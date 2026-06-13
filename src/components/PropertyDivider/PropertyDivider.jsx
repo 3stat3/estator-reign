@@ -5,11 +5,9 @@ import { motion, AnimatePresence } from 'framer-motion';
 const PropertyDivider = () => {
   const { darkMode } = useAuth();
   
-  // Add state for mobile menu
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
   
-  // Check screen size on mount and resize
   useEffect(() => {
     const checkMobile = () => {
       setIsMobile(window.innerWidth <= 768);
@@ -22,7 +20,6 @@ const PropertyDivider = () => {
     return () => window.removeEventListener('resize', checkMobile);
   }, []);
   
-  // Main data - Load from localStorage or empty state
   const [decedents, setDecedents] = useState(() => {
     const saved = localStorage.getItem('propertyDividerData');
     return saved ? JSON.parse(saved) : [];
@@ -30,27 +27,29 @@ const PropertyDivider = () => {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [showPersonModal, setShowPersonModal] = useState(false);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
-  const [showHeirModal, setShowHeirModal] = useState(false);
   const [editingPerson, setEditingPerson] = useState(null);
   const [editingProperty, setEditingProperty] = useState(null);
   const [inheritanceResult, setInheritanceResult] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [expandedInherited, setExpandedInherited] = useState({});
+  const [inheritanceSummary, setInheritanceSummary] = useState([]);
   
-  // Save to localStorage whenever decedents change
   useEffect(() => {
     localStorage.setItem('propertyDividerData', JSON.stringify(decedents));
+    // Recalculate all inheritances when data changes
+    calculateAllInheritances();
   }, [decedents]);
   
-  // Form states
   const [personForm, setPersonForm] = useState({
     name: '',
     dod: '',
     gender: 'Male',
     spouseId: null,
     parentId: null,
-    isDeceased: false
+    isDeceased: false,
+    taxDecValue: 0,
+    zonalValuePerSqm: 1000
   });
   
   const [propertyForm, setPropertyForm] = useState({
@@ -59,290 +58,263 @@ const PropertyDivider = () => {
     totalSqm: '',
     classification: 'Conjugal'
   });
-  
-  const [heirForm, setHeirForm] = useState({
-    personId: null,
-    relationship: 'Child',
-    isPredeceased: false,
-    hasRepresentatives: false,
-    representativeIds: []
-  });
 
-  // Clear all data
   const clearAllData = () => {
     localStorage.removeItem('propertyDividerData');
     setDecedents([]);
     setSelectedPerson(null);
     setInheritanceResult(null);
+    setInheritanceSummary([]);
     setShowClearConfirm(false);
   };
 
-  // Get children of a person
   const getChildren = (personId) => {
     return decedents.filter(p => p.parentId === personId);
   };
 
-  // Get detailed inherited properties with property-level breakdown
-  const getDetailedInheritedProperties = (person) => {
-    const inherited = [];
+  // Helper: Check if a person has living descendants
+  const hasLivingDescendants = (personId, allPersons) => {
+    const children = allPersons.filter(p => p.parentId === personId);
+    for (const child of children) {
+      if (!child.dod) return true;
+      if (hasLivingDescendants(child.id, allPersons)) return true;
+    }
+    return false;
+  };
+
+  // Helper: Get all living descendants (for representation)
+  const getLivingDescendants = (personId, allPersons) => {
+    const descendants = [];
+    const children = allPersons.filter(p => p.parentId === personId);
     
-    if (!person) return inherited;
+    for (const child of children) {
+      if (!child.dod) {
+        descendants.push(child);
+      } else {
+        const grandDescendants = getLivingDescendants(child.id, allPersons);
+        descendants.push(...grandDescendants);
+      }
+    }
+    return descendants;
+  };
+
+  // Calculate total estate value with proper valuation
+  const calculateEstateValue = (person, inheritedValue = 0) => {
+    let totalSqm = inheritedValue;
     
-    // Helper function to compute detailed inheritance from a decedent
-    const computeDetailedInheritance = (decedent, heirPerson) => {
-      const propertyBreakdown = [];
-      let spouseAutomaticSqm = 0;
-      let totalHereditaryEstate = 0;
-      
-      // Calculate breakdown per property
-      (decedent.properties || []).forEach(prop => {
-        let decedentShare = 0;
-        let shareType = '';
-        
-        if (prop.classification === 'Exclusive') {
-          decedentShare = prop.totalSqm;
-          totalHereditaryEstate += prop.totalSqm;
-          shareType = 'exclusive';
-        } else if (prop.classification === 'Conjugal') {
-          decedentShare = prop.totalSqm / 2;
-          spouseAutomaticSqm += prop.totalSqm / 2;
-          totalHereditaryEstate += prop.totalSqm / 2;
-          shareType = 'conjugal';
-        }
-        
-        propertyBreakdown.push({
-          propertyName: prop.name,
-          propertyType: prop.type,
-          totalSqm: prop.totalSqm,
-          classification: prop.classification,
-          decedentShare: decedentShare,
-          shareType: shareType
-        });
-      });
-      
-      const spouse = decedents.find(d => d.id === decedent.spouseId);
-      const children = decedents.filter(p => p.parentId === decedent.id);
-      
-      // Calculate shares
-      const livingChildren = children.filter(c => !c.dod);
-      const deceasedWithReps = children.filter(c => c.dod && getChildren(c.id).length > 0);
-      let totalShares = spouse ? 1 : 0;
-      totalShares += livingChildren.length;
-      totalShares += deceasedWithReps.length;
-      
-      const inheritanceSharePerHeir = totalShares > 0 ? totalHereditaryEstate / totalShares : 0;
-      
-      // Check if heir is the spouse
-      if (spouse && spouse.id === heirPerson.id) {
-        return {
-          conjugalShare: spouseAutomaticSqm,
-          inheritanceShare: inheritanceSharePerHeir,
-          totalSqm: spouseAutomaticSqm + inheritanceSharePerHeir,
-          type: 'spouse',
-          propertyBreakdown: propertyBreakdown.map(p => ({
-            ...p,
-            heirShare: p.classification === 'Conjugal' ? (p.totalSqm / 2) + (inheritanceSharePerHeir * (p.decedentShare / totalHereditaryEstate)) : inheritanceSharePerHeir * (p.decedentShare / totalHereditaryEstate),
-            shareReason: p.classification === 'Conjugal' ? 'Automatic conjugal share (50%) + inheritance share' : 'Inheritance share'
-          }))
-        };
+    (person.properties || []).forEach(prop => {
+      if (prop.classification === 'Exclusive') {
+        totalSqm += prop.totalSqm;
+      } else if (prop.classification === 'Conjugal') {
+        totalSqm += prop.totalSqm / 2;
       }
-      
-      // Check if heir is a living child
-      const isLivingChild = children.some(c => c.id === heirPerson.id && !c.dod);
-      if (isLivingChild) {
-        return {
-          conjugalShare: 0,
-          inheritanceShare: inheritanceSharePerHeir,
-          totalSqm: inheritanceSharePerHeir,
-          type: 'child',
-          propertyBreakdown: propertyBreakdown.map(p => ({
-            ...p,
-            heirShare: inheritanceSharePerHeir * (p.decedentShare / totalHereditaryEstate),
-            shareReason: 'Inheritance as child'
-          }))
-        };
-      }
-      
-      // Check if heir is a grandchild
-      const parent = decedents.find(p => p.id === heirPerson.parentId);
-      if (parent && parent.parentId === decedent.id && parent.dod) {
-        const grandchildrenCount = getChildren(parent.id).length;
-        const grandchildShare = grandchildrenCount > 0 ? inheritanceSharePerHeir / grandchildrenCount : 0;
-        
-        return {
-          conjugalShare: 0,
-          inheritanceShare: grandchildShare,
-          totalSqm: grandchildShare,
-          type: 'grandchild',
-          represents: parent.name,
-          propertyBreakdown: propertyBreakdown.map(p => ({
-            ...p,
-            heirShare: grandchildShare * (p.decedentShare / totalHereditaryEstate),
-            shareReason: `Representation of pre-deceased parent (${parent.name})`
-          }))
-        };
-      }
-      
-      return null;
+    });
+    
+    // Apply valuation (zonal value per sqm)
+    const zonalValue = person.zonalValuePerSqm || 1000;
+    const monetaryValue = totalSqm * zonalValue;
+    
+    // Tax declaration value (for comparison - "whichever is higher" rule)
+    const taxDecValue = person.taxDecValue || (totalSqm * 100); // Default fallback
+    
+    return {
+      totalSqm,
+      monetaryValue: Math.max(monetaryValue, taxDecValue),
+      zonalValue,
+      taxDecValue
     };
+  };
+
+  // Get eligible heirs (excludes pre-deceased without living descendants)
+  const getEligibleHeirs = (decedent, allPersons, spouse) => {
+    const children = allPersons.filter(p => p.parentId === decedent.id);
+    const eligibleHeirs = [];
     
-    // Check inheritance from ALL decedents
-    decedents.forEach(decedent => {
-      if (decedent.id !== person.id && decedent.isDeceased) {
-        const inheritance = computeDetailedInheritance(decedent, person);
-        if (inheritance && inheritance.totalSqm > 0) {
-          inherited.push({
-            sourceDecedent: decedent.name,
-            sourceDecedentId: decedent.id,
-            conjugalShare: inheritance.conjugalShare,
-            inheritanceShare: inheritance.inheritanceShare,
-            totalSqm: inheritance.totalSqm,
-            type: inheritance.type,
-            represents: inheritance.represents,
-            propertyBreakdown: inheritance.propertyBreakdown
+    if (spouse && !spouse.dod) {
+      eligibleHeirs.push({ ...spouse, relationship: 'Spouse', isRepresentative: false });
+    }
+    
+    for (const child of children) {
+      if (!child.dod) {
+        // Living child is an heir
+        eligibleHeirs.push({ ...child, relationship: 'Child', isRepresentative: false });
+      } else if (hasLivingDescendants(child.id, allPersons)) {
+        // Deceased child with living descendants - they represent
+        const descendants = getLivingDescendants(child.id, allPersons);
+        descendants.forEach(desc => {
+          eligibleHeirs.push({ 
+            ...desc, 
+            relationship: 'Grandchild', 
+            isRepresentative: true,
+            represents: child.name 
+          });
+        });
+      }
+      // If child died with NO living descendants, they are EXCLUDED (like Arnestor)
+    }
+    
+    return eligibleHeirs;
+  };
+
+  // Process inheritance chronologically
+  const calculateAllInheritances = () => {
+    // Sort by date of death (oldest first)
+    const deceased = decedents
+      .filter(p => p.dod && p.isDeceased)
+      .sort((a, b) => new Date(a.dod) - new Date(b.dod));
+    
+    // Track accumulated inheritance values
+    const inheritedValues = new Map();
+    const inheritanceRecords = [];
+    
+    for (const decedent of deceased) {
+      const spouse = decedents.find(d => d.id === decedent.spouseId);
+      
+      // Calculate total estate including previously inherited
+      const previousInheritance = inheritedValues.get(decedent.id) || 0;
+      const estate = calculateEstateValue(decedent, previousInheritance);
+      
+      // Get eligible heirs
+      const eligibleHeirs = getEligibleHeirs(decedent, decedents, spouse);
+      
+      if (eligibleHeirs.length === 0) {
+        // NO HEIRS - Distribute to surviving siblings (collateral heirs)
+        const siblings = decedents.filter(p => 
+          p.parentId === decedent.parentId && 
+          p.id !== decedent.id && 
+          !p.dod
+        );
+        
+        if (siblings.length > 0) {
+          const sharePerSibling = estate.totalSqm / siblings.length;
+          siblings.forEach(sibling => {
+            const current = inheritedValues.get(sibling.id) || 0;
+            inheritedValues.set(sibling.id, current + sharePerSibling);
+          });
+          
+          inheritanceRecords.push({
+            decedentName: decedent.name,
+            decedentDod: decedent.dod,
+            totalEstate: estate.totalSqm,
+            distributionType: 'Collateral (Siblings)',
+            heirs: siblings.map(s => ({ name: s.name, share: sharePerSibling, relationship: 'Sibling' })),
+            estateValue: estate.monetaryValue
           });
         }
+      } else {
+        // Calculate shares
+        let conjugalTotal = 0;
+        let hereditaryEstate = estate.totalSqm;
+        
+        // Calculate automatic conjugal share for spouse
+        if (spouse && !spouse.dod) {
+          (decedent.properties || []).forEach(prop => {
+            if (prop.classification === 'Conjugal') {
+              const conjugalShare = prop.totalSqm / 2;
+              conjugalTotal += conjugalShare;
+              hereditaryEstate -= conjugalShare;
+            }
+          });
+        }
+        
+        // Distribute hereditary estate
+        const shareValue = hereditaryEstate / eligibleHeirs.length;
+        const heirsWithShares = [];
+        
+        eligibleHeirs.forEach(heir => {
+          const heirShare = shareValue;
+          const current = inheritedValues.get(heir.id) || 0;
+          inheritedValues.set(heir.id, current + heirShare);
+          
+          heirsWithShares.push({
+            id: heir.id,
+            name: heir.name,
+            relationship: heir.relationship,
+            share: heirShare,
+            conjugalShare: heir.relationship === 'Spouse' ? conjugalTotal : 0,
+            totalShare: heir.relationship === 'Spouse' ? conjugalTotal + heirShare : heirShare,
+            represents: heir.represents
+          });
+        });
+        
+        inheritanceRecords.push({
+          decedentName: decedent.name,
+          decedentDod: decedent.dod,
+          totalEstate: estate.totalSqm,
+          conjugalTotal,
+          hereditaryEstate,
+          distributionType: 'Legal Heirs',
+          heirs: heirsWithShares,
+          estateValue: estate.monetaryValue,
+          propertyDetails: decedent.properties
+        });
+      }
+    }
+    
+    setInheritanceSummary(inheritanceRecords);
+    
+    // Update selected person if needed
+    if (selectedPerson) {
+      const updatedPerson = decedents.find(p => p.id === selectedPerson.id);
+      if (updatedPerson && updatedPerson.isDeceased) {
+        const result = getPersonInheritanceResult(updatedPerson.id, inheritanceRecords);
+        setInheritanceResult(result);
+      } else if (updatedPerson) {
+        const inherited = getPersonInheritedProperties(updatedPerson.id, inheritanceRecords);
+        setInheritanceResult({ inheritedProperties: inherited, isLiving: true });
+      }
+    }
+  };
+
+  // Get inheritance result for a specific person
+  const getPersonInheritanceResult = (personId, records) => {
+    const decedentRecord = records.find(r => r.decedentName === decedents.find(d => d.id === personId)?.name);
+    return decedentRecord || null;
+  };
+
+  // Get properties inherited BY a person (not from)
+  const getPersonInheritedProperties = (personId, records) => {
+    const person = decedents.find(p => p.id === personId);
+    if (!person) return [];
+    
+    const inherited = [];
+    
+    records.forEach(record => {
+      const heir = record.heirs?.find(h => h.id === personId);
+      if (heir && heir.share > 0) {
+        inherited.push({
+          sourceDecedent: record.decedentName,
+          sourceDod: record.decedentDod,
+          share: heir.share,
+          conjugalShare: heir.conjugalShare || 0,
+          totalShare: heir.totalShare || heir.share,
+          relationship: heir.relationship,
+          represents: heir.represents,
+          distributionType: record.distributionType,
+          propertyBreakdown: record.propertyDetails?.map(prop => ({
+            name: prop.name,
+            type: prop.type,
+            totalSqm: prop.totalSqm,
+            classification: prop.classification,
+            yourShare: heir.share * (prop.totalSqm / record.totalEstate)
+          }))
+        });
       }
     });
     
     return inherited;
   };
 
-  // Compute inheritance for a decedent
-  const computeInheritance = (decedent) => {
-    let totalDecedentSqm = 0;
-    let spouseAutomaticSqm = 0;
-    const propertyDetails = (decedent.properties || []).map(prop => {
-      let decedentShare = 0;
-      if (prop.classification === 'Exclusive') {
-        decedentShare = prop.totalSqm;
-      } else if (prop.classification === 'Conjugal') {
-        decedentShare = prop.totalSqm / 2;
-        spouseAutomaticSqm += prop.totalSqm / 2;
-      }
-      totalDecedentSqm += decedentShare;
-      return { ...prop, decedentShare };
-    });
-    
-    const hereditaryEstate = totalDecedentSqm;
-    const spouse = decedents.find(d => d.id === decedent.spouseId);
-    let childrenHeirs = [];
-    let representativeHeirs = [];
-    
-    const children = decedents.filter(p => p.parentId === decedent.id);
-    
-    children.forEach(child => {
-      const isPredeceased = !!child.dod;
-      
-      if (isPredeceased) {
-        const grandchildren = decedents.filter(g => g.parentId === child.id);
-        if (grandchildren.length > 0) {
-          grandchildren.forEach(grandchild => {
-            representativeHeirs.push({
-              ...grandchild,
-              inheritanceSqm: 0,
-              represents: child.name
-            });
-          });
-        }
-      } else {
-        childrenHeirs.push({ ...child, inheritanceSqm: 0, relationship: 'Child' });
-      }
-    });
-    
-    let totalShares = 0;
-    let spouseInheritance = 0;
-    
-    if (spouse) {
-      totalShares += 1;
-    }
-    totalShares += childrenHeirs.length;
-    
-    const representativeGroups = {};
-    representativeHeirs.forEach(rep => {
-      const parentId = rep.parentId;
-      if (!representativeGroups[parentId]) {
-        representativeGroups[parentId] = [];
-      }
-      representativeGroups[parentId].push(rep);
-    });
-    
-    Object.values(representativeGroups).forEach(group => {
-      totalShares += 1;
-    });
-    
-    const shareValue = totalShares > 0 ? hereditaryEstate / totalShares : 0;
-    
-    if (spouse) {
-      spouseInheritance = shareValue;
-    }
-    childrenHeirs.forEach(child => child.inheritanceSqm = shareValue);
-    
-    Object.values(representativeGroups).forEach(group => {
-      const groupShare = shareValue;
-      const perRep = groupShare / group.length;
-      group.forEach(rep => rep.inheritanceSqm = perRep);
-    });
-    
-    const finalResults = [];
-    
-    if (spouse) {
-      finalResults.push({
-        id: spouse.id,
-        name: spouse.name,
-        relationship: 'Spouse',
-        automaticConjugalSqm: spouseAutomaticSqm,
-        inheritanceSqm: spouseInheritance,
-        totalSqm: spouseAutomaticSqm + spouseInheritance
-      });
-    }
-    
-    childrenHeirs.forEach(child => {
-      finalResults.push({
-        id: child.id,
-        name: child.name,
-        relationship: 'Child',
-        automaticConjugalSqm: 0,
-        inheritanceSqm: child.inheritanceSqm,
-        totalSqm: child.inheritanceSqm
-      });
-    });
-    
-    representativeHeirs.forEach(rep => {
-      finalResults.push({
-        id: rep.id,
-        name: rep.name,
-        relationship: `Grandchild (child of ${rep.represents})`,
-        automaticConjugalSqm: 0,
-        inheritanceSqm: rep.inheritanceSqm,
-        totalSqm: rep.inheritanceSqm
-      });
-    });
-    
-    return {
-      decedentName: decedent.name,
-      decedentDod: decedent.dod,
-      totalEstateSqm: totalDecedentSqm,
-      hereditaryEstate,
-      spouseAutomaticSqm,
-      properties: propertyDetails,
-      heirs: finalResults,
-      shareValue
-    };
-  };
-
   const handleSelectPerson = (person) => {
     setSelectedPerson(person);
-    setExpandedInherited({}); // Reset expanded state when changing person
+    setExpandedInherited({});
+    
     if (person.isDeceased) {
-      const result = computeInheritance(person);
+      const result = getPersonInheritanceResult(person.id, inheritanceSummary);
       setInheritanceResult(result);
     } else {
-      setInheritanceResult(null);
-    }
-    // Close mobile menu on selection
-    if (isMobile) {
-      setIsMobileMenuOpen(false);
+      const inherited = getPersonInheritedProperties(person.id, inheritanceSummary);
+      setInheritanceResult({ inheritedProperties: inherited, isLiving: true });
     }
   };
 
@@ -361,7 +333,9 @@ const PropertyDivider = () => {
       gender: 'Male',
       spouseId: null,
       parentId: null,
-      isDeceased: false
+      isDeceased: false,
+      taxDecValue: 0,
+      zonalValuePerSqm: 1000
     });
     setShowPersonModal(true);
   };
@@ -381,6 +355,8 @@ const PropertyDivider = () => {
       spouseId: personForm.spouseId,
       parentId: personForm.parentId,
       isDeceased: !!personForm.dod,
+      taxDecValue: personForm.taxDecValue || 0,
+      zonalValuePerSqm: personForm.zonalValuePerSqm || 1000,
       properties: editingPerson?.properties || [],
       heirs: editingPerson?.heirs || []
     };
@@ -416,14 +392,6 @@ const PropertyDivider = () => {
     
     setDecedents(updatedDecedents);
     setShowPersonModal(false);
-    
-    // Refresh selected person
-    const refreshedPerson = updatedDecedents.find(p => p.id === (selectedPerson?.id === editingPerson?.id ? newPersonId : selectedPerson?.id));
-    if (refreshedPerson) {
-      handleSelectPerson(refreshedPerson);
-    } else if (selectedPerson && selectedPerson.id === newPersonId) {
-      handleSelectPerson(newPerson);
-    }
   };
 
   const addPropertyToPerson = () => {
@@ -462,11 +430,6 @@ const PropertyDivider = () => {
     
     setDecedents(updatedDecedents);
     setShowPropertyModal(false);
-    
-    const refreshedPerson = updatedDecedents.find(p => p.id === selectedPerson.id);
-    if (refreshedPerson) {
-      handleSelectPerson(refreshedPerson);
-    }
   };
 
   const deleteProperty = (propertyId) => {
@@ -479,76 +442,13 @@ const PropertyDivider = () => {
       });
       
       setDecedents(updatedDecedents);
-      
-      const refreshedPerson = updatedDecedents.find(p => p.id === selectedPerson.id);
-      if (refreshedPerson) {
-        handleSelectPerson(refreshedPerson);
-      }
     }
   };
 
-  const addHeirToDecedent = () => {
-    if (!selectedPerson) return;
-    setHeirForm({
-      personId: null,
-      relationship: 'Child',
-      isPredeceased: false,
-      hasRepresentatives: false,
-      representativeIds: []
-    });
-    setShowHeirModal(true);
-  };
-
-  const saveHeir = () => {
-    if (!heirForm.personId) {
-      alert('Please select a person');
-      return;
-    }
-    
-    const newHeir = { ...heirForm };
-    
-    let updatedDecedents = decedents.map(p => {
-      if (p.id === selectedPerson.id) {
-        return { ...p, heirs: [...(p.heirs || []), newHeir] };
-      }
-      return p;
-    });
-    
-    setDecedents(updatedDecedents);
-    setShowHeirModal(false);
-    
-    const refreshedPerson = updatedDecedents.find(p => p.id === selectedPerson.id);
-    if (refreshedPerson) {
-      handleSelectPerson(refreshedPerson);
-    }
-  };
-
-  const deleteHeir = (index) => {
-    if (window.confirm('Remove this heir?')) {
-      let updatedDecedents = decedents.map(p => {
-        if (p.id === selectedPerson.id) {
-          const newHeirs = [...(p.heirs || [])];
-          newHeirs.splice(index, 1);
-          return { ...p, heirs: newHeirs };
-        }
-        return p;
-      });
-      
-      setDecedents(updatedDecedents);
-      
-      const refreshedPerson = updatedDecedents.find(p => p.id === selectedPerson.id);
-      if (refreshedPerson) {
-        handleSelectPerson(refreshedPerson);
-      }
-    }
-  };
-
-  // Filter persons by search query
   const filteredPersons = decedents.filter(person =>
     person.name.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Sort decedents by date of death (oldest first, living last)
   const sortedDecedents = [...filteredPersons].sort((a, b) => {
     if (!a.dod && !b.dod) return 0;
     if (!a.dod) return 1;
@@ -556,7 +456,6 @@ const PropertyDivider = () => {
     return new Date(a.dod) - new Date(b.dod);
   });
 
-  // Left Panel Component
   const LeftPanel = () => (
     <div style={{
       width: isMobile ? '100%' : '400px',
@@ -579,7 +478,6 @@ const PropertyDivider = () => {
       boxShadow: isMobile && isMobileMenuOpen ? '2px 0 8px rgba(0,0,0,0.15)' : 'none'
     }}>
       <div style={{ padding: '20px' }}>
-        {/* Mobile Header */}
         {isMobile && (
           <div style={{ 
             display: 'flex', 
@@ -607,7 +505,6 @@ const PropertyDivider = () => {
           </div>
         )}
         
-        {/* Header with gradient */}
         <div style={{ marginBottom: '24px' }}>
           <div style={{
             background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
@@ -656,7 +553,6 @@ const PropertyDivider = () => {
           </button>
         </div>
         
-        {/* Search Bar */}
         <div style={{ marginBottom: '16px', position: 'relative' }}>
           <input
             type="text"
@@ -715,7 +611,6 @@ const PropertyDivider = () => {
           )}
         </div>
         
-        {/* Person Cards */}
         <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
           <AnimatePresence>
             {sortedDecedents.map(person => (
@@ -762,11 +657,6 @@ const PropertyDivider = () => {
                     <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b' }}>
                       {person.dod ? `⚰️ ${person.dod}` : 'Still alive'}
                     </div>
-                    {person.parentId && (
-                      <div style={{ fontSize: '9px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '2px' }}>
-                        Child of {decedents.find(p => p.id === person.parentId)?.name}
-                      </div>
-                    )}
                   </div>
                   {person.properties?.length > 0 && (
                     <div style={{
@@ -804,7 +694,6 @@ const PropertyDivider = () => {
     </div>
   );
 
-  // Right Panel Component
   const RightPanel = () => (
     <div style={{
       flex: 1,
@@ -812,7 +701,6 @@ const PropertyDivider = () => {
       background: darkMode ? '#0a0c10' : '#f0f2f5',
       padding: isMobile ? '16px' : '0'
     }}>
-      {/* Mobile Menu Button */}
       {isMobile && !isMobileMenuOpen && (
         <button
           onClick={() => setIsMobileMenuOpen(true)}
@@ -849,7 +737,7 @@ const PropertyDivider = () => {
             transition={{ duration: 0.3 }}
             style={{ padding: isMobile ? '16px' : '28px' }}
           >
-            {/* Premium Header Card */}
+            {/* Header Card */}
             <div style={{
               background: darkMode 
                 ? 'linear-gradient(135deg, #1a1e2e 0%, #0f1220 100%)'
@@ -909,7 +797,9 @@ const PropertyDivider = () => {
                       gender: selectedPerson.gender,
                       spouseId: selectedPerson.spouseId,
                       parentId: selectedPerson.parentId,
-                      isDeceased: selectedPerson.isDeceased
+                      isDeceased: selectedPerson.isDeceased,
+                      taxDecValue: selectedPerson.taxDecValue || 0,
+                      zonalValuePerSqm: selectedPerson.zonalValuePerSqm || 1000
                     });
                     setShowPersonModal(true);
                   }}
@@ -932,150 +822,129 @@ const PropertyDivider = () => {
             </div>
             
             {/* Inherited Properties Section */}
-            {(() => {
-              const detailedInherited = getDetailedInheritedProperties(selectedPerson);
-              if (detailedInherited.length > 0) {
-                return (
-                  <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ delay: 0.1 }}
-                    style={{
-                      background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-                      backdropFilter: 'blur(10px)',
-                      borderRadius: '20px',
+            {inheritanceResult?.inheritedProperties?.length > 0 && (
+              <motion.div
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: 0.1 }}
+                style={{
+                  background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
+                  backdropFilter: 'blur(10px)',
+                  borderRadius: '20px',
+                  padding: '16px',
+                  marginBottom: '20px',
+                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
+                }}
+              >
+                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                  📦 Inherited Properties
+                </h3>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                  {inheritanceResult.inheritedProperties.map((inv, idx) => (
+                    <div key={idx} style={{
                       padding: '16px',
-                      marginBottom: '20px',
-                      border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
-                    }}
-                  >
-                    <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-                      📦 Inherited Properties
-                    </h3>
-                    <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                      {detailedInherited.map((inv, idx) => (
-                        <div key={idx} style={{
-                          padding: '16px',
-                          background: darkMode ? 'rgba(10, 12, 16, 0.8)' : '#f8f9ff',
-                          borderRadius: '16px',
-                          borderLeft: `4px solid ${inv.type === 'spouse' ? '#10b981' : '#667eea'}`,
-                          cursor: 'pointer',
-                          transition: 'all 0.2s'
-                        }}>
-                          <div onClick={() => toggleExpanded(idx)}>
-                            <div style={{ marginBottom: '8px' }}>
-                              <div style={{ fontWeight: 600, color: '#667eea', fontSize: '12px', marginBottom: '4px' }}>
-                                📌 From: {inv.sourceDecedent}
-                                {inv.type === 'grandchild' && (
-                                  <span style={{ marginLeft: '6px', fontSize: '10px', color: '#f59e0b' }}>
-                                    (Representing {inv.represents})
-                                  </span>
-                                )}
-                              </div>
-                              <div style={{ fontSize: '24px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '6px' }}>
-                                {inv.totalSqm.toFixed(2)} m² total
-                              </div>
-                              <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                                {inv.conjugalShare > 0 && (
-                                  <div style={{ fontSize: '11px', color: '#10b981' }}>
-                                    • {inv.conjugalShare} m² conjugal share
-                                  </div>
-                                )}
-                                {inv.inheritanceShare > 0 && (
-                                  <div style={{ fontSize: '11px', color: '#667eea' }}>
-                                    • {inv.inheritanceShare.toFixed(2)} m² inheritance
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            <div style={{
-                              fontSize: '18px',
-                              color: darkMode ? '#64748b' : '#94a3b8',
-                              textAlign: 'right',
-                              transition: 'transform 0.2s',
-                              transform: expandedInherited[idx] ? 'rotate(180deg)' : 'rotate(0deg)'
-                            }}>
-                              ▼
-                            </div>
-                          </div>
-                          
-                          {/* Expandable Breakdown */}
-                          <AnimatePresence>
-                            {expandedInherited[idx] && (
-                              <motion.div
-                                initial={{ height: 0, opacity: 0 }}
-                                animate={{ height: 'auto', opacity: 1 }}
-                                exit={{ height: 0, opacity: 0 }}
-                                transition={{ duration: 0.3 }}
-                                style={{ overflow: 'hidden', marginTop: '12px' }}
-                              >
-                                <div style={{
-                                  paddingTop: '12px',
-                                  borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`
-                                }}>
-                                  <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '8px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                                    🔍 Property Breakdown:
-                                  </div>
-                                  <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                    {inv.propertyBreakdown.map((prop, propIdx) => (
-                                      <div key={propIdx} style={{
-                                        padding: '10px',
-                                        background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.02)',
-                                        borderRadius: '10px',
-                                        borderLeft: `3px solid ${prop.classification === 'Exclusive' ? '#f59e0b' : '#10b981'}`
-                                      }}>
-                                        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
-                                          <div>
-                                            <span style={{ fontWeight: 600, fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>{prop.propertyName}</span>
-                                            <span style={{ marginLeft: '6px', fontSize: '10px', color: darkMode ? '#64748b' : '#94a3b8' }}>
-                                              ({prop.propertyType})
-                                            </span>
-                                          </div>
-                                          <div>
-                                            <span style={{
-                                              padding: '2px 6px',
-                                              borderRadius: '10px',
-                                              fontSize: '9px',
-                                              fontWeight: 600,
-                                              background: prop.classification === 'Exclusive' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                              color: prop.classification === 'Exclusive' ? '#f59e0b' : '#10b981'
-                                            }}>
-                                              {prop.classification}
-                                            </span>
-                                          </div>
-                                        </div>
-                                        <div style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                                          Total: {prop.totalSqm} m² → Your share: <strong>{prop.heirShare.toFixed(2)} m²</strong>
-                                        </div>
-                                        <div style={{ fontSize: '10px', color: '#667eea', marginTop: '4px' }}>
-                                          {prop.shareReason}
-                                        </div>
-                                      </div>
-                                    ))}
-                                  </div>
-                                  <div style={{
-                                    marginTop: '10px',
-                                    padding: '6px 10px',
-                                    background: darkMode ? 'rgba(102, 126, 234, 0.1)' : 'rgba(102, 126, 234, 0.05)',
-                                    borderRadius: '8px',
-                                    fontSize: '10px',
-                                    color: '#667eea'
-                                  }}>
-                                    🧾 Source: Estate of {inv.sourceDecedent}
-                                    {inv.type === 'grandchild' && ` (Representing pre-deceased parent: ${inv.represents})`}
-                                  </div>
-                                </div>
-                              </motion.div>
+                      background: darkMode ? 'rgba(10, 12, 16, 0.8)' : '#f8f9ff',
+                      borderRadius: '16px',
+                      borderLeft: `4px solid ${inv.relationship === 'Spouse' ? '#10b981' : '#667eea'}`,
+                      cursor: 'pointer',
+                      transition: 'all 0.2s'
+                    }}>
+                      <div onClick={() => toggleExpanded(idx)}>
+                        <div style={{ marginBottom: '8px' }}>
+                          <div style={{ fontWeight: 600, color: '#667eea', fontSize: '12px', marginBottom: '4px' }}>
+                            📌 From: {inv.sourceDecedent} (died {inv.sourceDod})
+                            {inv.represents && (
+                              <span style={{ marginLeft: '6px', fontSize: '10px', color: '#f59e0b' }}>
+                                (Representing {inv.represents})
+                              </span>
                             )}
-                          </AnimatePresence>
+                          </div>
+                          <div style={{ fontSize: '24px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '6px' }}>
+                            {inv.totalShare.toFixed(2)} m² total
+                          </div>
+                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
+                            {inv.conjugalShare > 0 && (
+                              <div style={{ fontSize: '11px', color: '#10b981' }}>
+                                • {inv.conjugalShare.toFixed(2)} m² conjugal share
+                              </div>
+                            )}
+                            {inv.share > 0 && (
+                              <div style={{ fontSize: '11px', color: '#667eea' }}>
+                                • {inv.share.toFixed(2)} m² inheritance share
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      ))}
+                        <div style={{
+                          fontSize: '18px',
+                          color: darkMode ? '#64748b' : '#94a3b8',
+                          textAlign: 'right',
+                          transition: 'transform 0.2s',
+                          transform: expandedInherited[idx] ? 'rotate(180deg)' : 'rotate(0deg)'
+                        }}>
+                          ▼
+                        </div>
+                      </div>
+                      
+                      <AnimatePresence>
+                        {expandedInherited[idx] && (
+                          <motion.div
+                            initial={{ height: 0, opacity: 0 }}
+                            animate={{ height: 'auto', opacity: 1 }}
+                            exit={{ height: 0, opacity: 0 }}
+                            transition={{ duration: 0.3 }}
+                            style={{ overflow: 'hidden', marginTop: '12px' }}
+                          >
+                            <div style={{
+                              paddingTop: '12px',
+                              borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`
+                            }}>
+                              <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '8px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                                🔍 Property Breakdown:
+                              </div>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
+                                {inv.propertyBreakdown?.map((prop, propIdx) => (
+                                  <div key={propIdx} style={{
+                                    padding: '10px',
+                                    background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.02)',
+                                    borderRadius: '10px',
+                                    borderLeft: `3px solid ${prop.classification === 'Exclusive' ? '#f59e0b' : '#10b981'}`
+                                  }}>
+                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
+                                      <div>
+                                        <span style={{ fontWeight: 600, fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>{prop.name}</span>
+                                        <span style={{ marginLeft: '6px', fontSize: '10px', color: darkMode ? '#64748b' : '#94a3b8' }}>
+                                          ({prop.type})
+                                        </span>
+                                      </div>
+                                      <div>
+                                        <span style={{
+                                          padding: '2px 6px',
+                                          borderRadius: '10px',
+                                          fontSize: '9px',
+                                          fontWeight: 600,
+                                          background: prop.classification === 'Exclusive' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
+                                          color: prop.classification === 'Exclusive' ? '#f59e0b' : '#10b981'
+                                        }}>
+                                          {prop.classification}
+                                        </span>
+                                      </div>
+                                    </div>
+                                    <div style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                                      Total: {prop.totalSqm} m² → Your share: <strong>{prop.yourShare?.toFixed(2) || inv.share} m²</strong>
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </div>
+                          </motion.div>
+                        )}
+                      </AnimatePresence>
                     </div>
-                  </motion.div>
-                );
-              }
-              return null;
-            })()}
+                  ))}
+                </div>
+              </motion.div>
+            )}
             
             {/* Own Properties Section */}
             <motion.div
@@ -1185,65 +1054,12 @@ const PropertyDivider = () => {
               )}
             </motion.div>
             
-            {/* Children Section */}
-            {getChildren(selectedPerson.id).length > 0 && (
+            {/* Estate Distribution Section (for deceased persons) */}
+            {selectedPerson.isDeceased && inheritanceResult && !inheritanceResult.isLiving && (
               <motion.div
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.3 }}
-                style={{
-                  background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-                  backdropFilter: 'blur(10px)',
-                  borderRadius: '20px',
-                  padding: '16px',
-                  marginBottom: '20px',
-                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
-                }}
-              >
-                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-                  👶 Children
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                  {getChildren(selectedPerson.id).map(child => (
-                    <div key={child.id} style={{
-                      display: 'flex',
-                      alignItems: 'center',
-                      gap: '12px',
-                      padding: '10px',
-                      background: darkMode ? 'rgba(10, 12, 16, 0.6)' : '#f8f9ff',
-                      borderRadius: '14px'
-                    }}>
-                      <div style={{
-                        width: '36px',
-                        height: '36px',
-                        borderRadius: '18px',
-                        background: child.gender === 'Male' ? 'rgba(102, 126, 234, 0.2)' : 'rgba(245, 87, 108, 0.2)',
-                        display: 'flex',
-                        alignItems: 'center',
-                        justifyContent: 'center',
-                        fontSize: '18px',
-                        flexShrink: 0
-                      }}>
-                        {child.gender === 'Male' ? '👦' : '👧'}
-                      </div>
-                      <div>
-                        <div style={{ fontWeight: 600, fontSize: '14px', color: darkMode ? '#fff' : '#1a1a2e' }}>{child.name}</div>
-                        {child.dod && (
-                          <div style={{ fontSize: '10px', color: '#ef4444' }}>Pre-deceased</div>
-                        )}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
-            
-            {/* Estate Distribution Section */}
-            {selectedPerson.isDeceased && inheritanceResult && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.4 }}
                 style={{
                   background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))',
                   backdropFilter: 'blur(10px)',
@@ -1268,27 +1084,29 @@ const PropertyDivider = () => {
                     borderRadius: '12px'
                   }}>
                     <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Total Estate</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#667eea' }}>{inheritanceResult.totalEstateSqm} m²</div>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#667eea' }}>{inheritanceResult.totalEstate?.toFixed(2) || 0} m²</div>
                   </div>
-                  <div style={{
-                    padding: '12px',
-                    background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)',
-                    borderRadius: '12px'
-                  }}>
-                    <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Spouse's Share</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#10b981' }}>{inheritanceResult.spouseAutomaticSqm} m²</div>
-                  </div>
+                  {inheritanceResult.conjugalTotal > 0 && (
+                    <div style={{
+                      padding: '12px',
+                      background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)',
+                      borderRadius: '12px'
+                    }}>
+                      <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Spouse's Conjugal Share</div>
+                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#10b981' }}>{inheritanceResult.conjugalTotal?.toFixed(2) || 0} m²</div>
+                    </div>
+                  )}
                   <div style={{
                     padding: '12px',
                     background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)',
                     borderRadius: '12px'
                   }}>
                     <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Hereditary Estate</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#f59e0b' }}>{inheritanceResult.hereditaryEstate} m²</div>
+                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#f59e0b' }}>{inheritanceResult.hereditaryEstate?.toFixed(2) || inheritanceResult.totalEstate?.toFixed(2) || 0} m²</div>
                   </div>
                 </div>
                 
-                {inheritanceResult.heirs.length > 0 && (
+                {inheritanceResult.heirs && inheritanceResult.heirs.length > 0 && (
                   <div style={{ overflowX: 'auto' }}>
                     <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
                       <thead>
@@ -1301,11 +1119,16 @@ const PropertyDivider = () => {
                       <tbody>
                         {inheritanceResult.heirs.map((heir, idx) => (
                           <tr key={idx} style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}>
-                            <td style={{ padding: '8px 6px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>{heir.name}</td>
+                            <td style={{ padding: '8px 6px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                              {heir.name}
+                              {heir.represents && (
+                                <div style={{ fontSize: '9px', color: '#f59e0b' }}>(rep. {heir.represents})</div>
+                              )}
+                            </td>
                             <td style={{ padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px' }}>
                               {heir.relationship}
                             </td>
-                            <td style={{ padding: '8px 6px', fontWeight: 600, color: '#667eea' }}>{heir.totalSqm.toFixed(2)} m²</td>
+                            <td style={{ padding: '8px 6px', fontWeight: 600, color: '#667eea' }}>{heir.totalShare.toFixed(2)} m²</td>
                           </tr>
                         ))}
                       </tbody>
@@ -1353,7 +1176,6 @@ const PropertyDivider = () => {
       fontFamily: "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
       position: 'relative'
     }}>
-      {/* Overlay for mobile */}
       {isMobile && isMobileMenuOpen && (
         <div
           onClick={() => setIsMobileMenuOpen(false)}
@@ -1473,12 +1295,18 @@ const PropertyDivider = () => {
             </select>
             
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>👪 Parent (who is the father/mother of this person?)</label>
-            <select value={personForm.parentId || ''} onChange={(e) => setPersonForm({...personForm, parentId: e.target.value ? parseInt(e.target.value) : null})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
+            <select value={personForm.parentId || ''} onChange={(e) => setPersonForm({...personForm, parentId: e.target.value ? parseInt(e.target.value) : null})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
               <option value="">No Parent / Select Parent</option>
               {decedents.filter(p => p.id !== (editingPerson?.id || 0)).map(p => (
                 <option key={p.id} value={p.id}>{p.name} {p.dod ? '(Deceased)' : '(Alive)'}</option>
               ))}
             </select>
+            
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>💰 Tax Declaration Value (Optional)</label>
+            <input type="number" placeholder="e.g., 30000" value={personForm.taxDecValue} onChange={(e) => setPersonForm({...personForm, taxDecValue: parseFloat(e.target.value) || 0})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
+            
+            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>💰 Zonal Value per sqm (Default: ₱1,000)</label>
+            <input type="number" placeholder="e.g., 1000" value={personForm.zonalValuePerSqm} onChange={(e) => setPersonForm({...personForm, zonalValuePerSqm: parseFloat(e.target.value) || 1000})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
             
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
               <button onClick={() => setShowPersonModal(false)} style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>
@@ -1529,49 +1357,6 @@ const PropertyDivider = () => {
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
               <button onClick={() => setShowPropertyModal(false)} style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>
               <button onClick={saveProperty} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Save Property</button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-      
-      {/* Add Heir Modal */}
-      {showHeirModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)', padding: '16px' }}>
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            style={{
-              background: darkMode ? '#1e1e2e' : '#ffffff',
-              borderRadius: '24px',
-              padding: '24px',
-              width: '450px',
-              maxWidth: '100%',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
-            }}
-          >
-            <h3 style={{ marginBottom: '12px', fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>Add Manual Heir</h3>
-            <p style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '16px', paddingBottom: '10px', borderBottom: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}` }}>
-              For children, simply set their parent in the Add Person modal. This is for spouse, parents, or siblings.
-            </p>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Select Person</label>
-            <select value={heirForm.personId || ''} onChange={(e) => setHeirForm({...heirForm, personId: parseInt(e.target.value)})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="">Select a person</option>
-              {decedents.filter(p => p.id !== selectedPerson?.id).map(p => (
-                <option key={p.id} value={p.id}>{p.name} {p.dod ? '(Deceased)' : '(Alive)'}</option>
-              ))}
-            </select>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Relationship</label>
-            <select value={heirForm.relationship} onChange={(e) => setHeirForm({...heirForm, relationship: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="Spouse">Spouse</option>
-              <option value="Parent">Parent</option>
-              <option value="Sibling">Sibling</option>
-            </select>
-            
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
-              <button onClick={() => setShowHeirModal(false)} style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>
-              <button onClick={saveHeir} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Add Heir</button>
             </div>
           </motion.div>
         </div>
