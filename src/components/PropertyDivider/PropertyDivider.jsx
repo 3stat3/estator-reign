@@ -27,17 +27,20 @@ const PropertyDivider = () => {
   const [selectedPerson, setSelectedPerson] = useState(null);
   const [showPersonModal, setShowPersonModal] = useState(false);
   const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [showAuditModal, setShowAuditModal] = useState(false);
+  const [selectedAuditTrail, setSelectedAuditTrail] = useState(null);
   const [editingPerson, setEditingPerson] = useState(null);
   const [editingProperty, setEditingProperty] = useState(null);
   const [inheritanceResult, setInheritanceResult] = useState(null);
   const [showClearConfirm, setShowClearConfirm] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
-  const [expandedInherited, setExpandedInherited] = useState({});
   const [inheritanceSummary, setInheritanceSummary] = useState([]);
+  
+  // Track all inheritance transfers (who got what from whom)
+  const [inheritanceTransfers, setInheritanceTransfers] = useState([]);
   
   useEffect(() => {
     localStorage.setItem('propertyDividerData', JSON.stringify(decedents));
-    // Recalculate all inheritances when data changes
     calculateAllInheritances();
   }, [decedents]);
   
@@ -47,9 +50,7 @@ const PropertyDivider = () => {
     gender: 'Male',
     spouseId: null,
     parentId: null,
-    isDeceased: false,
-    taxDecValue: 0,
-    zonalValuePerSqm: 1000
+    isDeceased: false
   });
   
   const [propertyForm, setPropertyForm] = useState({
@@ -59,20 +60,59 @@ const PropertyDivider = () => {
     classification: 'Conjugal'
   });
 
+  // Format number with commas
+  const formatNumber = (num) => {
+    if (num === undefined || num === null) return '0';
+    return num.toLocaleString('en-US', {
+      minimumFractionDigits: 2,
+      maximumFractionDigits: 2
+    });
+  };
+
   const clearAllData = () => {
     localStorage.removeItem('propertyDividerData');
     setDecedents([]);
     setSelectedPerson(null);
     setInheritanceResult(null);
     setInheritanceSummary([]);
+    setInheritanceTransfers([]);
     setShowClearConfirm(false);
   };
 
-  const getChildren = (personId) => {
-    return decedents.filter(p => p.parentId === personId);
+  const getChildrenForPerson = (personId) => {
+    const person = decedents.find(p => p.id === personId);
+    if (!person) return [];
+    
+    const directChildren = decedents.filter(p => p.parentId === personId);
+    const spouseChildren = person.spouseId 
+      ? decedents.filter(p => p.parentId === person.spouseId)
+      : [];
+    
+    const allChildren = [...directChildren, ...spouseChildren];
+    const uniqueChildren = allChildren.filter((child, index, self) => 
+      self.findIndex(c => c.id === child.id) === index
+    );
+    
+    return uniqueChildren;
   };
 
-  // Helper: Check if a person has living descendants
+  // Get living descendants for representation
+  const getLivingDescendantsForRepresentation = (personId, allPersons) => {
+    const descendants = [];
+    const children = allPersons.filter(p => p.parentId === personId);
+    
+    for (const child of children) {
+      if (!child.dod) {
+        descendants.push({ ...child, represents: child.parentId === personId ? null : null });
+      } else {
+        const grandDescendants = getLivingDescendantsForRepresentation(child.id, allPersons);
+        descendants.push(...grandDescendants.map(d => ({ ...d, represents: child.name })));
+      }
+    }
+    return descendants;
+  };
+
+  // Check if a pre-deceased child has living descendants who can represent them
   const hasLivingDescendants = (personId, allPersons) => {
     const children = allPersons.filter(p => p.parentId === personId);
     for (const child of children) {
@@ -82,247 +122,327 @@ const PropertyDivider = () => {
     return false;
   };
 
-  // Helper: Get all living descendants (for representation)
-  const getLivingDescendants = (personId, allPersons) => {
-    const descendants = [];
-    const children = allPersons.filter(p => p.parentId === personId);
-    
-    for (const child of children) {
-      if (!child.dod) {
-        descendants.push(child);
-      } else {
-        const grandDescendants = getLivingDescendants(child.id, allPersons);
-        descendants.push(...grandDescendants);
-      }
-    }
-    return descendants;
-  };
-
-  // Calculate total estate value with proper valuation
-  const calculateEstateValue = (person, inheritedValue = 0) => {
-    let totalSqm = inheritedValue;
-    
-    (person.properties || []).forEach(prop => {
-      if (prop.classification === 'Exclusive') {
-        totalSqm += prop.totalSqm;
-      } else if (prop.classification === 'Conjugal') {
-        totalSqm += prop.totalSqm / 2;
-      }
-    });
-    
-    // Apply valuation (zonal value per sqm)
-    const zonalValue = person.zonalValuePerSqm || 1000;
-    const monetaryValue = totalSqm * zonalValue;
-    
-    // Tax declaration value (for comparison - "whichever is higher" rule)
-    const taxDecValue = person.taxDecValue || (totalSqm * 100); // Default fallback
-    
-    return {
-      totalSqm,
-      monetaryValue: Math.max(monetaryValue, taxDecValue),
-      zonalValue,
-      taxDecValue
-    };
-  };
-
-  // Get eligible heirs (excludes pre-deceased without living descendants)
-  const getEligibleHeirs = (decedent, allPersons, spouse) => {
+  // Get eligible heirs for a decedent (including representatives)
+  const getEligibleHeirsForDecedent = (decedent, allPersons, spouse) => {
     const children = allPersons.filter(p => p.parentId === decedent.id);
     const eligibleHeirs = [];
     
+    // Add surviving spouse
     if (spouse && !spouse.dod) {
-      eligibleHeirs.push({ ...spouse, relationship: 'Spouse', isRepresentative: false });
+      eligibleHeirs.push({ 
+        ...spouse, 
+        relationship: 'Spouse', 
+        isRepresentative: false, 
+        represents: null,
+        originalShare: null
+      });
     }
     
+    // Process children
     for (const child of children) {
       if (!child.dod) {
-        // Living child is an heir
-        eligibleHeirs.push({ ...child, relationship: 'Child', isRepresentative: false });
+        // Living child - direct heir
+        eligibleHeirs.push({ 
+          ...child, 
+          relationship: 'Child', 
+          isRepresentative: false, 
+          represents: null,
+          originalShare: null
+        });
       } else if (hasLivingDescendants(child.id, allPersons)) {
-        // Deceased child with living descendants - they represent
-        const descendants = getLivingDescendants(child.id, allPersons);
-        descendants.forEach(desc => {
+        // Pre-deceased child WITH living descendants - representation applies
+        const representatives = getLivingDescendantsForRepresentation(child.id, allPersons);
+        representatives.forEach(rep => {
           eligibleHeirs.push({ 
-            ...desc, 
+            ...rep, 
             relationship: 'Grandchild', 
-            isRepresentative: true,
-            represents: child.name 
+            isRepresentative: true, 
+            represents: child.name,
+            originalShare: null
           });
         });
       }
-      // If child died with NO living descendants, they are EXCLUDED (like Arnestor)
+      // Pre-deceased child WITHOUT living descendants - EXCLUDED completely
     }
     
     return eligibleHeirs;
   };
 
-  // Process inheritance chronologically
+  // Get ascendants (parents/grandparents) when no descendants exist
+  const getAscendantsForSuccession = (person, allPersons) => {
+    const ascendants = [];
+    let currentParentId = person.parentId;
+    
+    while (currentParentId) {
+      const parent = allPersons.find(p => p.id === currentParentId);
+      if (parent && !parent.dod) {
+        ascendants.push({ ...parent, relationship: 'Parent', isRepresentative: false, represents: null });
+        break;
+      }
+      currentParentId = parent?.parentId || null;
+    }
+    
+    return ascendants;
+  };
+
+  // Get collateral heirs (siblings and their representatives) when no ascendants
+  const getCollateralHeirs = (person, allPersons) => {
+    if (!person.parentId) return [];
+    
+    const siblings = allPersons.filter(p => p.parentId === person.parentId && p.id !== person.id);
+    const result = [];
+    
+    for (const sibling of siblings) {
+      if (!sibling.dod) {
+        result.push({ 
+          ...sibling, 
+          relationship: 'Sibling', 
+          isRepresentative: false, 
+          represents: null,
+          originalShare: null
+        });
+      } else if (hasLivingDescendants(sibling.id, allPersons)) {
+        const reps = getLivingDescendantsForRepresentation(sibling.id, allPersons);
+        reps.forEach(rep => {
+          result.push({ 
+            ...rep, 
+            relationship: 'Nephew/Niece', 
+            isRepresentative: true, 
+            represents: sibling.name,
+            originalShare: null
+          });
+        });
+      }
+    }
+    
+    return result;
+  };
+
+  // Calculate person's total assets (including inherited)
+  const calculatePersonTotalAssets = (personId, transfers) => {
+    const person = decedents.find(p => p.id === personId);
+    if (!person) return { conjugalShare: 0, exclusiveTotal: 0, inheritedTotal: 0, ocsTotal: 0 };
+    
+    // Get inherited amounts for this person
+    const inheritedAmount = transfers
+      .filter(t => t.toPersonId === personId)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    // Calculate own conjugal share (50% of conjugal properties they are part of)
+    let ownConjugalShare = 0;
+    let ownExclusiveTotal = 0;
+    let totalConjugalFull = 0;
+    
+    // Properties directly owned by this person
+    (person.properties || []).forEach(prop => {
+      if (prop.classification === 'Conjugal') {
+        ownConjugalShare += prop.totalSqm / 2;
+        totalConjugalFull += prop.totalSqm;
+      } else if (prop.classification === 'Exclusive') {
+        ownExclusiveTotal += prop.totalSqm;
+      }
+    });
+    
+    // Add conjugal share from spouse (if any)
+    const spouse = decedents.find(p => p.id === person.spouseId);
+    if (spouse) {
+      (spouse.properties || []).forEach(prop => {
+        if (prop.classification === 'Conjugal') {
+          ownConjugalShare += prop.totalSqm / 2;
+          totalConjugalFull += prop.totalSqm;
+        }
+      });
+    }
+    
+    // Determine OCS total based on death status and order
+    let ocsTotal;
+    if (!person.dod) {
+      // Living person: OCS = conjugal share + exclusive + inherited
+      ocsTotal = ownConjugalShare + ownExclusiveTotal + inheritedAmount;
+    } else {
+      // Check if this person is the first to die in their couple
+      const spouse = decedents.find(p => p.id === person.spouseId);
+      const isFirstToDie = !spouse?.dod || (person.dod && spouse.dod && new Date(person.dod) < new Date(spouse.dod));
+      
+      if (isFirstToDie) {
+        // First to die: OCS = TOTAL conjugal (full) + TOTAL exclusive (full)
+        ocsTotal = totalConjugalFull + ownExclusiveTotal;
+      } else {
+        // Second to die: OCS = conjugal share + exclusive + inherited
+        ocsTotal = ownConjugalShare + ownExclusiveTotal + inheritedAmount;
+      }
+    }
+    
+    return {
+      conjugalShare: ownConjugalShare,
+      exclusiveTotal: ownExclusiveTotal,
+      inheritedTotal: inheritedAmount,
+      ocsTotal: ocsTotal,
+      totalConjugalFull: totalConjugalFull
+    };
+  };
+
+  // Process inheritance for a single decedent
+  const processDecedentInheritance = (decedent, allPersons, transfers) => {
+    const spouse = allPersons.find(p => p.id === decedent.spouseId);
+    const assets = calculatePersonTotalAssets(decedent.id, transfers);
+    
+    // Calculate total hereditary estate (what gets distributed)
+    let conjugalShareToSpouse = 0;
+    let hereditaryEstate = assets.exclusiveTotal; // Start with exclusive properties
+    
+    // Add decedent's conjugal share (50% of conjugal properties)
+    hereditaryEstate += assets.conjugalShare;
+    
+    // If spouse is alive, spouse gets the other 50% conjugal share automatically
+    if (spouse && !spouse.dod) {
+      conjugalShareToSpouse = assets.totalConjugalFull - assets.conjugalShare;
+    }
+    
+    // Get eligible heirs
+    let eligibleHeirs = getEligibleHeirsForDecedent(decedent, allPersons, spouse);
+    
+    // If no spouse and no children/descendants, check ascendants
+    if (eligibleHeirs.length === 0) {
+      const ascendants = getAscendantsForSuccession(decedent, allPersons);
+      if (ascendants.length > 0) {
+        eligibleHeirs = ascendants;
+      }
+    }
+    
+    // If still no heirs, check collateral (siblings)
+    if (eligibleHeirs.length === 0) {
+      const collateral = getCollateralHeirs(decedent, allPersons);
+      if (collateral.length > 0) {
+        eligibleHeirs = collateral;
+      }
+    }
+    
+    // If still no heirs, return empty
+    if (eligibleHeirs.length === 0) {
+      return {
+        decedentId: decedent.id,
+        decedentName: decedent.name,
+        conjugalShareToSpouse: conjugalShareToSpouse,
+        hereditaryEstate: hereditaryEstate,
+        heirs: [],
+        distributionType: 'No Heirs Found',
+        propertyDetails: decedent.properties,
+        transfers: []
+      };
+    }
+    
+    // Distribute hereditary estate equally among eligible heirs
+    const sharePerHeir = hereditaryEstate / eligibleHeirs.length;
+    const newTransfers = [];
+    const heirsWithShares = [];
+    
+    eligibleHeirs.forEach(heir => {
+      const totalShare = sharePerHeir;
+      newTransfers.push({
+        fromPersonId: decedent.id,
+        fromPersonName: decedent.name,
+        toPersonId: heir.id,
+        toPersonName: heir.name,
+        amount: totalShare,
+        relationship: heir.relationship,
+        represents: heir.represents,
+        isRepresentative: heir.isRepresentative
+      });
+      
+      heirsWithShares.push({
+        id: heir.id,
+        name: heir.name,
+        relationship: heir.relationship,
+        share: sharePerHeir,
+        conjugalShare: 0,
+        totalShare: totalShare,
+        represents: heir.represents,
+        isRepresentative: heir.isRepresentative
+      });
+    });
+    
+    return {
+      decedentId: decedent.id,
+      decedentName: decedent.name,
+      decedentDod: decedent.dod,
+      conjugalShareToSpouse: conjugalShareToSpouse,
+      hereditaryEstate: hereditaryEstate,
+      totalEstate: conjugalShareToSpouse + hereditaryEstate,
+      heirs: heirsWithShares,
+      distributionType: 'Legal Succession',
+      propertyDetails: decedent.properties,
+      transfers: newTransfers
+    };
+  };
+
+  // Main inheritance calculation - processes deaths in chronological order
   const calculateAllInheritances = () => {
-    // Sort by date of death (oldest first)
+    // Sort deceased by date of death (oldest first)
     const deceased = decedents
       .filter(p => p.dod && p.isDeceased)
       .sort((a, b) => new Date(a.dod) - new Date(b.dod));
     
-    // Track accumulated inheritance values
-    const inheritedValues = new Map();
+    let allTransfers = [];
     const inheritanceRecords = [];
     
     for (const decedent of deceased) {
-      const spouse = decedents.find(d => d.id === decedent.spouseId);
+      const result = processDecedentInheritance(decedent, decedents, allTransfers);
       
-      // Calculate total estate including previously inherited
-      const previousInheritance = inheritedValues.get(decedent.id) || 0;
-      const estate = calculateEstateValue(decedent, previousInheritance);
-      
-      // Get eligible heirs
-      const eligibleHeirs = getEligibleHeirs(decedent, decedents, spouse);
-      
-      if (eligibleHeirs.length === 0) {
-        // NO HEIRS - Distribute to surviving siblings (collateral heirs)
-        const siblings = decedents.filter(p => 
-          p.parentId === decedent.parentId && 
-          p.id !== decedent.id && 
-          !p.dod
-        );
-        
-        if (siblings.length > 0) {
-          const sharePerSibling = estate.totalSqm / siblings.length;
-          siblings.forEach(sibling => {
-            const current = inheritedValues.get(sibling.id) || 0;
-            inheritedValues.set(sibling.id, current + sharePerSibling);
-          });
-          
-          inheritanceRecords.push({
-            decedentName: decedent.name,
-            decedentDod: decedent.dod,
-            totalEstate: estate.totalSqm,
-            distributionType: 'Collateral (Siblings)',
-            heirs: siblings.map(s => ({ name: s.name, share: sharePerSibling, relationship: 'Sibling' })),
-            estateValue: estate.monetaryValue
-          });
-        }
-      } else {
-        // Calculate shares
-        let conjugalTotal = 0;
-        let hereditaryEstate = estate.totalSqm;
-        
-        // Calculate automatic conjugal share for spouse
-        if (spouse && !spouse.dod) {
-          (decedent.properties || []).forEach(prop => {
-            if (prop.classification === 'Conjugal') {
-              const conjugalShare = prop.totalSqm / 2;
-              conjugalTotal += conjugalShare;
-              hereditaryEstate -= conjugalShare;
-            }
-          });
-        }
-        
-        // Distribute hereditary estate
-        const shareValue = hereditaryEstate / eligibleHeirs.length;
-        const heirsWithShares = [];
-        
-        eligibleHeirs.forEach(heir => {
-          const heirShare = shareValue;
-          const current = inheritedValues.get(heir.id) || 0;
-          inheritedValues.set(heir.id, current + heirShare);
-          
-          heirsWithShares.push({
-            id: heir.id,
-            name: heir.name,
-            relationship: heir.relationship,
-            share: heirShare,
-            conjugalShare: heir.relationship === 'Spouse' ? conjugalTotal : 0,
-            totalShare: heir.relationship === 'Spouse' ? conjugalTotal + heirShare : heirShare,
-            represents: heir.represents
-          });
-        });
-        
-        inheritanceRecords.push({
-          decedentName: decedent.name,
-          decedentDod: decedent.dod,
-          totalEstate: estate.totalSqm,
-          conjugalTotal,
-          hereditaryEstate,
-          distributionType: 'Legal Heirs',
-          heirs: heirsWithShares,
-          estateValue: estate.monetaryValue,
-          propertyDetails: decedent.properties
-        });
+      // Add any new transfers from this decedent
+      if (result.transfers && result.transfers.length > 0) {
+        allTransfers = [...allTransfers, ...result.transfers];
       }
+      
+      inheritanceRecords.push(result);
     }
     
+    setInheritanceTransfers(allTransfers);
     setInheritanceSummary(inheritanceRecords);
     
     // Update selected person if needed
     if (selectedPerson) {
-      const updatedPerson = decedents.find(p => p.id === selectedPerson.id);
-      if (updatedPerson && updatedPerson.isDeceased) {
-        const result = getPersonInheritanceResult(updatedPerson.id, inheritanceRecords);
-        setInheritanceResult(result);
-      } else if (updatedPerson) {
-        const inherited = getPersonInheritedProperties(updatedPerson.id, inheritanceRecords);
-        setInheritanceResult({ inheritedProperties: inherited, isLiving: true });
-      }
+      updateSelectedPersonData(selectedPerson.id, inheritanceRecords, allTransfers);
     }
   };
-
-  // Get inheritance result for a specific person
-  const getPersonInheritanceResult = (personId, records) => {
-    const decedentRecord = records.find(r => r.decedentName === decedents.find(d => d.id === personId)?.name);
-    return decedentRecord || null;
-  };
-
-  // Get properties inherited BY a person (not from)
-  const getPersonInheritedProperties = (personId, records) => {
+  
+  const updateSelectedPersonData = (personId, records, transfers) => {
     const person = decedents.find(p => p.id === personId);
-    if (!person) return [];
+    if (!person) return;
     
-    const inherited = [];
+    const assets = calculatePersonTotalAssets(personId, transfers);
+    const inheritedProperties = transfers
+      .filter(t => t.toPersonId === personId)
+      .map(t => ({
+        sourceDecedent: t.fromPersonName,
+        sourceDod: decedents.find(p => p.id === t.fromPersonId)?.dod || '',
+        share: t.amount,
+        totalShare: t.amount,
+        relationship: t.relationship,
+        represents: t.represents,
+        distributionType: 'Legal Succession'
+      }));
     
-    records.forEach(record => {
-      const heir = record.heirs?.find(h => h.id === personId);
-      if (heir && heir.share > 0) {
-        inherited.push({
-          sourceDecedent: record.decedentName,
-          sourceDod: record.decedentDod,
-          share: heir.share,
-          conjugalShare: heir.conjugalShare || 0,
-          totalShare: heir.totalShare || heir.share,
-          relationship: heir.relationship,
-          represents: heir.represents,
-          distributionType: record.distributionType,
-          propertyBreakdown: record.propertyDetails?.map(prop => ({
-            name: prop.name,
-            type: prop.type,
-            totalSqm: prop.totalSqm,
-            classification: prop.classification,
-            yourShare: heir.share * (prop.totalSqm / record.totalEstate)
-          }))
-        });
+    let heirs = [];
+    if (person.isDeceased) {
+      const decedentRecord = records.find(r => r.decedentId === personId);
+      if (decedentRecord) {
+        heirs = decedentRecord.heirs;
       }
-    });
+    }
     
-    return inherited;
+    setInheritanceResult({
+      assets: assets,
+      inheritedProperties: inheritedProperties,
+      heirs: heirs,
+      isLiving: !person.isDeceased,
+      conjugalShareToSpouse: person.isDeceased ? records.find(r => r.decedentId === personId)?.conjugalShareToSpouse || 0 : 0
+    });
   };
 
   const handleSelectPerson = (person) => {
     setSelectedPerson(person);
-    setExpandedInherited({});
-    
-    if (person.isDeceased) {
-      const result = getPersonInheritanceResult(person.id, inheritanceSummary);
-      setInheritanceResult(result);
-    } else {
-      const inherited = getPersonInheritedProperties(person.id, inheritanceSummary);
-      setInheritanceResult({ inheritedProperties: inherited, isLiving: true });
-    }
-  };
-
-  const toggleExpanded = (index) => {
-    setExpandedInherited(prev => ({
-      ...prev,
-      [index]: !prev[index]
-    }));
+    updateSelectedPersonData(person.id, inheritanceSummary, inheritanceTransfers);
   };
 
   const addNewPerson = () => {
@@ -333,9 +453,7 @@ const PropertyDivider = () => {
       gender: 'Male',
       spouseId: null,
       parentId: null,
-      isDeceased: false,
-      taxDecValue: 0,
-      zonalValuePerSqm: 1000
+      isDeceased: false
     });
     setShowPersonModal(true);
   };
@@ -350,13 +468,11 @@ const PropertyDivider = () => {
     const newPerson = {
       id: newPersonId,
       name: personForm.name,
-      dod: personForm.dod,
+      dod: personForm.dod || null,
       gender: personForm.gender,
       spouseId: personForm.spouseId,
       parentId: personForm.parentId,
       isDeceased: !!personForm.dod,
-      taxDecValue: personForm.taxDecValue || 0,
-      zonalValuePerSqm: personForm.zonalValuePerSqm || 1000,
       properties: editingPerson?.properties || [],
       heirs: editingPerson?.heirs || []
     };
@@ -369,7 +485,6 @@ const PropertyDivider = () => {
       updatedDecedents = [...decedents, newPerson];
     }
     
-    // Handle bidirectional spouse relationship
     if (newPerson.spouseId) {
       updatedDecedents = updatedDecedents.map(p => {
         if (p.id === newPerson.spouseId) {
@@ -456,9 +571,237 @@ const PropertyDivider = () => {
     return new Date(a.dod) - new Date(b.dod);
   });
 
+  // Render Person Card Content
+  const PersonCardContent = ({ person }) => {
+    const assets = inheritanceResult?.assets || { conjugalShare: 0, exclusiveTotal: 0, inheritedTotal: 0, ocsTotal: 0, totalConjugalFull: 0 };
+    const isDeceased = person.isDeceased;
+    const spouse = decedents.find(p => p.id === person.spouseId);
+    
+    // Get conjugal properties (full amounts) that this person is part of
+    const conjugalProperties = [];
+    const exclusiveProperties = [];
+    
+    // Person's own properties
+    (person.properties || []).forEach(prop => {
+      if (prop.classification === 'Conjugal') {
+        conjugalProperties.push({ ...prop, ownershipType: 'Own' });
+      } else {
+        exclusiveProperties.push({ ...prop, ownershipType: 'Own' });
+      }
+    });
+    
+    // Spouse's conjugal properties (if any)
+    if (spouse) {
+      (spouse.properties || []).forEach(prop => {
+        if (prop.classification === 'Conjugal' && !conjugalProperties.some(p => p.id === prop.id)) {
+          conjugalProperties.push({ ...prop, ownershipType: 'From Spouse' });
+        }
+      });
+    }
+    
+    // Add inherited properties to exclusive section
+    const inheritedProps = inheritanceResult?.inheritedProperties || [];
+    inheritedProps.forEach(inv => {
+      exclusiveProperties.push({
+        name: `Share from ${inv.sourceDecedent}'s property`,
+        type: 'Inheritance',
+        totalSqm: inv.totalShare,
+        classification: 'Inherited',
+        ownershipType: 'Inherited',
+        inheritedFrom: inv.sourceDecedent
+      });
+    });
+    
+    return (
+      <div>
+        {/* Properties Section */}
+        <div style={{
+          background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
+          borderRadius: '20px',
+          padding: '16px',
+          marginBottom: '20px'
+        }}>
+          <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+            📋 Properties
+          </h3>
+          
+          {/* Conjugal Properties */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#10b981' }}>
+              Conjugal Properties:
+            </div>
+            {conjugalProperties.length === 0 ? (
+              <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', padding: '8px 0' }}>None</div>
+            ) : (
+              conjugalProperties.map((prop, idx) => (
+                <div key={idx} style={{
+                  padding: '8px 12px',
+                  background: darkMode ? 'rgba(0,0,0,0.3)' : '#f8f9ff',
+                  borderRadius: '12px',
+                  marginBottom: '6px',
+                  display: 'flex',
+                  justifyContent: 'space-between'
+                }}>
+                  <span style={{ fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {prop.name} {prop.ownershipType === 'From Spouse' && `(from ${spouse?.name})`}
+                  </span>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#10b981' }}>
+                    {formatNumber(prop.totalSqm)} m²
+                  </span>
+                </div>
+              ))
+            )}
+            
+            <div style={{
+              marginTop: '12px',
+              padding: '8px 12px',
+              background: darkMode ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)',
+              borderRadius: '12px',
+              display: 'flex',
+              justifyContent: 'space-between'
+            }}>
+              <span style={{ fontSize: '13px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                Total Share from conjugal property:
+              </span>
+              <span style={{ fontSize: '15px', fontWeight: 700, color: '#10b981' }}>
+                {formatNumber(assets.conjugalShare)} m²
+              </span>
+            </div>
+          </div>
+          
+          {/* Exclusive Properties */}
+          <div style={{ marginBottom: '16px' }}>
+            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#667eea' }}>
+              Exclusive Properties:
+            </div>
+            {exclusiveProperties.length === 0 ? (
+              <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', padding: '8px 0' }}>None</div>
+            ) : (
+              exclusiveProperties.map((prop, idx) => (
+                <div key={idx} style={{
+                  padding: '8px 12px',
+                  background: darkMode ? 'rgba(0,0,0,0.3)' : '#f8f9ff',
+                  borderRadius: '12px',
+                  marginBottom: '6px',
+                  display: 'flex',
+                  justifyContent: 'space-between'
+                }}>
+                  <div>
+                    <span style={{ fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                      {prop.name}
+                    </span>
+                    {prop.inheritedFrom && (
+                      <div style={{ fontSize: '10px', color: '#f59e0b' }}>(inherited from {prop.inheritedFrom})</div>
+                    )}
+                  </div>
+                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#667eea' }}>
+                    {formatNumber(prop.totalSqm)} m²
+                  </span>
+                </div>
+              ))
+            )}
+          </div>
+          
+          {/* OCS Total */}
+          <div style={{
+            padding: '12px',
+            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15))',
+            borderRadius: '12px',
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center'
+          }}>
+            <span style={{ fontSize: '14px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+              Total Property to appear in OCS:
+            </span>
+            <span style={{ fontSize: '20px', fontWeight: 700, color: '#f59e0b' }}>
+              {formatNumber(assets.ocsTotal)} m²
+            </span>
+          </div>
+        </div>
+        
+        {/* Heirs Section - Only for Deceased */}
+        {isDeceased && inheritanceResult?.heirs && inheritanceResult.heirs.length > 0 && (
+          <div style={{
+            background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
+            borderRadius: '20px',
+            padding: '16px',
+            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
+          }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+              👥 Heirs
+            </h3>
+            
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+                <thead>
+                  <tr style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` }}>
+                    <th style={{ textAlign: 'left', padding: '10px 8px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Heir</th>
+                    <th style={{ textAlign: 'right', padding: '10px 8px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Share from the property</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {inheritanceResult.heirs.map((heir, idx) => (
+                    <tr key={idx} style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}>
+                      <td style={{ padding: '10px 8px' }}>
+                        <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                          {heir.relationship === 'Spouse' ? '💑' : heir.relationship === 'Child' ? '👶' : '👧'} {heir.name}
+                        </span>
+                        {heir.represents && (
+                          <div style={{ fontSize: '9px', color: '#f59e0b' }}>(rep. {heir.represents})</div>
+                        )}
+                      </td>
+                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 600, color: '#667eea' }}>
+                        {formatNumber(heir.totalShare)} m²
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+                {inheritanceResult.heirs.length > 0 && (
+                  <tfoot>
+                    <tr style={{ borderTop: `2px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
+                      <td style={{ padding: '10px 8px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>Total:</td>
+                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: '#f59e0b' }}>
+                        {formatNumber(inheritanceResult.heirs.reduce((sum, h) => sum + h.totalShare, 0))} m²
+                      </td>
+                    </tr>
+                  </tfoot>
+                )}
+              </table>
+            </div>
+          </div>
+        )}
+        
+        {isDeceased && (!inheritanceResult?.heirs || inheritanceResult.heirs.length === 0) && (
+          <div style={{
+            background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
+            borderRadius: '20px',
+            padding: '16px',
+            textAlign: 'center',
+            color: '#ef4444'
+          }}>
+            No eligible heirs found
+          </div>
+        )}
+        
+        {!isDeceased && (
+          <div style={{
+            background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
+            borderRadius: '20px',
+            padding: '16px',
+            textAlign: 'center',
+            color: darkMode ? '#94a3b8' : '#64748b'
+          }}>
+            ⏳ Heirs will be shown upon death
+          </div>
+        )}
+      </div>
+    );
+  };
+
   const LeftPanel = () => (
     <div style={{
-      width: isMobile ? '100%' : '400px',
+      width: isMobile ? '100%' : '380px',
       height: isMobile && !isMobileMenuOpen ? '0px' : '100%',
       overflow: isMobile && !isMobileMenuOpen ? 'hidden' : 'auto',
       background: darkMode 
@@ -540,14 +883,6 @@ const PropertyDivider = () => {
               transition: 'transform 0.2s, box-shadow 0.2s',
               boxShadow: '0 4px 14px rgba(102, 126, 234, 0.4)'
             }}
-            onMouseEnter={(e) => {
-              e.target.style.transform = 'translateY(-2px)';
-              e.target.style.boxShadow = '0 6px 20px rgba(102, 126, 234, 0.5)';
-            }}
-            onMouseLeave={(e) => {
-              e.target.style.transform = 'translateY(0)';
-              e.target.style.boxShadow = '0 4px 14px rgba(102, 126, 234, 0.4)';
-            }}
           >
             + Add New Person
           </button>
@@ -568,8 +903,7 @@ const PropertyDivider = () => {
               borderRadius: '40px',
               fontSize: '14px',
               color: darkMode ? '#fff' : '#1a1a2e',
-              outline: 'none',
-              transition: 'all 0.2s'
+              outline: 'none'
             }}
           />
           <span style={{
@@ -602,8 +936,7 @@ const PropertyDivider = () => {
                 borderRadius: '40px',
                 fontSize: '10px',
                 fontWeight: 500,
-                cursor: 'pointer',
-                transition: 'all 0.2s'
+                cursor: 'pointer'
               }}
             >
               Clear All
@@ -631,8 +964,7 @@ const PropertyDivider = () => {
                   border: `1px solid ${selectedPerson?.id === person.id 
                     ? 'rgba(102, 126, 234, 0.5)'
                     : darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  cursor: 'pointer'
                 }}
               >
                 <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
@@ -699,7 +1031,7 @@ const PropertyDivider = () => {
       flex: 1,
       overflowY: 'auto',
       background: darkMode ? '#0a0c10' : '#f0f2f5',
-      padding: isMobile ? '16px' : '0'
+      padding: isMobile ? '16px' : '28px'
     }}>
       {isMobile && !isMobileMenuOpen && (
         <button
@@ -735,7 +1067,6 @@ const PropertyDivider = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            style={{ padding: isMobile ? '16px' : '28px' }}
           >
             {/* Header Card */}
             <div style={{
@@ -797,9 +1128,7 @@ const PropertyDivider = () => {
                       gender: selectedPerson.gender,
                       spouseId: selectedPerson.spouseId,
                       parentId: selectedPerson.parentId,
-                      isDeceased: selectedPerson.isDeceased,
-                      taxDecValue: selectedPerson.taxDecValue || 0,
-                      zonalValuePerSqm: selectedPerson.zonalValuePerSqm || 1000
+                      isDeceased: selectedPerson.isDeceased
                     });
                     setShowPersonModal(true);
                   }}
@@ -812,7 +1141,6 @@ const PropertyDivider = () => {
                     fontWeight: 600,
                     cursor: 'pointer',
                     color: '#667eea',
-                    transition: 'all 0.2s',
                     width: isMobile ? '100%' : 'auto'
                   }}
                 >
@@ -821,321 +1149,29 @@ const PropertyDivider = () => {
               </div>
             </div>
             
-            {/* Inherited Properties Section */}
-            {inheritanceResult?.inheritedProperties?.length > 0 && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.1 }}
-                style={{
-                  background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-                  backdropFilter: 'blur(10px)',
-                  borderRadius: '20px',
-                  padding: '16px',
-                  marginBottom: '20px',
-                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
-                }}
-              >
-                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-                  📦 Inherited Properties
-                </h3>
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
-                  {inheritanceResult.inheritedProperties.map((inv, idx) => (
-                    <div key={idx} style={{
-                      padding: '16px',
-                      background: darkMode ? 'rgba(10, 12, 16, 0.8)' : '#f8f9ff',
-                      borderRadius: '16px',
-                      borderLeft: `4px solid ${inv.relationship === 'Spouse' ? '#10b981' : '#667eea'}`,
-                      cursor: 'pointer',
-                      transition: 'all 0.2s'
-                    }}>
-                      <div onClick={() => toggleExpanded(idx)}>
-                        <div style={{ marginBottom: '8px' }}>
-                          <div style={{ fontWeight: 600, color: '#667eea', fontSize: '12px', marginBottom: '4px' }}>
-                            📌 From: {inv.sourceDecedent} (died {inv.sourceDod})
-                            {inv.represents && (
-                              <span style={{ marginLeft: '6px', fontSize: '10px', color: '#f59e0b' }}>
-                                (Representing {inv.represents})
-                              </span>
-                            )}
-                          </div>
-                          <div style={{ fontSize: '24px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '6px' }}>
-                            {inv.totalShare.toFixed(2)} m² total
-                          </div>
-                          <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                            {inv.conjugalShare > 0 && (
-                              <div style={{ fontSize: '11px', color: '#10b981' }}>
-                                • {inv.conjugalShare.toFixed(2)} m² conjugal share
-                              </div>
-                            )}
-                            {inv.share > 0 && (
-                              <div style={{ fontSize: '11px', color: '#667eea' }}>
-                                • {inv.share.toFixed(2)} m² inheritance share
-                              </div>
-                            )}
-                          </div>
-                        </div>
-                        <div style={{
-                          fontSize: '18px',
-                          color: darkMode ? '#64748b' : '#94a3b8',
-                          textAlign: 'right',
-                          transition: 'transform 0.2s',
-                          transform: expandedInherited[idx] ? 'rotate(180deg)' : 'rotate(0deg)'
-                        }}>
-                          ▼
-                        </div>
-                      </div>
-                      
-                      <AnimatePresence>
-                        {expandedInherited[idx] && (
-                          <motion.div
-                            initial={{ height: 0, opacity: 0 }}
-                            animate={{ height: 'auto', opacity: 1 }}
-                            exit={{ height: 0, opacity: 0 }}
-                            transition={{ duration: 0.3 }}
-                            style={{ overflow: 'hidden', marginTop: '12px' }}
-                          >
-                            <div style={{
-                              paddingTop: '12px',
-                              borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`
-                            }}>
-                              <div style={{ fontSize: '11px', fontWeight: 600, marginBottom: '8px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                                🔍 Property Breakdown:
-                              </div>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-                                {inv.propertyBreakdown?.map((prop, propIdx) => (
-                                  <div key={propIdx} style={{
-                                    padding: '10px',
-                                    background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(0,0,0,0.02)',
-                                    borderRadius: '10px',
-                                    borderLeft: `3px solid ${prop.classification === 'Exclusive' ? '#f59e0b' : '#10b981'}`
-                                  }}>
-                                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: '6px', marginBottom: '6px' }}>
-                                      <div>
-                                        <span style={{ fontWeight: 600, fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>{prop.name}</span>
-                                        <span style={{ marginLeft: '6px', fontSize: '10px', color: darkMode ? '#64748b' : '#94a3b8' }}>
-                                          ({prop.type})
-                                        </span>
-                                      </div>
-                                      <div>
-                                        <span style={{
-                                          padding: '2px 6px',
-                                          borderRadius: '10px',
-                                          fontSize: '9px',
-                                          fontWeight: 600,
-                                          background: prop.classification === 'Exclusive' ? 'rgba(245, 158, 11, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                                          color: prop.classification === 'Exclusive' ? '#f59e0b' : '#10b981'
-                                        }}>
-                                          {prop.classification}
-                                        </span>
-                                      </div>
-                                    </div>
-                                    <div style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                                      Total: {prop.totalSqm} m² → Your share: <strong>{prop.yourShare?.toFixed(2) || inv.share} m²</strong>
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </div>
-                          </motion.div>
-                        )}
-                      </AnimatePresence>
-                    </div>
-                  ))}
-                </div>
-              </motion.div>
-            )}
+            {/* Person Card Content */}
+            <PersonCardContent person={selectedPerson} />
             
-            {/* Own Properties Section */}
-            <motion.div
-              initial={{ opacity: 0, y: 20 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: 0.2 }}
-              style={{
-                background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-                backdropFilter: 'blur(10px)',
-                borderRadius: '20px',
-                padding: '16px',
-                marginBottom: '20px',
-                border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
-              }}
-            >
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px', flexWrap: 'wrap', gap: '10px' }}>
-                <h3 style={{ fontSize: '16px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                  🏠 Owned Properties
-                </h3>
+            {/* Add Property Button for Living Persons */}
+            {!selectedPerson.isDeceased && (
+              <div style={{ marginTop: '16px' }}>
                 <button
                   onClick={addPropertyToPerson}
                   style={{
-                    padding: '6px 16px',
+                    width: '100%',
+                    padding: '12px',
                     background: 'linear-gradient(135deg, #10b981, #059669)',
                     color: 'white',
                     border: 'none',
                     borderRadius: '40px',
-                    fontSize: '12px',
+                    fontSize: '14px',
                     fontWeight: 600,
-                    cursor: 'pointer',
-                    transition: 'all 0.2s'
+                    cursor: 'pointer'
                   }}
                 >
                   + Add Property
                 </button>
               </div>
-              
-              {(selectedPerson.properties || []).length === 0 ? (
-                <div style={{ textAlign: 'center', padding: '40px 20px' }}>
-                  <div style={{ fontSize: '48px', marginBottom: '12px' }}>🏷️</div>
-                  <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>No properties added yet</p>
-                </div>
-              ) : (
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                    <thead>
-                      <tr style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` }}>
-                        <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Property</th>
-                        <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Type</th>
-                        <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Area</th>
-                        <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Status</th>
-                        <th style={{ textAlign: 'center', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}></th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {(selectedPerson.properties || []).map((prop, idx) => (
-                        <motion.tr
-                          key={idx}
-                          initial={{ opacity: 0 }}
-                          animate={{ opacity: 1 }}
-                          transition={{ delay: idx * 0.05 }}
-                          style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}
-                        >
-                          <td style={{ padding: '8px 6px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e', wordBreak: 'break-word' }}>{prop.name}</td>
-                          <td style={{ padding: '8px 6px', color: darkMode ? '#fff' : '#1a1a2e' }}>{prop.type}</td>
-                          <td style={{ padding: '8px 6px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>{prop.totalSqm} m²</td>
-                          <td style={{ padding: '8px 6px' }}>
-                            <span style={{
-                              padding: '2px 8px',
-                              borderRadius: '20px',
-                              fontSize: '9px',
-                              fontWeight: 600,
-                              background: prop.classification === 'Exclusive' ? 'rgba(102, 126, 234, 0.15)' : 'rgba(16, 185, 129, 0.15)',
-                              color: prop.classification === 'Exclusive' ? '#667eea' : '#10b981'
-                            }}>
-                              {prop.classification}
-                            </span>
-                            {prop.classification === 'Conjugal' && (
-                              <div style={{ fontSize: '9px', color: '#10b981', marginTop: '2px' }}>(50% to spouse)</div>
-                            )}
-                          </td>
-                          <td style={{ padding: '8px 6px', textAlign: 'center' }}>
-                            <div style={{ display: 'flex', gap: '6px', justifyContent: 'center' }}>
-                              <button
-                                onClick={() => {
-                                  setEditingProperty({ id: prop.id, ...prop });
-                                  setPropertyForm({ name: prop.name, type: prop.type, totalSqm: prop.totalSqm, classification: prop.classification });
-                                  setShowPropertyModal(true);
-                                }}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.7, padding: '4px' }}
-                              >
-                                ✏️
-                              </button>
-                              <button
-                                onClick={() => deleteProperty(prop.id)}
-                                style={{ background: 'none', border: 'none', cursor: 'pointer', fontSize: '16px', opacity: 0.7, color: '#ef4444', padding: '4px' }}
-                              >
-                                🗑️
-                              </button>
-                            </div>
-                          </td>
-                        </motion.tr>
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-            </motion.div>
-            
-            {/* Estate Distribution Section (for deceased persons) */}
-            {selectedPerson.isDeceased && inheritanceResult && !inheritanceResult.isLiving && (
-              <motion.div
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ delay: 0.3 }}
-                style={{
-                  background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.1), rgba(118, 75, 162, 0.1))',
-                  backdropFilter: 'blur(10px)',
-                  borderRadius: '20px',
-                  padding: '16px',
-                  border: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(102, 126, 234, 0.2)'}`
-                }}
-              >
-                <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-                  📤 Estate Distribution
-                </h3>
-                
-                <div style={{
-                  display: 'grid',
-                  gridTemplateColumns: 'repeat(auto-fit, minmax(140px, 1fr))',
-                  gap: '12px',
-                  marginBottom: '20px'
-                }}>
-                  <div style={{
-                    padding: '12px',
-                    background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)',
-                    borderRadius: '12px'
-                  }}>
-                    <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Total Estate</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#667eea' }}>{inheritanceResult.totalEstate?.toFixed(2) || 0} m²</div>
-                  </div>
-                  {inheritanceResult.conjugalTotal > 0 && (
-                    <div style={{
-                      padding: '12px',
-                      background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)',
-                      borderRadius: '12px'
-                    }}>
-                      <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Spouse's Conjugal Share</div>
-                      <div style={{ fontSize: '20px', fontWeight: 700, color: '#10b981' }}>{inheritanceResult.conjugalTotal?.toFixed(2) || 0} m²</div>
-                    </div>
-                  )}
-                  <div style={{
-                    padding: '12px',
-                    background: darkMode ? 'rgba(0,0,0,0.3)' : 'rgba(255,255,255,0.8)',
-                    borderRadius: '12px'
-                  }}>
-                    <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '2px' }}>Hereditary Estate</div>
-                    <div style={{ fontSize: '20px', fontWeight: 700, color: '#f59e0b' }}>{inheritanceResult.hereditaryEstate?.toFixed(2) || inheritanceResult.totalEstate?.toFixed(2) || 0} m²</div>
-                  </div>
-                </div>
-                
-                {inheritanceResult.heirs && inheritanceResult.heirs.length > 0 && (
-                  <div style={{ overflowX: 'auto' }}>
-                    <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '12px' }}>
-                      <thead>
-                        <tr style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` }}>
-                          <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Heir</th>
-                          <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Share Type</th>
-                          <th style={{ textAlign: 'left', padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Area</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {inheritanceResult.heirs.map((heir, idx) => (
-                          <tr key={idx} style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}>
-                            <td style={{ padding: '8px 6px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                              {heir.name}
-                              {heir.represents && (
-                                <div style={{ fontSize: '9px', color: '#f59e0b' }}>(rep. {heir.represents})</div>
-                              )}
-                            </td>
-                            <td style={{ padding: '8px 6px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px' }}>
-                              {heir.relationship}
-                            </td>
-                            <td style={{ padding: '8px 6px', fontWeight: 600, color: '#667eea' }}>{heir.totalShare.toFixed(2)} m²</td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                )}
-              </motion.div>
             )}
           </motion.div>
         ) : (
@@ -1242,8 +1278,7 @@ const PropertyDivider = () => {
                   borderRadius: '40px',
                   fontSize: '13px',
                   fontWeight: 600,
-                  cursor: 'pointer',
-                  transition: 'all 0.2s'
+                  cursor: 'pointer'
                 }}
               >
                 Yes, Clear Everything
@@ -1295,18 +1330,12 @@ const PropertyDivider = () => {
             </select>
             
             <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>👪 Parent (who is the father/mother of this person?)</label>
-            <select value={personForm.parentId || ''} onChange={(e) => setPersonForm({...personForm, parentId: e.target.value ? parseInt(e.target.value) : null})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
+            <select value={personForm.parentId || ''} onChange={(e) => setPersonForm({...personForm, parentId: e.target.value ? parseInt(e.target.value) : null})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
               <option value="">No Parent / Select Parent</option>
               {decedents.filter(p => p.id !== (editingPerson?.id || 0)).map(p => (
                 <option key={p.id} value={p.id}>{p.name} {p.dod ? '(Deceased)' : '(Alive)'}</option>
               ))}
             </select>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>💰 Tax Declaration Value (Optional)</label>
-            <input type="number" placeholder="e.g., 30000" value={personForm.taxDecValue} onChange={(e) => setPersonForm({...personForm, taxDecValue: parseFloat(e.target.value) || 0})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>💰 Zonal Value per sqm (Default: ₱1,000)</label>
-            <input type="number" placeholder="e.g., 1000" value={personForm.zonalValuePerSqm} onChange={(e) => setPersonForm({...personForm, zonalValuePerSqm: parseFloat(e.target.value) || 1000})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
             
             <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
               <button onClick={() => setShowPersonModal(false)} style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>

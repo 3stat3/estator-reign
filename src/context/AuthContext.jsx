@@ -80,7 +80,7 @@ export const AuthProvider = ({ children }) => {
     const register = async (email, password, username, fullName, position) => {
         setError(null);
         try {
-            // Register with Supabase Auth
+            // Register with Supabase Auth - Using explicit URL instead of window.location.origin
             const { data: authData, error: signUpError } = await supabase.auth.signUp({
                 email: email,
                 password: password,
@@ -89,7 +89,8 @@ export const AuthProvider = ({ children }) => {
                         username: username,
                         full_name: fullName,
                         position: position
-                    }
+                    },
+                    emailRedirectTo: 'http://localhost:5173/email-confirmation'
                 }
             });
 
@@ -110,6 +111,9 @@ export const AuthProvider = ({ children }) => {
                     }]);
 
                 if (profileError) throw profileError;
+                
+                // Store email for potential resend
+                sessionStorage.setItem('pendingVerificationEmail', email);
                 
                 return { success: true, user: authData.user };
             }
@@ -181,7 +185,7 @@ export const AuthProvider = ({ children }) => {
         const { error } = await supabase.auth.signInWithOtp({
             email: email,
             options: {
-                emailRedirectTo: window.location.origin + '/dashboard'
+                emailRedirectTo: 'http://localhost:5173/dashboard'
             }
         });
         if (error) throw error;
@@ -198,6 +202,42 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: '2FA not configured' };
     };
 
+    // Forgot password function
+    const forgotPassword = async (email) => {
+        setError(null);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: 'http://localhost:5173/reset-password',
+            });
+            
+            if (error) throw error;
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Forgot password error:', error);
+            setError(error.message);
+            throw error;
+        }
+    };
+
+    // Resend reset link function
+    const resendResetLink = async (email) => {
+        setError(null);
+        try {
+            const { error } = await supabase.auth.resetPasswordForEmail(email, {
+                redirectTo: 'http://localhost:5173/reset-password',
+            });
+            
+            if (error) throw error;
+            
+            return { success: true };
+        } catch (error) {
+            console.error('Resend reset link error:', error);
+            setError(error.message);
+            throw error;
+        }
+    };
+
     const value = {
         user,
         loading,
@@ -209,7 +249,9 @@ export const AuthProvider = ({ children }) => {
         toggleDarkMode,
         sendMagicLink,
         loginWithBiometrics,
-        loginWith2FA
+        loginWith2FA,
+        forgotPassword,
+        resendResetLink
     };
 
     return (

@@ -1,9 +1,11 @@
-import React from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import React, { useEffect } from 'react';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import ForgotPassword from './pages/ForgotPassword';
+import EmailConfirmation from './pages/EmailConfirmation';
 import './index.css';
 
 // Protected Route wrapper
@@ -30,12 +32,29 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   return children;
 };
 
+// Component to check for email confirmation in URL hash
+function CheckHashForConfirmation() {
+  const navigate = useNavigate();
+  
+  useEffect(() => {
+    const hash = window.location.hash;
+    if (hash && hash.includes('access_token')) {
+      // If there's an access token in the hash, go to email confirmation
+      navigate('/email-confirmation', { replace: true });
+    }
+  }, [navigate]);
+  
+  return null;
+}
+
 // Main App Component
 function AppContent() {
   const { user, darkMode, toggleDarkMode } = useAuth();
 
   return (
     <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
+      <CheckHashForConfirmation />
+      
       {/* Dark mode toggle button - fixed position */}
       <button
         onClick={toggleDarkMode}
@@ -67,6 +86,10 @@ function AppContent() {
         <Route path="/register" element={
           !user ? <Register /> : <Navigate to="/dashboard" replace />
         } />
+        <Route path="/forgot-password" element={
+          !user ? <ForgotPassword /> : <Navigate to="/dashboard" replace />
+        } />
+        <Route path="/email-confirmation" element={<EmailConfirmation />} />
         <Route path="/dashboard" element={
           <ProtectedRoute>
             <Dashboard />
