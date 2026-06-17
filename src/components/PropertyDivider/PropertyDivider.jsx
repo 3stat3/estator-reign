@@ -1,50 +1,31 @@
-import React, { useState, useEffect } from 'react';
+// src/components/PropertyDivider/PropertyDivider.jsx
+
+import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
 import { useAuth } from '../../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
+import ReactFlow, {
+  MiniMap,
+  Controls,
+  Background,
+  useNodesState,
+  useEdgesState,
+  addEdge,
+  MarkerType,
+} from 'reactflow';
+import 'reactflow/dist/style.css';
+import { calculateAllInheritance, AssetLedger } from './inheritance/index.js';
 
-const PropertyDivider = () => {
-  const { darkMode } = useAuth();
-  
-  const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
-  const [isMobile, setIsMobile] = useState(false);
-  
-  useEffect(() => {
-    const checkMobile = () => {
-      setIsMobile(window.innerWidth <= 768);
-      if (window.innerWidth > 768) {
-        setIsMobileMenuOpen(false);
-      }
-    };
-    checkMobile();
-    window.addEventListener('resize', checkMobile);
-    return () => window.removeEventListener('resize', checkMobile);
-  }, []);
-  
-  const [decedents, setDecedents] = useState(() => {
-    const saved = localStorage.getItem('propertyDividerData');
-    return saved ? JSON.parse(saved) : [];
-  });
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [showPersonModal, setShowPersonModal] = useState(false);
-  const [showPropertyModal, setShowPropertyModal] = useState(false);
-  const [showAuditModal, setShowAuditModal] = useState(false);
-  const [selectedAuditTrail, setSelectedAuditTrail] = useState(null);
-  const [editingPerson, setEditingPerson] = useState(null);
-  const [editingProperty, setEditingProperty] = useState(null);
-  const [inheritanceResult, setInheritanceResult] = useState(null);
-  const [showClearConfirm, setShowClearConfirm] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [inheritanceSummary, setInheritanceSummary] = useState([]);
-  
-  // Track all inheritance transfers (who got what from whom)
-  const [inheritanceTransfers, setInheritanceTransfers] = useState([]);
-  
-  useEffect(() => {
-    localStorage.setItem('propertyDividerData', JSON.stringify(decedents));
-    calculateAllInheritances();
-  }, [decedents]);
-  
-  const [personForm, setPersonForm] = useState({
+// ==================== PERSON MODAL COMPONENT ====================
+const PersonModalComponent = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  editingPerson, 
+  decedents, 
+  darkMode, 
+  isMobile 
+}) => {
+  const [localForm, setLocalForm] = useState({
     name: '',
     dod: '',
     gender: 'Male',
@@ -52,435 +33,2016 @@ const PropertyDivider = () => {
     parentId: null,
     isDeceased: false
   });
-  
-  const [propertyForm, setPropertyForm] = useState({
+
+  useEffect(() => {
+    if (isOpen) {
+      if (editingPerson) {
+        setLocalForm({
+          name: editingPerson.name || '',
+          dod: editingPerson.dod || '',
+          gender: editingPerson.gender || 'Male',
+          spouseId: editingPerson.spouseId || null,
+          parentId: editingPerson.parentId || null,
+          isDeceased: editingPerson.isDeceased || false
+        });
+      } else {
+        setLocalForm({
+          name: '',
+          dod: '',
+          gender: 'Male',
+          spouseId: null,
+          parentId: null,
+          isDeceased: false
+        });
+      }
+    }
+  }, [isOpen, editingPerson]);
+
+  if (!isOpen) return null;
+
+  const handleChange = (field, value) => {
+    setLocalForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSave = () => {
+    if (!localForm.name.trim()) {
+      alert('Please enter a name');
+      return;
+    }
+    onSave(localForm);
+  };
+
+  const availablePeople = useMemo(() => {
+    return decedents.filter(p => {
+      if (editingPerson && p.id === editingPerson.id) return false;
+      return true;
+    });
+  }, [decedents, editingPerson]);
+
+  return (
+    <div style={{ 
+      position: 'fixed', 
+      top: 0, 
+      left: 0, 
+      right: 0, 
+      bottom: 0, 
+      background: 'rgba(0,0,0,0.8)', 
+      display: 'flex', 
+      alignItems: 'center', 
+      justifyContent: 'center', 
+      zIndex: 9999, 
+      backdropFilter: 'blur(8px)', 
+      padding: '16px' 
+    }}>
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        style={{
+          background: darkMode ? '#1e1e2e' : '#ffffff',
+          borderRadius: '24px',
+          padding: '24px',
+          width: '500px',
+          maxWidth: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ marginBottom: '20px', fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+          {editingPerson ? 'Edit Person' : 'Add New Person'}
+        </h3>
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Full Name *</label>
+        <input 
+          type="text" 
+          placeholder="e.g., Juan Dela Cruz" 
+          value={localForm.name} 
+          onChange={(e) => handleChange('name', e.target.value)} 
+          style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000', fontSize: '14px' }} 
+          autoFocus
+        />
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>⚰️ Date of Death (leave blank if still alive)</label>
+        <input 
+          type="date" 
+          value={localForm.dod} 
+          onChange={(e) => {
+            const value = e.target.value;
+            handleChange('dod', value);
+            handleChange('isDeceased', !!value);
+          }} 
+          style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} 
+        />
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Gender</label>
+        <select 
+          value={localForm.gender} 
+          onChange={(e) => handleChange('gender', e.target.value)} 
+          style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}
+        >
+          <option value="Male">Male</option>
+          <option value="Female">Female</option>
+        </select>
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>💍 Spouse (if married)</label>
+        <select 
+          value={localForm.spouseId ?? ''} 
+          onChange={(e) => {
+            const value = e.target.value;
+            handleChange('spouseId', value ? Number(value) : null);
+          }} 
+          style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}
+        >
+          <option value="">No Spouse / Select Spouse</option>
+          {availablePeople.map(p => (
+            <option key={p.id} value={p.id}>
+              {p.name} {p.dod ? '⚰️ Deceased' : '💚 Alive'}
+            </option>
+          ))}
+        </select>
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>👪 Parent</label>
+        <select 
+          value={localForm.parentId ?? ''} 
+          onChange={(e) => {
+            const value = e.target.value;
+            handleChange('parentId', value ? Number(value) : null);
+          }} 
+          style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}
+        >
+          <option value="">No Parent / Select Parent</option>
+          {availablePeople.map(p => (
+            <option key={p.id} value={p.id}>{p.name} {p.dod ? '⚰️ Deceased' : '💚 Alive'}</option>
+          ))}
+        </select>
+        
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
+          <button 
+            onClick={onClose} 
+            type="button"
+            style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            type="button"
+            style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Save Person
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// ==================== PROPERTY MODAL COMPONENT ====================
+const PropertyModalComponent = ({ 
+  isOpen, 
+  onClose, 
+  onSave, 
+  editingProperty, 
+  darkMode, 
+  isMobile 
+}) => {
+  const [localForm, setLocalForm] = useState({
     name: '',
     type: 'Land',
     totalSqm: '',
     classification: 'Conjugal'
   });
 
-  // Format number with commas
-  const formatNumber = (num) => {
+  useEffect(() => {
+    if (isOpen) {
+      if (editingProperty) {
+        setLocalForm({
+          name: editingProperty.name || '',
+          type: editingProperty.type || 'Land',
+          totalSqm: editingProperty.totalSqm || '',
+          classification: editingProperty.classification || 'Conjugal'
+        });
+      } else {
+        setLocalForm({
+          name: '',
+          type: 'Land',
+          totalSqm: '',
+          classification: 'Conjugal'
+        });
+      }
+    }
+  }, [isOpen, editingProperty]);
+
+  if (!isOpen) return null;
+
+  const handleChange = (field, value) => {
+    setLocalForm(prev => ({
+      ...prev,
+      [field]: value
+    }));
+  };
+
+  const handleSave = () => {
+    if (!localForm.name.trim() || !localForm.totalSqm) {
+      alert('Please fill all property fields');
+      return;
+    }
+    onSave(localForm);
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px' }}>
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        style={{
+          background: darkMode ? '#1e1e2e' : '#ffffff',
+          borderRadius: '24px',
+          padding: '24px',
+          width: '450px',
+          maxWidth: '100%',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <h3 style={{ marginBottom: '20px', fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+          {editingProperty ? 'Edit Property' : 'Add Property'}
+        </h3>
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Property Name</label>
+        <input type="text" placeholder="e.g., Family Home, Lot A" value={localForm.name} onChange={(e) => handleChange('name', e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Property Type</label>
+        <select value={localForm.type} onChange={(e) => handleChange('type', e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
+          <option value="Land">Land</option>
+          <option value="Building">Building</option>
+          <option value="Land & Building">Land & Building</option>
+        </select>
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Total Area (Square Meters)</label>
+        <input type="number" placeholder="e.g., 300" value={localForm.totalSqm} onChange={(e) => handleChange('totalSqm', e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
+        
+        <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Classification</label>
+        <select value={localForm.classification} onChange={(e) => handleChange('classification', e.target.value)} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
+          <option value="Exclusive">Exclusive - 100% belongs to decedent</option>
+          <option value="Conjugal">Conjugal/Community - 50% to spouse, 50% to estate</option>
+        </select>
+        
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
+          <button onClick={onClose} type="button" style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>
+          <button onClick={handleSave} type="button" style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Save Property</button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// ==================== PERSON DETAIL MODAL ====================
+const PersonDetailModal = ({ 
+  person, 
+  decedents, 
+  inheritanceResult, 
+  inheritanceTransfers,
+  totalEstateValue,
+  onClose, 
+  onEdit, 
+  onAddProperty, 
+  onEditProperty, 
+  onDeleteProperty,
+  darkMode,
+  formatNumber
+}) => {
+  if (!person) return null;
+
+  const spouse = decedents.find(p => p.id === person.spouseId);
+  const children = decedents.filter(p => p.parentId === person.id);
+  const hasChildren = children.length > 0;
+  const parents = decedents.filter(p => p.id === person.parentId);
+
+  // Calculate conjugal properties for this person
+  const conjugalProperties = person.properties?.filter(p => p.classification === 'Conjugal') || [];
+  const exclusiveProperties = person.properties?.filter(p => p.classification === 'Exclusive') || [];
+  
+  // Calculate total conjugal share (50% of conjugal properties)
+  const totalConjugalShare = conjugalProperties.reduce((sum, prop) => sum + (prop.totalSqm / 2), 0);
+  const totalExclusive = exclusiveProperties.reduce((sum, prop) => sum + prop.totalSqm, 0);
+
+  return (
+    <div style={{
+      position: 'fixed',
+      top: 0,
+      left: 0,
+      right: 0,
+      bottom: 0,
+      background: 'rgba(0,0,0,0.7)',
+      backdropFilter: 'blur(8px)',
+      display: 'flex',
+      alignItems: 'center',
+      justifyContent: 'center',
+      zIndex: 9998,
+      padding: '20px'
+    }}
+    onClick={onClose}
+    >
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0, y: 20 }}
+        animate={{ scale: 1, opacity: 1, y: 0 }}
+        exit={{ scale: 0.9, opacity: 0, y: 20 }}
+        style={{
+          background: darkMode ? '#1e1e2e' : '#ffffff',
+          borderRadius: '24px',
+          padding: '32px',
+          width: '700px',
+          maxWidth: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.5)',
+          position: 'relative'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <button
+          onClick={onClose}
+          type="button"
+          style={{
+            position: 'absolute',
+            top: '16px',
+            right: '16px',
+            background: 'transparent',
+            border: 'none',
+            fontSize: '24px',
+            cursor: 'pointer',
+            color: darkMode ? '#94a3b8' : '#64748b',
+            padding: '8px',
+            borderRadius: '8px',
+            transition: 'background 0.2s',
+            zIndex: 10
+          }}
+          onMouseEnter={(e) => e.currentTarget.style.background = darkMode ? '#2d2d44' : '#f0f0f0'}
+          onMouseLeave={(e) => e.currentTarget.style.background = 'transparent'}
+        >
+          ✕
+        </button>
+
+        <div style={{ marginBottom: '24px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '12px', marginBottom: '8px', flexWrap: 'wrap' }}>
+            <h2 style={{ fontSize: '28px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', margin: 0 }}>
+              {person.name}
+            </h2>
+            <span style={{ fontSize: '24px' }}>
+              {person.isDeceased ? '⚰️' : '💚'}
+            </span>
+            <button
+              onClick={() => { onEdit(person); }}
+              type="button"
+              style={{
+                padding: '6px 14px',
+                background: 'transparent',
+                border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                borderRadius: '40px',
+                fontSize: '12px',
+                cursor: 'pointer',
+                color: darkMode ? '#94a3b8' : '#64748b'
+              }}
+            >
+              ✏️ Edit
+            </button>
+          </div>
+          
+          <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '14px', margin: 0 }}>
+            {person.dod ? `Died: ${new Date(person.dod).toLocaleDateString()}` : 'Still Alive'}
+          </p>
+          
+          <div style={{ display: 'flex', gap: '16px', marginTop: '12px', flexWrap: 'wrap' }}>
+            {spouse && (
+              <span style={{ 
+                padding: '4px 12px', 
+                borderRadius: '20px', 
+                background: darkMode ? '#1e2d3d' : '#eef2ff',
+                color: darkMode ? '#94a3b8' : '#64748b',
+                fontSize: '13px'
+              }}>
+                💍 Spouse: {spouse.name}
+              </span>
+            )}
+            {parents.length > 0 && (
+              <span style={{ 
+                padding: '4px 12px', 
+                borderRadius: '20px', 
+                background: darkMode ? '#1e2d3d' : '#eef2ff',
+                color: darkMode ? '#94a3b8' : '#64748b',
+                fontSize: '13px'
+              }}>
+                👪 Parent: {parents[0].name}
+              </span>
+            )}
+            {hasChildren && (
+              <span style={{ 
+                padding: '4px 12px', 
+                borderRadius: '20px', 
+                background: darkMode ? '#1e2d3d' : '#eef2ff',
+                color: darkMode ? '#94a3b8' : '#64748b',
+                fontSize: '13px'
+              }}>
+                👨‍👧‍👦 {children.length} children
+              </span>
+            )}
+            {person.properties?.length > 0 && (
+              <span style={{ 
+                padding: '4px 12px', 
+                borderRadius: '20px', 
+                background: darkMode ? '#1e2d3d' : '#eef2ff',
+                color: darkMode ? '#94a3b8' : '#64748b',
+                fontSize: '13px'
+              }}>
+                📦 {person.properties.length} properties
+              </span>
+            )}
+          </div>
+        </div>
+
+        <div style={{
+          background: darkMode ? '#14161f' : '#f8fafc',
+          borderRadius: '16px',
+          padding: '20px',
+          marginBottom: '20px'
+        }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '12px' }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e', margin: 0 }}>
+              📋 Properties
+            </h3>
+            <button
+              onClick={() => { onAddProperty(); }}
+              type="button"
+              style={{
+                padding: '6px 16px',
+                background: 'linear-gradient(135deg, #667eea, #764ba2)',
+                color: 'white',
+                border: 'none',
+                borderRadius: '40px',
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              + Add Property
+            </button>
+          </div>
+          
+          {person.properties && person.properties.length > 0 ? (
+            <div>
+              {person.properties.map(prop => (
+                <div key={prop.id} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '10px 12px',
+                  marginBottom: '6px',
+                  borderRadius: '8px',
+                  background: darkMode ? '#0a0c10' : '#ffffff',
+                  border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
+                }}>
+                  <div>
+                    <div style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e', fontSize: '14px' }}>
+                      {prop.name}
+                    </div>
+                    <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                      {prop.type} • {prop.totalSqm} sqm • {prop.classification}
+                    </div>
+                  </div>
+                  <div style={{ display: 'flex', gap: '4px' }}>
+                    <button
+                      onClick={() => { onEditProperty(prop); }}
+                      type="button"
+                      style={{
+                        padding: '4px 8px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: darkMode ? '#94a3b8' : '#64748b',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      ✏️
+                    </button>
+                    <button
+                      onClick={() => onDeleteProperty(prop.id)}
+                      type="button"
+                      style={{
+                        padding: '4px 8px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer'
+                      }}
+                    >
+                      🗑️
+                    </button>
+                  </div>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', textAlign: 'center', padding: '20px 0' }}>
+              No properties added yet
+            </p>
+          )}
+        </div>
+
+        {/* Enhanced Inheritance Summary - Now includes all transfer details */}
+        {inheritanceResult && (
+          <div style={{
+            background: darkMode ? '#14161f' : '#f8fafc',
+            borderRadius: '16px',
+            padding: '20px',
+            marginBottom: '20px'
+          }}>
+            <h3 style={{ fontSize: '16px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '12px' }}>
+              💰 Inheritance Summary
+            </h3>
+            
+            {/* Show total estate for decedents */}
+            {inheritanceResult.isDecedent ? (
+              <div>
+                <div style={{ 
+                  padding: '12px',
+                  background: darkMode ? '#1e2d3d' : '#eef2ff',
+                  borderRadius: '8px',
+                  marginBottom: '12px'
+                }}>
+                  <div style={{ fontSize: '14px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    Total Estate Value
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {formatNumber(inheritanceResult.decedentEstate)} sqm
+                  </div>
+                  <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '4px' }}>
+                    {inheritanceResult.isHeir ? `Also an heir: ${inheritanceResult.heirRelationship}` : 'Decedent'}
+                  </div>
+                </div>
+                
+                {inheritanceResult.transfers && inheritanceResult.transfers.length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                      📤 Distributions:
+                    </div>
+                    {inheritanceResult.transfers.map((t, i) => (
+                      <div key={i} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        marginBottom: '4px',
+                        borderRadius: '6px',
+                        background: darkMode ? '#0a0c10' : '#ffffff',
+                        borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : '#2196F3'}`
+                      }}>
+                        <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
+                          → {t.toName} 
+                          {t.conjugal ? ' (Conjugal Share)' : ' (Inheritance)'}
+                          {t.represents && ` (${t.represents})`}
+                        </span>
+                        <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                          {formatNumber(t.amount)} sqm
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+            ) : inheritanceResult.isHeir ? (
+  <div>
+    {/* Show total inherited estate */}
+    <div style={{ 
+      padding: '12px',
+      background: darkMode ? '#1e2d3d' : '#eef2ff',
+      borderRadius: '8px',
+      marginBottom: '12px'
+    }}>
+      <div style={{ fontSize: '14px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+        Total Estate Holdings
+      </div>
+      <div style={{ fontSize: '24px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+        {formatNumber(inheritanceResult.totalEstateValue || 0)} sqm
+      </div>
+      <div style={{ fontSize: '13px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '4px' }}>
+        {inheritanceResult.heirRelationship}
+      </div>
+    </div>
+    
+    {/* Show conjugal share owned by this person (automatic 50% of conjugal properties) */}
+    {inheritanceResult.conjugalShareOwned > 0 && (
+      <div style={{
+        padding: '10px 14px',
+        marginBottom: '10px',
+        borderRadius: '8px',
+        background: darkMode ? '#1e2d3d' : '#eef2ff',
+        border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+            💍 Conjugal Share Owned (50% of conjugal properties)
+          </span>
+          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+            {formatNumber(inheritanceResult.conjugalShareOwned)} sqm
+          </span>
+        </div>
+        <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
+          This is the spouse's automatic 50% share of conjugal properties
+        </div>
+      </div>
+    )}
+    
+    {/* Show conjugal share received from inheritance */}
+    {inheritanceResult.totalConjugal > 0 && (
+      <div style={{
+        padding: '10px 14px',
+        marginBottom: '10px',
+        borderRadius: '8px',
+        background: darkMode ? '#1e2d3d' : '#eef2ff',
+        border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+            💍 Conjugal Share (from deceased spouse's estate)
+          </span>
+          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+            {formatNumber(inheritanceResult.totalConjugal)} sqm
+          </span>
+        </div>
+        <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
+          Inherited conjugal share from deceased spouse
+        </div>
+      </div>
+    )}
+    
+    {/* Show inheritance received */}
+    {inheritanceResult.totalInherited > 0 && (
+      <div style={{
+        padding: '10px 14px',
+        marginBottom: '10px',
+        borderRadius: '8px',
+        background: darkMode ? '#0a0c10' : '#ffffff',
+        border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+            📦 Inheritance Received
+          </span>
+          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+            {formatNumber(inheritanceResult.totalInherited)} sqm
+          </span>
+        </div>
+        <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
+          Inheritance from deceased spouse's estate
+        </div>
+      </div>
+    )}
+    
+    {/* Show exclusive properties owned */}
+    {totalExclusive > 0 && !person.isDeceased && (
+      <div style={{
+        padding: '10px 14px',
+        marginBottom: '10px',
+        borderRadius: '8px',
+        background: darkMode ? '#0a0c10' : '#ffffff',
+        border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
+      }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+            📦 Exclusive Properties Owned
+          </span>
+          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+            {formatNumber(totalExclusive)} sqm
+          </span>
+        </div>
+      </div>
+    )}
+    
+    {/* Show breakdown of inheritance received */}
+    {inheritanceResult.transfers && inheritanceResult.transfers.filter(t => t.toId === inheritanceResult.person.id).length > 0 && (
+      <div>
+        <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+          📥 Received From:
+        </div>
+        {inheritanceResult.transfers.filter(t => t.toId === inheritanceResult.person.id).map((t, i) => (
+          <div key={i} style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            marginBottom: '4px',
+            borderRadius: '6px',
+            background: darkMode ? '#0a0c10' : '#ffffff',
+            borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : '#2196F3'}`
+          }}>
+            <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
+              ← {t.fromName} 
+              {t.conjugal ? ' (Conjugal Share)' : ' (Inheritance)'}
+              {t.represents && ` (${t.represents})`}
+            </span>
+            <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+              {formatNumber(t.amount)} sqm
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+    
+    {/* Show what they gave (if they are also a decedent) */}
+    {inheritanceResult.transfers.filter(t => t.fromId === inheritanceResult.person.id).length > 0 && (
+      <div style={{ marginTop: '12px' }}>
+        <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+          📤 Distributed To Others:
+        </div>
+        {inheritanceResult.transfers.filter(t => t.fromId === inheritanceResult.person.id).map((t, i) => (
+          <div key={i} style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            padding: '8px 12px',
+            marginBottom: '4px',
+            borderRadius: '6px',
+            background: darkMode ? '#0a0c10' : '#ffffff',
+            borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : '#FF9800'}`
+          }}>
+            <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
+              → {t.toName} 
+              {t.conjugal ? ' (Conjugal Share)' : ' (Inheritance)'}
+            </span>
+            <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+              {formatNumber(t.amount)} sqm
+            </span>
+          </div>
+        ))}
+      </div>
+    )}
+    
+    {/* Net inheritance */}
+    <div style={{
+      marginTop: '12px',
+      padding: '12px 14px',
+      borderRadius: '8px',
+      background: darkMode ? '#1e2d3d' : '#eef2ff',
+      border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+    }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+        <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+          Net Inheritance (Received - Given):
+        </span>
+        <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>
+          {formatNumber((inheritanceResult.totalInherited || 0) + (inheritanceResult.totalConjugal || 0) - (inheritanceResult.totalGiven || 0))} sqm
+        </strong>
+      </div>
+      <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
+        This includes conjugal share, inheritance, and excludes what was given
+      </div>
+    </div>
+  </div>
+            ) : (
+              <p style={{ color: darkMode ? '#64748b' : '#94a3b8', textAlign: 'center', padding: '10px 0' }}>
+                No inheritance records found
+              </p>
+            )}
+          </div>
+        )}
+      </motion.div>
+    </div>
+  );
+};
+
+// ==================== FAMILY MAP - REACT FLOW ====================
+const FamilyMap = ({ decedents, selectedPersonId, onSelectPerson, darkMode }) => {
+  const [nodes, setNodes, onNodesChange] = useNodesState([]);
+  const [edges, setEdges, onEdgesChange] = useEdgesState([]);
+
+  useEffect(() => {
+    const newNodes = [];
+    const newEdges = [];
+    
+    decedents.forEach((person, index) => {
+      const isSelected = selectedPersonId === person.id;
+      const isDeceased = person.isDeceased;
+      
+      newNodes.push({
+        id: String(person.id),
+        data: { 
+          label: person.name,
+          deceased: isDeceased,
+          dod: person.dod,
+          properties: person.properties?.length || 0,
+          hasChildren: decedents.some(c => c.parentId === person.id),
+          hasSpouse: !!person.spouseId
+        },
+        position: { 
+          x: (index % 5) * 200 + 50, 
+          y: Math.floor(index / 5) * 120 + 50 
+        },
+        style: {
+          background: isSelected 
+            ? 'linear-gradient(135deg, #667eea, #764ba2)'
+            : isDeceased 
+              ? 'linear-gradient(135deg, #f093fb, #f5576c)'
+              : 'linear-gradient(135deg, #4facfe, #00f2fe)',
+          color: 'white',
+          borderRadius: '16px',
+          width: 100,
+          height: 60,
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          textAlign: 'center',
+          padding: 10,
+          fontSize: 13,
+          fontWeight: 600,
+          border: isSelected ? '3px solid #fff' : 'none',
+          boxShadow: isSelected 
+            ? '0 8px 32px rgba(102, 126, 234, 0.4)'
+            : '0 4px 16px rgba(0,0,0,0.15)',
+          transition: 'all 0.3s ease',
+          cursor: 'pointer',
+        }
+      });
+      
+      if (person.spouseId) {
+        newEdges.push({
+          id: `spouse-${person.id}-${person.spouseId}`,
+          source: String(person.id),
+          target: String(person.spouseId),
+          type: 'smoothstep',
+          style: { stroke: '#ff6b6b', strokeWidth: 2 },
+          label: '💍',
+          labelStyle: { fill: '#ff6b6b', fontSize: 16 },
+          labelBgStyle: { fill: 'transparent' },
+          markerEnd: {
+            type: MarkerType.ArrowClosed,
+            color: '#ff6b6b',
+          }
+        });
+      }
+      
+      if (person.parentId) {
+        const parentExists = decedents.some(p => p.id === person.parentId);
+        if (parentExists) {
+          newEdges.push({
+            id: `parent-${person.id}-${person.parentId}`,
+            source: String(person.parentId),
+            target: String(person.id),
+            type: 'smoothstep',
+            style: { stroke: '#4a9eff', strokeWidth: 2 },
+            markerEnd: {
+              type: MarkerType.ArrowClosed,
+              color: '#4a9eff',
+            }
+          });
+        }
+      }
+    });
+    
+    setNodes(newNodes);
+    setEdges(newEdges);
+  }, [decedents, selectedPersonId]);
+
+  const onNodeClick = useCallback((_, node) => {
+    const person = decedents.find(p => String(p.id) === node.id);
+    if (person) onSelectPerson(person);
+  }, [decedents, onSelectPerson]);
+
+  const onConnect = useCallback((params) => setEdges((eds) => addEdge(params, eds)), []);
+
+  const nodeTypes = useMemo(() => ({}), []);
+  const edgeTypes = useMemo(() => ({}), []);
+
+  if (decedents.length === 0) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        color: darkMode ? '#64748b' : '#94a3b8'
+      }}>
+        <div style={{ fontSize: '64px', marginBottom: '16px' }}>📖</div>
+        <h3 style={{ fontSize: '20px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+          No Story Yet
+        </h3>
+        <p>Click "Add Person" to start your family estate story</p>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ width: '100%', height: '100%' }}>
+      <ReactFlow
+        nodes={nodes}
+        edges={edges}
+        onNodesChange={onNodesChange}
+        onEdgesChange={onEdgesChange}
+        onConnect={onConnect}
+        onNodeClick={onNodeClick}
+        fitView
+        fitViewOptions={{ padding: 0.2 }}
+        attributionPosition="bottom-left"
+        nodeTypes={nodeTypes}
+        edgeTypes={edgeTypes}
+        minZoom={0.3}
+        maxZoom={2}
+      >
+        <Background 
+          color={darkMode ? '#1a1a2e' : '#f0f0f0'} 
+          gap={16} 
+          size={1}
+        />
+        <Controls 
+          style={{
+            background: darkMode ? '#1e1e2e' : '#ffffff',
+            border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+            borderRadius: '8px',
+          }}
+        />
+        <MiniMap 
+          nodeColor={(node) => node.data?.deceased ? '#f5576c' : '#4facfe'}
+          maskColor={darkMode ? 'rgba(0,0,0,0.7)' : 'rgba(255,255,255,0.7)'}
+          style={{
+            background: darkMode ? '#0a0c10' : '#ffffff',
+            border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+            borderRadius: '8px',
+          }}
+        />
+      </ReactFlow>
+    </div>
+  );
+};
+
+// ==================== BULK ADD MODAL ====================
+const BulkAddModal = ({ isOpen, onClose, onSave, darkMode }) => {
+  const [rows, setRows] = useState([
+    { id: 1, name: '', dod: '', gender: 'Male', spouse: '', parent: '' }
+  ]);
+  const [nextId, setNextId] = useState(2);
+
+  if (!isOpen) return null;
+
+  const addRow = () => {
+    setRows([...rows, { id: nextId, name: '', dod: '', gender: 'Male', spouse: '', parent: '' }]);
+    setNextId(nextId + 1);
+  };
+
+  const removeRow = (id) => {
+    if (rows.length <= 1) return;
+    setRows(rows.filter(row => row.id !== id));
+  };
+
+  const updateRow = (id, field, value) => {
+    setRows(rows.map(row => 
+      row.id === id ? { ...row, [field]: value } : row
+    ));
+  };
+
+  const handleSave = () => {
+    const validRows = rows.filter(row => row.name.trim());
+    if (validRows.length === 0) {
+      alert('Please enter at least one person with a name');
+      return;
+    }
+    onSave(rows);
+    setRows([{ id: 1, name: '', dod: '', gender: 'Male', spouse: '', parent: '' }]);
+    setNextId(2);
+  };
+
+  const handlePaste = (e) => {
+    const pastedData = e.clipboardData.getData('text');
+    const lines = pastedData.split('\n').filter(line => line.trim());
+    const newRows = [];
+    
+    lines.forEach((line, index) => {
+      const parts = line.split('\t').map(s => s.trim());
+      if (parts.length >= 1 && parts[0]) {
+        newRows.push({
+          id: nextId + index,
+          name: parts[0] || '',
+          dod: parts[1] || '',
+          gender: parts[2] || 'Male',
+          spouse: parts[3] || '',
+          parent: parts[4] || ''
+        });
+      }
+    });
+    
+    if (newRows.length > 0) {
+      setRows(newRows);
+      setNextId(nextId + newRows.length);
+    }
+    e.preventDefault();
+  };
+
+  return (
+    <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 9999, backdropFilter: 'blur(8px)', padding: '16px' }}>
+      <motion.div
+        initial={{ scale: 0.9, opacity: 0 }}
+        animate={{ scale: 1, opacity: 1 }}
+        style={{
+          background: darkMode ? '#1e1e2e' : '#ffffff',
+          borderRadius: '24px',
+          padding: '24px',
+          width: '800px',
+          maxWidth: '100%',
+          maxHeight: '90vh',
+          overflowY: 'auto',
+          boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+        }}
+        onClick={(e) => e.stopPropagation()}
+      >
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
+          <h3 style={{ fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+            📋 Bulk Add People
+          </h3>
+          <div style={{ display: 'flex', gap: '8px' }}>
+            <button
+              onClick={addRow}
+              type="button"
+              style={{
+                padding: '6px 16px',
+                background: '#4CAF50',
+                color: 'white',
+                border: 'none',
+                borderRadius: '40px',
+                fontSize: '13px',
+                cursor: 'pointer'
+              }}
+            >
+              + Add Row
+            </button>
+          </div>
+        </div>
+        
+        <div style={{ 
+          fontSize: '13px', 
+          color: darkMode ? '#94a3b8' : '#64748b', 
+          marginBottom: '12px',
+          padding: '12px',
+          background: darkMode ? '#0a0c10' : '#f8fafc',
+          borderRadius: '8px'
+        }}>
+          💡 Enter people below. You can also paste from Excel (copy columns: Name, Date of Death, Gender, Spouse, Parent)
+        </div>
+        
+        <div style={{ 
+          maxHeight: '400px', 
+          overflowY: 'auto',
+          border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+          borderRadius: '12px'
+        }}>
+          <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+            <thead style={{ 
+              background: darkMode ? '#0a0c10' : '#f8fafc',
+              position: 'sticky',
+              top: 0,
+              zIndex: 1
+            }}>
+              <tr>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: darkMode ? '#94a3b8' : '#64748b' }}>Name *</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: darkMode ? '#94a3b8' : '#64748b' }}>Date of Death</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: darkMode ? '#94a3b8' : '#64748b' }}>Gender</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: darkMode ? '#94a3b8' : '#64748b' }}>Spouse</th>
+                <th style={{ padding: '8px 12px', textAlign: 'left', fontSize: '11px', fontWeight: 600, color: darkMode ? '#94a3b8' : '#64748b' }}>Parent</th>
+                <th style={{ padding: '8px 12px', textAlign: 'center', fontSize: '11px', fontWeight: 600, color: darkMode ? '#94a3b8' : '#64748b' }}></th>
+              </tr>
+            </thead>
+            <tbody onPaste={handlePaste}>
+              {rows.map((row) => (
+                <tr key={row.id} style={{ borderTop: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}` }}>
+                  <td style={{ padding: '6px 8px' }}>
+                    <input
+                      type="text"
+                      value={row.name}
+                      onChange={(e) => updateRow(row.id, 'name', e.target.value)}
+                      placeholder="Full name..."
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                        borderRadius: '6px',
+                        background: darkMode ? '#0f1220' : '#fff',
+                        color: darkMode ? '#fff' : '#000',
+                        fontSize: '13px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <input
+                      type="date"
+                      value={row.dod}
+                      onChange={(e) => updateRow(row.id, 'dod', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                        borderRadius: '6px',
+                        background: darkMode ? '#0f1220' : '#fff',
+                        color: darkMode ? '#fff' : '#000',
+                        fontSize: '13px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <select
+                      value={row.gender}
+                      onChange={(e) => updateRow(row.id, 'gender', e.target.value)}
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                        borderRadius: '6px',
+                        background: darkMode ? '#0f1220' : '#fff',
+                        color: darkMode ? '#fff' : '#000',
+                        fontSize: '13px'
+                      }}
+                    >
+                      <option value="Male">Male</option>
+                      <option value="Female">Female</option>
+                    </select>
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <input
+                      type="text"
+                      value={row.spouse}
+                      onChange={(e) => updateRow(row.id, 'spouse', e.target.value)}
+                      placeholder="Spouse name..."
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                        borderRadius: '6px',
+                        background: darkMode ? '#0f1220' : '#fff',
+                        color: darkMode ? '#fff' : '#000',
+                        fontSize: '13px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px' }}>
+                    <input
+                      type="text"
+                      value={row.parent}
+                      onChange={(e) => updateRow(row.id, 'parent', e.target.value)}
+                      placeholder="Parent name..."
+                      style={{
+                        width: '100%',
+                        padding: '6px 10px',
+                        border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                        borderRadius: '6px',
+                        background: darkMode ? '#0f1220' : '#fff',
+                        color: darkMode ? '#fff' : '#000',
+                        fontSize: '13px'
+                      }}
+                    />
+                  </td>
+                  <td style={{ padding: '6px 8px', textAlign: 'center' }}>
+                    <button
+                      onClick={() => removeRow(row.id)}
+                      type="button"
+                      style={{
+                        padding: '4px 8px',
+                        background: 'transparent',
+                        border: 'none',
+                        color: '#ef4444',
+                        cursor: 'pointer',
+                        fontSize: '16px'
+                      }}
+                    >
+                      ✕
+                    </button>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+        
+        <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', marginTop: '20px' }}>
+          <button 
+            onClick={onClose} 
+            type="button"
+            style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSave} 
+            type="button"
+            style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}
+          >
+            Add {rows.filter(r => r.name.trim()).length} People
+          </button>
+        </div>
+      </motion.div>
+    </div>
+  );
+};
+
+// ==================== STORY MODE COMPONENT ====================
+const StoryMode = ({ decedents, inheritanceSummary, inheritanceTransfers, totalEstateValue, darkMode, formatNumber, onSelectPerson }) => {
+  const [expandedChapter, setExpandedChapter] = useState(null);
+  
+  if (decedents.length === 0) {
+    return (
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        height: '100%',
+        padding: '40px',
+        color: darkMode ? '#94a3b8' : '#64748b',
+        textAlign: 'center'
+      }}>
+        <div style={{ fontSize: '64px', marginBottom: '24px' }}>📖</div>
+        <h3 style={{ fontSize: '24px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '12px' }}>
+          Estate Story
+        </h3>
+        <p style={{ maxWidth: '400px' }}>
+          Start by adding people to your family tree. The story of your estate will unfold here.
+        </p>
+      </div>
+    );
+  }
+
+  // Find the decedent (first deceased person with properties or first in list)
+  const decedent = decedents.find(p => p.isDeceased && p.properties?.length > 0) || decedents[0];
+  const spouse = decedents.find(p => p.id === decedent?.spouseId);
+  const children = decedents.filter(p => p.parentId === decedent?.id);
+  const parents = decedents.filter(p => p.id === decedent?.parentId);
+  
+  // Get inheritance for decedent
+  const decedentInheritance = inheritanceSummary.find(s => s.decedentId === decedent?.id);
+  const hasInheritance = decedentInheritance && decedentInheritance.heirs.length > 0;
+
+  const chapters = [
+    {
+      id: 'decedent',
+      icon: '👤',
+      title: 'The Decedent',
+      content: (
+        <div>
+          <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '8px' }}>
+            <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{decedent?.name}</strong>
+            {decedent?.dod ? ` passed away on ${new Date(decedent.dod).toLocaleDateString()}.` : ' is the central figure of this estate.'}
+          </p>
+          {decedent?.dod && (
+            <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '14px' }}>
+              ⚰️ Age at passing: {Math.floor((new Date(decedent.dod) - new Date(new Date().getFullYear() - 80, 0, 1)) / (1000 * 60 * 60 * 24 * 365.25))} years
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      id: 'family',
+      icon: '👨‍👩‍👧‍👦',
+      title: 'The Family',
+      content: (
+        <div>
+          {spouse && (
+            <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '6px' }}>
+              💍 <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{spouse.name}</strong> - Spouse
+              {spouse.isDeceased ? ' ⚰️ (Deceased)' : ' 💚 (Living)'}
+            </p>
+          )}
+          {parents.length > 0 && parents.map(p => (
+            <p key={p.id} style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '6px' }}>
+              👪 <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{p.name}</strong> - Parent
+              {p.isDeceased ? ' ⚰️ (Deceased)' : ' 💚 (Living)'}
+            </p>
+          ))}
+          {children.length > 0 && children.map(c => (
+            <p key={c.id} style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '6px' }}>
+              👨‍👧‍👦 <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{c.name}</strong> - Child
+              {c.isDeceased ? ' ⚰️ (Deceased)' : ' 💚 (Living)'}
+            </p>
+          ))}
+          {!spouse && parents.length === 0 && children.length === 0 && (
+            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
+              No family members linked yet. Add relationships to build the family story.
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      id: 'estate',
+      icon: '🏠',
+      title: 'The Estate',
+      content: (
+        <div>
+          {decedent?.properties && decedent.properties.length > 0 ? (
+            <div>
+              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '12px' }}>
+                <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{decedent.name}</strong> left behind:
+              </p>
+              {decedent.properties.map(prop => (
+                <div key={prop.id} style={{
+                  padding: '10px 14px',
+                  marginBottom: '8px',
+                  borderRadius: '8px',
+                  background: darkMode ? '#0a0c10' : '#f8fafc',
+                  border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
+                }}>
+                  <div style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {prop.name}
+                  </div>
+                  <div style={{ fontSize: '13px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    {prop.type} • {prop.totalSqm} sqm • {prop.classification}
+                  </div>
+                </div>
+              ))}
+              <div style={{
+                marginTop: '12px',
+                padding: '12px',
+                borderRadius: '8px',
+                background: darkMode ? '#1e2d3d' : '#eef2ff',
+                border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+              }}>
+                <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                  Total Estate Value:
+                </span>
+                <strong style={{ color: darkMode ? '#fff' : '#1a1a2e', fontSize: '18px', display: 'block', marginTop: '4px' }}>
+                  {formatNumber(totalEstateValue)} sqm
+                </strong>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
+              No properties added yet. Add properties to build the estate story.
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      id: 'distribution',
+      icon: '💰',
+      title: 'Distribution',
+      content: (
+        <div>
+          {hasInheritance && decedentInheritance.heirs.length > 0 ? (
+            <div>
+              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '12px' }}>
+                The estate of <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{decedent.name}</strong> is distributed as follows:
+              </p>
+              {decedentInheritance.heirs.map((heir, index) => {
+                const person = decedents.find(p => p.id === heir.id);
+                return (
+                  <div key={index} style={{
+                    display: 'flex',
+                    justifyContent: 'space-between',
+                    alignItems: 'center',
+                    padding: '10px 14px',
+                    marginBottom: '8px',
+                    borderRadius: '8px',
+                    background: darkMode ? '#0a0c10' : '#f8fafc',
+                    border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+                    cursor: person ? 'pointer' : 'default',
+                  }}
+                  onClick={() => person && onSelectPerson(person)}
+                  >
+                    <div>
+                      <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                        {heir.name}
+                      </span>
+                      <span style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', marginLeft: '8px' }}>
+                        {heir.relationship}
+                        {heir.isRepresentative && ` (Represents ${heir.represents})`}
+                      </span>
+                    </div>
+                    <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                      {formatNumber(heir.share)} sqm
+                      {heir.conjugalShare > 0 && ` (${formatNumber(heir.conjugalShare)} conjugal)`}
+                    </span>
+                  </div>
+                );
+              })}
+              <div style={{
+                marginTop: '12px',
+                padding: '12px 14px',
+                borderRadius: '8px',
+                background: darkMode ? '#1e2d3d' : '#eef2ff',
+                border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+              }}>
+                <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                  Total Distributed:
+                </span>
+                <strong style={{ color: darkMode ? '#fff' : '#1a1a2e', display: 'block', marginTop: '4px' }}>
+                  {formatNumber(decedentInheritance.totalAssets)} sqm
+                </strong>
+              </div>
+            </div>
+          ) : (
+            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
+              No inheritance distribution calculated yet. Add properties and relationships to see the distribution.
+            </p>
+          )}
+        </div>
+      )
+    },
+    {
+      id: 'audit',
+      icon: '📋',
+      title: 'Audit Trail',
+      content: (
+        <div>
+          {inheritanceTransfers.length > 0 ? (
+            <div>
+              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '12px' }}>
+                Transaction history of all inheritance transfers:
+              </p>
+              {inheritanceTransfers.slice(0, 10).map((t, index) => (
+                <div key={index} style={{
+                  display: 'flex',
+                  justifyContent: 'space-between',
+                  alignItems: 'center',
+                  padding: '8px 14px',
+                  marginBottom: '6px',
+                  borderRadius: '6px',
+                  background: darkMode ? '#0a0c10' : '#ffffff',
+                  borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : t.represents ? '#FF9800' : '#2196F3'}`
+                }}>
+                  <div>
+                    <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                      {t.fromName} → {t.toName}
+                    </span>
+                    {t.represents && (
+                      <span style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginLeft: '8px' }}>
+                        (Representing {t.represents})
+                      </span>
+                    )}
+                  </div>
+                  <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {formatNumber(t.amount)} sqm
+                  </span>
+                </div>
+              ))}
+              {inheritanceTransfers.length > 10 && (
+                <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontSize: '13px', textAlign: 'center', marginTop: '8px' }}>
+                  + {inheritanceTransfers.length - 10} more transfers
+                </p>
+              )}
+            </div>
+          ) : (
+            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
+              No transactions recorded yet.
+            </p>
+          )}
+        </div>
+      )
+    }
+  ];
+
+  const toggleChapter = (id) => {
+    setExpandedChapter(expandedChapter === id ? null : id);
+  };
+
+  return (
+    <div style={{
+      height: '100%',
+      overflow: 'auto',
+      padding: '20px',
+      background: darkMode ? '#0a0c10' : '#f8fafc',
+      position: 'relative'
+    }}>
+      {/* Header */}
+      <div style={{
+        marginBottom: '24px',
+        textAlign: 'center',
+        padding: '20px',
+        borderRadius: '16px',
+        background: darkMode ? 'rgba(30,30,46,0.6)' : 'rgba(255,255,255,0.8)',
+        backdropFilter: 'blur(10px)',
+        border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+      }}>
+        <div style={{ fontSize: '40px', marginBottom: '8px' }}>📖</div>
+        <h2 style={{ fontSize: '24px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', margin: 0 }}>
+          Estate Story
+        </h2>
+        <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '14px', marginTop: '4px' }}>
+          The narrative of your family's legacy and inheritance
+        </p>
+      </div>
+
+      {/* Quick Stats */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
+        gap: '12px',
+        marginBottom: '24px'
+      }}>
+        {[
+          { icon: '👤', label: 'Members', value: decedents.length },
+          { icon: '🏠', label: 'Properties', value: decedents.reduce((sum, p) => sum + (p.properties?.length || 0), 0) },
+          { icon: '💰', label: 'Total Estate', value: formatNumber(totalEstateValue) + ' sqm' },
+          { icon: '💍', label: 'Couples', value: Math.floor(decedents.filter(p => p.spouseId).length / 2) },
+        ].map((stat, index) => (
+          <div key={index} style={{
+            padding: '12px 16px',
+            borderRadius: '12px',
+            background: darkMode ? 'rgba(30,30,46,0.4)' : 'rgba(255,255,255,0.6)',
+            backdropFilter: 'blur(10px)',
+            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+            textAlign: 'center'
+          }}>
+            <div style={{ fontSize: '20px' }}>{stat.icon}</div>
+            <div style={{ fontSize: '18px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e' }}>
+              {stat.value}
+            </div>
+            <div style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+              {stat.label}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      {/* Story Chapters */}
+      <div style={{
+        display: 'flex',
+        flexDirection: 'column',
+        gap: '12px'
+      }}>
+        {chapters.map((chapter, index) => (
+          <motion.div
+            key={chapter.id}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: index * 0.1 }}
+            style={{
+              borderRadius: '16px',
+              background: darkMode ? 'rgba(30,30,46,0.6)' : 'rgba(255,255,255,0.8)',
+              backdropFilter: 'blur(10px)',
+              border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+              overflow: 'hidden',
+              transition: 'all 0.3s ease',
+            }}
+          >
+            <div
+              onClick={() => toggleChapter(chapter.id)}
+              style={{
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'space-between',
+                padding: '16px 20px',
+                cursor: 'pointer',
+                transition: 'background 0.2s',
+                ...(expandedChapter === chapter.id ? {
+                  background: darkMode ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)',
+                } : {})
+              }}
+              onMouseEnter={(e) => {
+                if (expandedChapter !== chapter.id) {
+                  e.currentTarget.style.background = darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+                }
+              }}
+              onMouseLeave={(e) => {
+                if (expandedChapter !== chapter.id) {
+                  e.currentTarget.style.background = 'transparent';
+                }
+              }}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+                <span style={{ fontSize: '24px' }}>{chapter.icon}</span>
+                <div>
+                  <div style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    Chapter {index + 1}: {chapter.title}
+                  </div>
+                  <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    {expandedChapter === chapter.id ? 'Click to collapse' : 'Click to expand'}
+                  </div>
+                </div>
+              </div>
+              <div style={{
+                fontSize: '20px',
+                color: darkMode ? '#94a3b8' : '#64748b',
+                transform: expandedChapter === chapter.id ? 'rotate(180deg)' : 'rotate(0deg)',
+                transition: 'transform 0.3s ease',
+              }}>
+                ▼
+              </div>
+            </div>
+            
+            <AnimatePresence>
+              {expandedChapter === chapter.id && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{ height: 'auto', opacity: 1 }}
+                  exit={{ height: 0, opacity: 0 }}
+                  transition={{ duration: 0.3, ease: 'easeInOut' }}
+                  style={{
+                    overflow: 'hidden',
+                    padding: '0 20px 20px 20px',
+                    borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+                  }}
+                >
+                  {chapter.content}
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
+        ))}
+      </div>
+
+      {/* Footer */}
+      <div style={{
+        marginTop: '24px',
+        padding: '16px',
+        textAlign: 'center',
+        borderRadius: '12px',
+        background: darkMode ? 'rgba(30,30,46,0.3)' : 'rgba(255,255,255,0.4)',
+        border: `1px solid ${darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'}`
+      }}>
+        <p style={{ fontSize: '12px', color: darkMode ? '#64748b' : '#94a3b8' }}>
+          💡 Click on any name to view their detailed profile and inheritance information
+        </p>
+      </div>
+    </div>
+  );
+};
+
+// ==================== MAIN PROPERTY DIVIDER COMPONENT ====================
+const PropertyDivider = () => {
+  const { darkMode } = useAuth();
+  
+  const [decedents, setDecedents] = useState(() => {
+    const saved = localStorage.getItem('propertyDividerData');
+    return saved ? JSON.parse(saved) : [];
+  });
+  const [selectedPersonId, setSelectedPersonId] = useState(null);
+  const [showPersonModal, setShowPersonModal] = useState(false);
+  const [showBulkModal, setShowBulkModal] = useState(false);
+  const [showPropertyModal, setShowPropertyModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [editingPersonId, setEditingPersonId] = useState(null);
+  const [editingProperty, setEditingProperty] = useState(null);
+  const [inheritanceResult, setInheritanceResult] = useState(null);
+  const [showClearConfirm, setShowClearConfirm] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [personToDelete, setPersonToDelete] = useState(null);
+  const [searchQuery, setSearchQuery] = useState('');
+  const [inheritanceSummary, setInheritanceSummary] = useState([]);
+  const [inheritanceTransfers, setInheritanceTransfers] = useState([]);
+  const [inheritanceDetails, setInheritanceDetails] = useState(null);
+  const [isCalculating, setIsCalculating] = useState(false);
+  const [totalEstateValue, setTotalEstateValue] = useState(0);
+  const [viewMode, setViewMode] = useState('story'); // 'story' or 'map'
+  const previousDecedentsRef = useRef();
+
+  const selectedPerson = useMemo(() => 
+    decedents.find(p => p.id === selectedPersonId) || null,
+    [decedents, selectedPersonId]
+  );
+  
+  const editingPerson = useMemo(() => 
+    decedents.find(p => p.id === editingPersonId) || null,
+    [decedents, editingPersonId]
+  );
+
+  useEffect(() => {
+    localStorage.setItem('propertyDividerData', JSON.stringify(decedents));
+    
+    const decedentsChanged = JSON.stringify(previousDecedentsRef.current) !== JSON.stringify(decedents);
+    if (decedentsChanged && !isCalculating) {
+      previousDecedentsRef.current = JSON.parse(JSON.stringify(decedents));
+      calculateAllInheritances();
+    }
+  }, [decedents]);
+
+  useEffect(() => {
+    if (selectedPersonId && inheritanceSummary.length > 0) {
+      const personExists = decedents.some(p => p.id === selectedPersonId);
+      if (personExists) {
+        updateSelectedPersonData(selectedPersonId, inheritanceSummary, inheritanceTransfers);
+      }
+    }
+  }, [inheritanceSummary, inheritanceTransfers, selectedPersonId]);
+
+  const formatNumber = useCallback((num) => {
     if (num === undefined || num === null) return '0';
     return num.toLocaleString('en-US', {
       minimumFractionDigits: 2,
       maximumFractionDigits: 2
     });
-  };
+  }, []);
 
-  const clearAllData = () => {
+  const clearAllData = useCallback(() => {
     localStorage.removeItem('propertyDividerData');
     setDecedents([]);
-    setSelectedPerson(null);
+    setSelectedPersonId(null);
     setInheritanceResult(null);
     setInheritanceSummary([]);
     setInheritanceTransfers([]);
+    setInheritanceDetails(null);
+    setTotalEstateValue(0);
     setShowClearConfirm(false);
-  };
+  }, []);
 
-  const getChildrenForPerson = (personId) => {
-    const person = decedents.find(p => p.id === personId);
-    if (!person) return [];
-    
-    const directChildren = decedents.filter(p => p.parentId === personId);
-    const spouseChildren = person.spouseId 
-      ? decedents.filter(p => p.parentId === person.spouseId)
-      : [];
-    
-    const allChildren = [...directChildren, ...spouseChildren];
-    const uniqueChildren = allChildren.filter((child, index, self) => 
-      self.findIndex(c => c.id === child.id) === index
-    );
-    
-    return uniqueChildren;
-  };
-
-  // Get living descendants for representation
-  const getLivingDescendantsForRepresentation = (personId, allPersons) => {
-    const descendants = [];
-    const children = allPersons.filter(p => p.parentId === personId);
-    
-    for (const child of children) {
-      if (!child.dod) {
-        descendants.push({ ...child, represents: child.parentId === personId ? null : null });
-      } else {
-        const grandDescendants = getLivingDescendantsForRepresentation(child.id, allPersons);
-        descendants.push(...grandDescendants.map(d => ({ ...d, represents: child.name })));
-      }
-    }
-    return descendants;
-  };
-
-  // Check if a pre-deceased child has living descendants who can represent them
-  const hasLivingDescendants = (personId, allPersons) => {
-    const children = allPersons.filter(p => p.parentId === personId);
-    for (const child of children) {
-      if (!child.dod) return true;
-      if (hasLivingDescendants(child.id, allPersons)) return true;
-    }
-    return false;
-  };
-
-  // Get eligible heirs for a decedent (including representatives)
-  const getEligibleHeirsForDecedent = (decedent, allPersons, spouse) => {
-    const children = allPersons.filter(p => p.parentId === decedent.id);
-    const eligibleHeirs = [];
-    
-    // Add surviving spouse
-    if (spouse && !spouse.dod) {
-      eligibleHeirs.push({ 
-        ...spouse, 
-        relationship: 'Spouse', 
-        isRepresentative: false, 
-        represents: null,
-        originalShare: null
-      });
-    }
-    
-    // Process children
-    for (const child of children) {
-      if (!child.dod) {
-        // Living child - direct heir
-        eligibleHeirs.push({ 
-          ...child, 
-          relationship: 'Child', 
-          isRepresentative: false, 
-          represents: null,
-          originalShare: null
-        });
-      } else if (hasLivingDescendants(child.id, allPersons)) {
-        // Pre-deceased child WITH living descendants - representation applies
-        const representatives = getLivingDescendantsForRepresentation(child.id, allPersons);
-        representatives.forEach(rep => {
-          eligibleHeirs.push({ 
-            ...rep, 
-            relationship: 'Grandchild', 
-            isRepresentative: true, 
-            represents: child.name,
-            originalShare: null
-          });
-        });
-      }
-      // Pre-deceased child WITHOUT living descendants - EXCLUDED completely
-    }
-    
-    return eligibleHeirs;
-  };
-
-  // Get ascendants (parents/grandparents) when no descendants exist
-  const getAscendantsForSuccession = (person, allPersons) => {
-    const ascendants = [];
-    let currentParentId = person.parentId;
-    
-    while (currentParentId) {
-      const parent = allPersons.find(p => p.id === currentParentId);
-      if (parent && !parent.dod) {
-        ascendants.push({ ...parent, relationship: 'Parent', isRepresentative: false, represents: null });
-        break;
-      }
-      currentParentId = parent?.parentId || null;
-    }
-    
-    return ascendants;
-  };
-
-  // Get collateral heirs (siblings and their representatives) when no ascendants
-  const getCollateralHeirs = (person, allPersons) => {
-    if (!person.parentId) return [];
-    
-    const siblings = allPersons.filter(p => p.parentId === person.parentId && p.id !== person.id);
-    const result = [];
-    
-    for (const sibling of siblings) {
-      if (!sibling.dod) {
-        result.push({ 
-          ...sibling, 
-          relationship: 'Sibling', 
-          isRepresentative: false, 
-          represents: null,
-          originalShare: null
-        });
-      } else if (hasLivingDescendants(sibling.id, allPersons)) {
-        const reps = getLivingDescendantsForRepresentation(sibling.id, allPersons);
-        reps.forEach(rep => {
-          result.push({ 
-            ...rep, 
-            relationship: 'Nephew/Niece', 
-            isRepresentative: true, 
-            represents: sibling.name,
-            originalShare: null
-          });
-        });
-      }
-    }
-    
-    return result;
-  };
-
-  // Calculate person's total assets (including inherited)
-  const calculatePersonTotalAssets = (personId, transfers) => {
-    const person = decedents.find(p => p.id === personId);
-    if (!person) return { conjugalShare: 0, exclusiveTotal: 0, inheritedTotal: 0, ocsTotal: 0 };
-    
-    // Get inherited amounts for this person
-    const inheritedAmount = transfers
-      .filter(t => t.toPersonId === personId)
-      .reduce((sum, t) => sum + t.amount, 0);
-    
-    // Calculate own conjugal share (50% of conjugal properties they are part of)
-    let ownConjugalShare = 0;
-    let ownExclusiveTotal = 0;
-    let totalConjugalFull = 0;
-    
-    // Properties directly owned by this person
-    (person.properties || []).forEach(prop => {
-      if (prop.classification === 'Conjugal') {
-        ownConjugalShare += prop.totalSqm / 2;
-        totalConjugalFull += prop.totalSqm;
-      } else if (prop.classification === 'Exclusive') {
-        ownExclusiveTotal += prop.totalSqm;
-      }
-    });
-    
-    // Add conjugal share from spouse (if any)
-    const spouse = decedents.find(p => p.id === person.spouseId);
-    if (spouse) {
-      (spouse.properties || []).forEach(prop => {
-        if (prop.classification === 'Conjugal') {
-          ownConjugalShare += prop.totalSqm / 2;
-          totalConjugalFull += prop.totalSqm;
-        }
-      });
-    }
-    
-    // Determine OCS total based on death status and order
-    let ocsTotal;
-    if (!person.dod) {
-      // Living person: OCS = conjugal share + exclusive + inherited
-      ocsTotal = ownConjugalShare + ownExclusiveTotal + inheritedAmount;
-    } else {
-      // Check if this person is the first to die in their couple
-      const spouse = decedents.find(p => p.id === person.spouseId);
-      const isFirstToDie = !spouse?.dod || (person.dod && spouse.dod && new Date(person.dod) < new Date(spouse.dod));
-      
-      if (isFirstToDie) {
-        // First to die: OCS = TOTAL conjugal (full) + TOTAL exclusive (full)
-        ocsTotal = totalConjugalFull + ownExclusiveTotal;
-      } else {
-        // Second to die: OCS = conjugal share + exclusive + inherited
-        ocsTotal = ownConjugalShare + ownExclusiveTotal + inheritedAmount;
-      }
-    }
-    
-    return {
-      conjugalShare: ownConjugalShare,
-      exclusiveTotal: ownExclusiveTotal,
-      inheritedTotal: inheritedAmount,
-      ocsTotal: ocsTotal,
-      totalConjugalFull: totalConjugalFull
-    };
-  };
-
-  // Process inheritance for a single decedent
-  const processDecedentInheritance = (decedent, allPersons, transfers) => {
-    const spouse = allPersons.find(p => p.id === decedent.spouseId);
-    const assets = calculatePersonTotalAssets(decedent.id, transfers);
-    
-    // Calculate total hereditary estate (what gets distributed)
-    let conjugalShareToSpouse = 0;
-    let hereditaryEstate = assets.exclusiveTotal; // Start with exclusive properties
-    
-    // Add decedent's conjugal share (50% of conjugal properties)
-    hereditaryEstate += assets.conjugalShare;
-    
-    // If spouse is alive, spouse gets the other 50% conjugal share automatically
-    if (spouse && !spouse.dod) {
-      conjugalShareToSpouse = assets.totalConjugalFull - assets.conjugalShare;
-    }
-    
-    // Get eligible heirs
-    let eligibleHeirs = getEligibleHeirsForDecedent(decedent, allPersons, spouse);
-    
-    // If no spouse and no children/descendants, check ascendants
-    if (eligibleHeirs.length === 0) {
-      const ascendants = getAscendantsForSuccession(decedent, allPersons);
-      if (ascendants.length > 0) {
-        eligibleHeirs = ascendants;
-      }
-    }
-    
-    // If still no heirs, check collateral (siblings)
-    if (eligibleHeirs.length === 0) {
-      const collateral = getCollateralHeirs(decedent, allPersons);
-      if (collateral.length > 0) {
-        eligibleHeirs = collateral;
-      }
-    }
-    
-    // If still no heirs, return empty
-    if (eligibleHeirs.length === 0) {
-      return {
-        decedentId: decedent.id,
-        decedentName: decedent.name,
-        conjugalShareToSpouse: conjugalShareToSpouse,
-        hereditaryEstate: hereditaryEstate,
-        heirs: [],
-        distributionType: 'No Heirs Found',
-        propertyDetails: decedent.properties,
-        transfers: []
-      };
-    }
-    
-    // Distribute hereditary estate equally among eligible heirs
-    const sharePerHeir = hereditaryEstate / eligibleHeirs.length;
-    const newTransfers = [];
-    const heirsWithShares = [];
-    
-    eligibleHeirs.forEach(heir => {
-      const totalShare = sharePerHeir;
-      newTransfers.push({
-        fromPersonId: decedent.id,
-        fromPersonName: decedent.name,
-        toPersonId: heir.id,
-        toPersonName: heir.name,
-        amount: totalShare,
-        relationship: heir.relationship,
-        represents: heir.represents,
-        isRepresentative: heir.isRepresentative
-      });
-      
-      heirsWithShares.push({
-        id: heir.id,
-        name: heir.name,
-        relationship: heir.relationship,
-        share: sharePerHeir,
-        conjugalShare: 0,
-        totalShare: totalShare,
-        represents: heir.represents,
-        isRepresentative: heir.isRepresentative
-      });
-    });
-    
-    return {
-      decedentId: decedent.id,
-      decedentName: decedent.name,
-      decedentDod: decedent.dod,
-      conjugalShareToSpouse: conjugalShareToSpouse,
-      hereditaryEstate: hereditaryEstate,
-      totalEstate: conjugalShareToSpouse + hereditaryEstate,
-      heirs: heirsWithShares,
-      distributionType: 'Legal Succession',
-      propertyDetails: decedent.properties,
-      transfers: newTransfers
-    };
-  };
-
-  // Main inheritance calculation - processes deaths in chronological order
-  const calculateAllInheritances = () => {
-    // Sort deceased by date of death (oldest first)
-    const deceased = decedents
-      .filter(p => p.dod && p.isDeceased)
-      .sort((a, b) => new Date(a.dod) - new Date(b.dod));
-    
-    let allTransfers = [];
-    const inheritanceRecords = [];
-    
-    for (const decedent of deceased) {
-      const result = processDecedentInheritance(decedent, decedents, allTransfers);
-      
-      // Add any new transfers from this decedent
-      if (result.transfers && result.transfers.length > 0) {
-        allTransfers = [...allTransfers, ...result.transfers];
-      }
-      
-      inheritanceRecords.push(result);
-    }
-    
-    setInheritanceTransfers(allTransfers);
-    setInheritanceSummary(inheritanceRecords);
-    
-    // Update selected person if needed
-    if (selectedPerson) {
-      updateSelectedPersonData(selectedPerson.id, inheritanceRecords, allTransfers);
-    }
-  };
-  
-  const updateSelectedPersonData = (personId, records, transfers) => {
+  const deletePerson = useCallback((personId) => {
     const person = decedents.find(p => p.id === personId);
     if (!person) return;
     
-    const assets = calculatePersonTotalAssets(personId, transfers);
-    const inheritedProperties = transfers
-      .filter(t => t.toPersonId === personId)
-      .map(t => ({
-        sourceDecedent: t.fromPersonName,
-        sourceDod: decedents.find(p => p.id === t.fromPersonId)?.dod || '',
-        share: t.amount,
-        totalShare: t.amount,
-        relationship: t.relationship,
-        represents: t.represents,
-        distributionType: 'Legal Succession'
-      }));
+    const hasSpouse = decedents.some(p => p.spouseId === personId);
+    const hasChildren = decedents.some(p => p.parentId === personId);
     
-    let heirs = [];
-    if (person.isDeceased) {
-      const decedentRecord = records.find(r => r.decedentId === personId);
-      if (decedentRecord) {
-        heirs = decedentRecord.heirs;
+    if (hasSpouse || hasChildren) {
+      if (!window.confirm(`⚠️ ${person.name} is linked as a spouse or parent to other persons. Deleting them will remove these relationships. Continue?`)) {
+        return;
       }
     }
     
-    setInheritanceResult({
-      assets: assets,
-      inheritedProperties: inheritedProperties,
-      heirs: heirs,
-      isLiving: !person.isDeceased,
-      conjugalShareToSpouse: person.isDeceased ? records.find(r => r.decedentId === personId)?.conjugalShareToSpouse || 0 : 0
+    let updatedDecedents = decedents
+      .filter(p => p.id !== personId)
+      .map(p => {
+        if (p.spouseId === personId) {
+          return { ...p, spouseId: null };
+        }
+        if (p.parentId === personId) {
+          return { ...p, parentId: null };
+        }
+        return p;
+      });
+    
+    setDecedents(updatedDecedents);
+    
+    if (selectedPersonId === personId) {
+      setSelectedPersonId(null);
+      setInheritanceResult(null);
+      setShowDetailModal(false);
+    }
+    
+    setShowDeleteConfirm(false);
+    setPersonToDelete(null);
+  }, [decedents, selectedPersonId]);
+
+  const handleBulkAdd = useCallback((rows) => {
+    const newPeople = [];
+    let nextId = Math.max(...decedents.map(p => p.id), 0) + 1;
+    
+    const nameToId = {};
+    rows.forEach(row => {
+      if (!row.name.trim()) return;
+      const id = nextId++;
+      nameToId[row.name.trim()] = id;
+      newPeople.push({
+        id: id,
+        name: row.name.trim(),
+        dod: row.dod || null,
+        gender: row.gender || 'Male',
+        spouseId: null,
+        parentId: null,
+        isDeceased: !!row.dod,
+        properties: [],
+        heirs: []
+      });
     });
-  };
-
-  const handleSelectPerson = (person) => {
-    setSelectedPerson(person);
-    updateSelectedPersonData(person.id, inheritanceSummary, inheritanceTransfers);
-  };
-
-  const addNewPerson = () => {
-    setEditingPerson(null);
-    setPersonForm({
-      name: '',
-      dod: '',
-      gender: 'Male',
-      spouseId: null,
-      parentId: null,
-      isDeceased: false
+    
+    rows.forEach(row => {
+      if (!row.name.trim()) return;
+      const person = newPeople.find(p => p.name === row.name.trim());
+      if (!person) return;
+      
+      if (row.spouse && nameToId[row.spouse]) {
+        person.spouseId = nameToId[row.spouse];
+      }
+      if (row.parent && nameToId[row.parent]) {
+        person.parentId = nameToId[row.parent];
+      }
     });
-    setShowPersonModal(true);
-  };
+    
+    if (newPeople.length > 0) {
+      setDecedents(prev => [...prev, ...newPeople]);
+    }
+    setShowBulkModal(false);
+  }, [decedents]);
 
-  const savePerson = () => {
-    if (!personForm.name.trim()) {
-      alert('Please enter a name');
+  const calculateAllInheritances = useCallback(() => {
+    if (decedents.length === 0) {
+      setInheritanceSummary([]);
+      setInheritanceTransfers([]);
+      setInheritanceDetails(null);
+      setTotalEstateValue(0);
       return;
     }
     
-    const newPersonId = editingPerson?.id || Date.now();
+    setIsCalculating(true);
+    
+    try {
+      const result = calculateAllInheritance(decedents);
+      
+      setInheritanceDetails(result);
+      
+      const summary = [];
+      const transfers = [];
+      let totalEstate = 0;
+      
+      if (result.results && result.results.length > 0) {
+        result.results.forEach(r => {
+          const decedent = decedents.find(p => p.id === r.decedent);
+          if (!decedent) return;
+          
+          totalEstate += r.assets?.totalEstate || 0;
+          
+          const summaryEntry = {
+            decedent: decedent.name,
+            decedentId: r.decedent,
+            deathDate: r.deathDate,
+            totalAssets: r.assets?.totalEstate || 0,
+            conjugalShare: r.assets?.conjugalShare || 0,
+            exclusiveTotal: r.assets?.exclusiveTotal || 0,
+            inheritedAmount: r.assets?.inheritedAmount || 0,
+            heirs: []
+          };
+          
+          if (r.distribution && r.distribution.heirs) {
+            r.distribution.heirs.forEach(h => {
+              const heirName = decedents.find(p => p.id === h.id)?.name || h.name || `Person ${h.id}`;
+              summaryEntry.heirs.push({
+                id: h.id,
+                name: heirName,
+                relationship: h.relationship || 'Heir',
+                share: h.totalShare || h.share || 0,
+                conjugalShare: h.conjugalShare || 0,
+                isRepresentative: h.isRepresentative || false,
+                represents: h.represents || null
+              });
+            });
+          }
+          
+          summary.push(summaryEntry);
+          
+          if (r.transfers && r.transfers.length > 0) {
+            r.transfers.forEach(t => {
+              const from = decedents.find(p => p.id === t.from);
+              const to = decedents.find(p => p.id === t.to);
+              
+              transfers.push({
+                fromId: t.from,
+                fromName: from?.name || t.from,
+                toId: t.to,
+                toName: to?.name || t.to,
+                amount: t.amount,
+                relationship: t.relationship || 'Unknown',
+                conjugal: t.conjugal || false,
+                represents: t.represents || null,
+                decedent: decedent.name,
+                type: t.conjugal ? 'Conjugal Share' : t.represents ? 'Representation' : 'Inheritance'
+              });
+            });
+          }
+        });
+      }
+      
+      setTotalEstateValue(totalEstate);
+      setInheritanceSummary(summary);
+      setInheritanceTransfers(transfers);
+      
+      if (selectedPersonId) {
+        updateSelectedPersonData(selectedPersonId, summary, transfers);
+      }
+      
+    } catch (error) {
+      console.error('Error calculating inheritance:', error);
+      alert('Error calculating inheritance: ' + error.message);
+    } finally {
+      setIsCalculating(false);
+    }
+  }, [decedents, selectedPersonId]);
+
+  // In the main PropertyDivider component, update the updateSelectedPersonData function:
+
+const updateSelectedPersonData = useCallback((personId, records, transfers) => {
+  const person = decedents.find(p => p.id === personId);
+  if (!person) return;
+  
+  // Find all inheritance records where this person is involved
+  const personInheritance = records.find(r => 
+    r.decedent === person.name || 
+    r.decedentId === personId ||
+    r.heirs.some(h => h.id === personId || h.name === person.name)
+  );
+  
+  // Find all transfers involving this person
+  const personTransfers = transfers.filter(t => 
+    t.fromId === personId || t.toId === personId
+  );
+  
+  // Calculate total received (all amounts going TO this person)
+  const totalReceived = personTransfers
+    .filter(t => t.toId === personId)
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // Calculate total given (all amounts going FROM this person)
+  const totalGiven = personTransfers
+    .filter(t => t.fromId === personId)
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // Find if this person is a decedent
+  const isDecedent = records.some(r => r.decedentId === personId);
+  
+  // Find if this person is an heir
+  const heirInfo = records.flatMap(r => r.heirs).find(h => h.id === personId);
+  const isHeir = !!heirInfo;
+  
+  // Get the decedent's estate if this person is a decedent
+  const decedentRecord = records.find(r => r.decedentId === personId);
+  const decedentEstate = decedentRecord?.totalAssets || 0;
+  
+  // Calculate total inherited amount (for heirs)
+  const totalInherited = personTransfers
+    .filter(t => t.toId === personId && !t.conjugal)
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // Calculate conjugal share received
+  const totalConjugalReceived = personTransfers
+    .filter(t => t.toId === personId && t.conjugal)
+    .reduce((sum, t) => sum + t.amount, 0);
+  
+  // --- NEW: Calculate the spouse's conjugal share from their own properties ---
+  // A living spouse always owns 50% of conjugal properties
+  let conjugalShareOwned = 0;
+  if (!person.isDeceased) {
+    // Calculate 50% of all conjugal properties owned by this person
+    // This represents the spouse's share of conjugal properties
+    person.properties?.forEach(prop => {
+      if (prop.classification === 'Conjugal') {
+        conjugalShareOwned += prop.totalSqm / 2;
+      }
+    });
+  }
+  
+  // The total estate value for this person
+  let totalEstate = 0;
+  let heirShare = 0;
+  let heirRelationship = null;
+  
+  if (isDecedent) {
+    totalEstate = decedentEstate;
+  } else if (isHeir) {
+    heirShare = totalInherited;
+    heirRelationship = heirInfo?.relationship || 'Heir';
+    totalEstate = totalInherited + totalConjugalReceived + conjugalShareOwned;
+  } else {
+    // If not an heir and not a decedent, still show their conjugal share
+    totalEstate = conjugalShareOwned;
+  }
+  
+  const result = {
+    person: person,
+    isDecedent: isDecedent,
+    isHeir: isHeir,
+    heirShare: heirShare,
+    heirRelationship: heirRelationship,
+    totalInherited: totalInherited,
+    totalConjugal: totalConjugalReceived,
+    totalGiven: totalGiven,
+    netInheritance: totalInherited + totalConjugalReceived - totalGiven,
+    transfers: personTransfers,
+    decedentEstate: decedentEstate,
+    totalEstateValue: totalEstate,
+    conjugalShareOwned: conjugalShareOwned, // Add this to track owned conjugal share
+  };
+  
+  setInheritanceResult(result);
+}, [decedents]);
+
+  const handleSelectPerson = useCallback((person) => {
+    setSelectedPersonId(person.id);
+    updateSelectedPersonData(person.id, inheritanceSummary, inheritanceTransfers);
+    setShowDetailModal(true);
+  }, [inheritanceSummary, inheritanceTransfers, updateSelectedPersonData]);
+
+  const addNewPerson = useCallback(() => {
+    setEditingPersonId(null);
+    setShowPersonModal(true);
+  }, []);
+
+  const editPerson = useCallback((person) => {
+    setEditingPersonId(person.id);
+    setShowDetailModal(false);
+    setTimeout(() => setShowPersonModal(true), 100);
+  }, []);
+
+  const handleSavePerson = useCallback((formData) => {
+    const newPersonId = editingPersonId || Date.now();
     const newPerson = {
       id: newPersonId,
-      name: personForm.name,
-      dod: personForm.dod || null,
-      gender: personForm.gender,
-      spouseId: personForm.spouseId,
-      parentId: personForm.parentId,
-      isDeceased: !!personForm.dod,
+      name: formData.name.trim(),
+      dod: formData.dod || null,
+      gender: formData.gender,
+      spouseId: formData.spouseId,
+      parentId: formData.parentId,
+      isDeceased: !!formData.dod,
       properties: editingPerson?.properties || [],
       heirs: editingPerson?.heirs || []
     };
     
     let updatedDecedents;
-    
-    if (editingPerson) {
-      updatedDecedents = decedents.map(p => p.id === editingPerson.id ? newPerson : p);
+    if (editingPersonId) {
+      updatedDecedents = decedents.map(p => p.id === editingPersonId ? newPerson : p);
     } else {
       updatedDecedents = [...decedents, newPerson];
     }
@@ -494,8 +2056,8 @@ const PropertyDivider = () => {
       });
     }
     
-    if (editingPerson && editingPerson.spouseId !== newPerson.spouseId) {
-      if (editingPerson.spouseId) {
+    if (editingPersonId && editingPerson?.spouseId !== newPerson.spouseId) {
+      if (editingPerson?.spouseId) {
         updatedDecedents = updatedDecedents.map(p => {
           if (p.id === editingPerson.spouseId && p.spouseId === editingPerson.id) {
             return { ...p, spouseId: null };
@@ -507,31 +2069,32 @@ const PropertyDivider = () => {
     
     setDecedents(updatedDecedents);
     setShowPersonModal(false);
-  };
+    setEditingPersonId(null);
+    
+    const savedPerson = updatedDecedents.find(p => p.id === newPersonId);
+    if (savedPerson) {
+      setSelectedPersonId(savedPerson.id);
+      setShowDetailModal(true);
+    }
+  }, [editingPersonId, decedents, editingPerson]);
 
-  const addPropertyToPerson = () => {
+  const addPropertyToPerson = useCallback(() => {
     if (!selectedPerson) return;
     setEditingProperty(null);
-    setPropertyForm({ name: '', type: 'Land', totalSqm: '', classification: 'Conjugal' });
     setShowPropertyModal(true);
-  };
+  }, [selectedPerson]);
 
-  const saveProperty = () => {
-    if (!propertyForm.name.trim() || !propertyForm.totalSqm) {
-      alert('Please fill all property fields');
-      return;
-    }
-    
+  const handleSaveProperty = useCallback((formData) => {
     const newProperty = {
       id: editingProperty?.id || Date.now(),
-      name: propertyForm.name,
-      type: propertyForm.type,
-      totalSqm: parseFloat(propertyForm.totalSqm),
-      classification: propertyForm.classification
+      name: formData.name.trim(),
+      type: formData.type,
+      totalSqm: parseFloat(formData.totalSqm),
+      classification: formData.classification
     };
     
     let updatedDecedents = decedents.map(p => {
-      if (p.id === selectedPerson.id) {
+      if (p.id === selectedPersonId) {
         let properties = [...(p.properties || [])];
         if (editingProperty) {
           properties = properties.map(prop => prop.id === editingProperty.id ? newProperty : prop);
@@ -545,851 +2108,438 @@ const PropertyDivider = () => {
     
     setDecedents(updatedDecedents);
     setShowPropertyModal(false);
-  };
+    setEditingProperty(null);
+  }, [editingProperty, decedents, selectedPersonId]);
 
-  const deleteProperty = (propertyId) => {
+  const editProperty = useCallback((prop) => {
+    setEditingProperty(prop);
+    setShowPropertyModal(true);
+  }, []);
+
+  const deleteProperty = useCallback((propertyId) => {
     if (window.confirm('Remove this property?')) {
       let updatedDecedents = decedents.map(p => {
-        if (p.id === selectedPerson.id) {
+        if (p.id === selectedPersonId) {
           return { ...p, properties: p.properties.filter(prop => prop.id !== propertyId) };
         }
         return p;
       });
-      
       setDecedents(updatedDecedents);
     }
-  };
+  }, [decedents, selectedPersonId]);
 
-  const filteredPersons = decedents.filter(person =>
-    person.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const sortedDecedents = [...filteredPersons].sort((a, b) => {
-    if (!a.dod && !b.dod) return 0;
-    if (!a.dod) return 1;
-    if (!b.dod) return -1;
-    return new Date(a.dod) - new Date(b.dod);
-  });
-
-  // Render Person Card Content
-  const PersonCardContent = ({ person }) => {
-    const assets = inheritanceResult?.assets || { conjugalShare: 0, exclusiveTotal: 0, inheritedTotal: 0, ocsTotal: 0, totalConjugalFull: 0 };
-    const isDeceased = person.isDeceased;
-    const spouse = decedents.find(p => p.id === person.spouseId);
-    
-    // Get conjugal properties (full amounts) that this person is part of
-    const conjugalProperties = [];
-    const exclusiveProperties = [];
-    
-    // Person's own properties
-    (person.properties || []).forEach(prop => {
-      if (prop.classification === 'Conjugal') {
-        conjugalProperties.push({ ...prop, ownershipType: 'Own' });
-      } else {
-        exclusiveProperties.push({ ...prop, ownershipType: 'Own' });
-      }
-    });
-    
-    // Spouse's conjugal properties (if any)
-    if (spouse) {
-      (spouse.properties || []).forEach(prop => {
-        if (prop.classification === 'Conjugal' && !conjugalProperties.some(p => p.id === prop.id)) {
-          conjugalProperties.push({ ...prop, ownershipType: 'From Spouse' });
-        }
-      });
-    }
-    
-    // Add inherited properties to exclusive section
-    const inheritedProps = inheritanceResult?.inheritedProperties || [];
-    inheritedProps.forEach(inv => {
-      exclusiveProperties.push({
-        name: `Share from ${inv.sourceDecedent}'s property`,
-        type: 'Inheritance',
-        totalSqm: inv.totalShare,
-        classification: 'Inherited',
-        ownershipType: 'Inherited',
-        inheritedFrom: inv.sourceDecedent
-      });
-    });
-    
-    return (
-      <div>
-        {/* Properties Section */}
-        <div style={{
-          background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-          borderRadius: '20px',
-          padding: '16px',
-          marginBottom: '20px'
-        }}>
-          <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-            📋 Properties
-          </h3>
-          
-          {/* Conjugal Properties */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#10b981' }}>
-              Conjugal Properties:
-            </div>
-            {conjugalProperties.length === 0 ? (
-              <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', padding: '8px 0' }}>None</div>
-            ) : (
-              conjugalProperties.map((prop, idx) => (
-                <div key={idx} style={{
-                  padding: '8px 12px',
-                  background: darkMode ? 'rgba(0,0,0,0.3)' : '#f8f9ff',
-                  borderRadius: '12px',
-                  marginBottom: '6px',
-                  display: 'flex',
-                  justifyContent: 'space-between'
-                }}>
-                  <span style={{ fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-                    {prop.name} {prop.ownershipType === 'From Spouse' && `(from ${spouse?.name})`}
-                  </span>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#10b981' }}>
-                    {formatNumber(prop.totalSqm)} m²
-                  </span>
-                </div>
-              ))
-            )}
-            
-            <div style={{
-              marginTop: '12px',
-              padding: '8px 12px',
-              background: darkMode ? 'rgba(16, 185, 129, 0.15)' : 'rgba(16, 185, 129, 0.08)',
-              borderRadius: '12px',
-              display: 'flex',
-              justifyContent: 'space-between'
-            }}>
-              <span style={{ fontSize: '13px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                Total Share from conjugal property:
-              </span>
-              <span style={{ fontSize: '15px', fontWeight: 700, color: '#10b981' }}>
-                {formatNumber(assets.conjugalShare)} m²
-              </span>
-            </div>
-          </div>
-          
-          {/* Exclusive Properties */}
-          <div style={{ marginBottom: '16px' }}>
-            <div style={{ fontSize: '14px', fontWeight: 600, marginBottom: '8px', color: '#667eea' }}>
-              Exclusive Properties:
-            </div>
-            {exclusiveProperties.length === 0 ? (
-              <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', padding: '8px 0' }}>None</div>
-            ) : (
-              exclusiveProperties.map((prop, idx) => (
-                <div key={idx} style={{
-                  padding: '8px 12px',
-                  background: darkMode ? 'rgba(0,0,0,0.3)' : '#f8f9ff',
-                  borderRadius: '12px',
-                  marginBottom: '6px',
-                  display: 'flex',
-                  justifyContent: 'space-between'
-                }}>
-                  <div>
-                    <span style={{ fontSize: '13px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-                      {prop.name}
-                    </span>
-                    {prop.inheritedFrom && (
-                      <div style={{ fontSize: '10px', color: '#f59e0b' }}>(inherited from {prop.inheritedFrom})</div>
-                    )}
-                  </div>
-                  <span style={{ fontSize: '13px', fontWeight: 600, color: '#667eea' }}>
-                    {formatNumber(prop.totalSqm)} m²
-                  </span>
-                </div>
-              ))
-            )}
-          </div>
-          
-          {/* OCS Total */}
-          <div style={{
-            padding: '12px',
-            background: 'linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15))',
-            borderRadius: '12px',
-            display: 'flex',
-            justifyContent: 'space-between',
-            alignItems: 'center'
-          }}>
-            <span style={{ fontSize: '14px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              Total Property to appear in OCS:
-            </span>
-            <span style={{ fontSize: '20px', fontWeight: 700, color: '#f59e0b' }}>
-              {formatNumber(assets.ocsTotal)} m²
-            </span>
-          </div>
-        </div>
-        
-        {/* Heirs Section - Only for Deceased */}
-        {isDeceased && inheritanceResult?.heirs && inheritanceResult.heirs.length > 0 && (
-          <div style={{
-            background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-            borderRadius: '20px',
-            padding: '16px',
-            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.04)'}`
-          }}>
-            <h3 style={{ fontSize: '16px', fontWeight: 600, marginBottom: '16px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-              👥 Heirs
-            </h3>
-            
-            <div style={{ overflowX: 'auto' }}>
-              <table style={{ width: '100%', borderCollapse: 'collapse' }}>
-                <thead>
-                  <tr style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}` }}>
-                    <th style={{ textAlign: 'left', padding: '10px 8px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Heir</th>
-                    <th style={{ textAlign: 'right', padding: '10px 8px', color: darkMode ? '#94a3b8' : '#64748b', fontSize: '11px', fontWeight: 600 }}>Share from the property</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {inheritanceResult.heirs.map((heir, idx) => (
-                    <tr key={idx} style={{ borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.04)'}` }}>
-                      <td style={{ padding: '10px 8px' }}>
-                        <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                          {heir.relationship === 'Spouse' ? '💑' : heir.relationship === 'Child' ? '👶' : '👧'} {heir.name}
-                        </span>
-                        {heir.represents && (
-                          <div style={{ fontSize: '9px', color: '#f59e0b' }}>(rep. {heir.represents})</div>
-                        )}
-                      </td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 600, color: '#667eea' }}>
-                        {formatNumber(heir.totalShare)} m²
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-                {inheritanceResult.heirs.length > 0 && (
-                  <tfoot>
-                    <tr style={{ borderTop: `2px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}` }}>
-                      <td style={{ padding: '10px 8px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>Total:</td>
-                      <td style={{ padding: '10px 8px', textAlign: 'right', fontWeight: 700, color: '#f59e0b' }}>
-                        {formatNumber(inheritanceResult.heirs.reduce((sum, h) => sum + h.totalShare, 0))} m²
-                      </td>
-                    </tr>
-                  </tfoot>
-                )}
-              </table>
-            </div>
-          </div>
-        )}
-        
-        {isDeceased && (!inheritanceResult?.heirs || inheritanceResult.heirs.length === 0) && (
-          <div style={{
-            background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-            borderRadius: '20px',
-            padding: '16px',
-            textAlign: 'center',
-            color: '#ef4444'
-          }}>
-            No eligible heirs found
-          </div>
-        )}
-        
-        {!isDeceased && (
-          <div style={{
-            background: darkMode ? 'rgba(30, 35, 50, 0.8)' : 'white',
-            borderRadius: '20px',
-            padding: '16px',
-            textAlign: 'center',
-            color: darkMode ? '#94a3b8' : '#64748b'
-          }}>
-            ⏳ Heirs will be shown upon death
-          </div>
-        )}
-      </div>
-    );
-  };
-
-  const LeftPanel = () => (
-    <div style={{
-      width: isMobile ? '100%' : '380px',
-      height: isMobile && !isMobileMenuOpen ? '0px' : '100%',
-      overflow: isMobile && !isMobileMenuOpen ? 'hidden' : 'auto',
-      background: darkMode 
-        ? 'rgba(18, 22, 28, 0.95)' 
-        : 'rgba(255, 255, 255, 0.95)',
-      backdropFilter: 'blur(20px)',
-      borderRight: isMobile ? 'none' : `1px solid ${darkMode ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.06)'}`,
-      display: 'flex',
-      flexDirection: 'column',
-      flexShrink: 0,
-      position: isMobile ? 'fixed' : 'relative',
-      top: 0,
-      left: 0,
-      zIndex: 100,
-      transform: isMobile && !isMobileMenuOpen ? 'translateX(-100%)' : 'translateX(0)',
-      transition: 'transform 0.3s ease-in-out',
-      boxShadow: isMobile && isMobileMenuOpen ? '2px 0 8px rgba(0,0,0,0.15)' : 'none'
-    }}>
-      <div style={{ padding: '20px' }}>
-        {isMobile && (
-          <div style={{ 
-            display: 'flex', 
-            justifyContent: 'space-between', 
-            alignItems: 'center',
-            marginBottom: '20px',
-            paddingBottom: '10px',
-            borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.1)'}`
-          }}>
-            <div style={{ fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              Persons List
-            </div>
-            <button
-              onClick={() => setIsMobileMenuOpen(false)}
-              style={{
-                background: 'none',
-                border: 'none',
-                fontSize: '24px',
-                cursor: 'pointer',
-                color: darkMode ? '#fff' : '#1a1a2e'
-              }}
-            >
-              ✕
-            </button>
-          </div>
-        )}
-        
-        <div style={{ marginBottom: '24px' }}>
-          <div style={{
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            padding: '16px',
-            borderRadius: '20px',
-            marginBottom: '16px'
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-              <div>
-                <div style={{ fontSize: '11px', fontWeight: 500, color: 'rgba(255,255,255,0.7)', marginBottom: '2px' }}>
-                  Total Persons
-                </div>
-                <div style={{ fontSize: '28px', fontWeight: 700, color: 'white' }}>
-                  {decedents.length}
-                </div>
-              </div>
-              <div style={{ fontSize: '40px' }}>⚖️</div>
-            </div>
-          </div>
-          
-          <button
-            onClick={addNewPerson}
-            style={{
-              width: '100%',
-              padding: '12px',
-              background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-              color: 'white',
-              border: 'none',
-              borderRadius: '40px',
-              fontSize: '14px',
-              fontWeight: 600,
-              cursor: 'pointer',
-              transition: 'transform 0.2s, box-shadow 0.2s',
-              boxShadow: '0 4px 14px rgba(102, 126, 234, 0.4)'
-            }}
-          >
-            + Add New Person
-          </button>
-        </div>
-        
-        <div style={{ marginBottom: '16px', position: 'relative' }}>
-          <input
-            type="text"
-            placeholder="Search persons..."
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            style={{
-              width: '100%',
-              padding: '10px 12px',
-              paddingLeft: '36px',
-              background: darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.03)',
-              border: `1px solid ${darkMode ? 'rgba(255,255,255,0.1)' : 'rgba(0,0,0,0.08)'}`,
-              borderRadius: '40px',
-              fontSize: '14px',
-              color: darkMode ? '#fff' : '#1a1a2e',
-              outline: 'none'
-            }}
-          />
-          <span style={{
-            position: 'absolute',
-            left: '12px',
-            top: '50%',
-            transform: 'translateY(-50%)',
-            fontSize: '14px'
-          }}>🔍</span>
-        </div>
-        
-        <div style={{ 
-          display: 'flex', 
-          justifyContent: 'space-between', 
-          alignItems: 'center',
-          marginBottom: '12px',
-          padding: '0 4px'
-        }}>
-          <div style={{ fontSize: '11px', fontWeight: 500, color: darkMode ? '#94a3b8' : '#64748b' }}>
-            {sortedDecedents.length} person{sortedDecedents.length !== 1 ? 's' : ''}
-          </div>
-          {decedents.length > 0 && (
-            <button
-              onClick={() => setShowClearConfirm(true)}
-              style={{
-                padding: '4px 12px',
-                background: 'transparent',
-                color: '#ef4444',
-                border: '1px solid #ef4444',
-                borderRadius: '40px',
-                fontSize: '10px',
-                fontWeight: 500,
-                cursor: 'pointer'
-              }}
-            >
-              Clear All
-            </button>
-          )}
-        </div>
-        
-        <div style={{ display: 'flex', flexDirection: 'column', gap: '10px' }}>
-          <AnimatePresence>
-            {sortedDecedents.map(person => (
-              <motion.div
-                key={person.id}
-                initial={{ opacity: 0, x: -20 }}
-                animate={{ opacity: 1, x: 0 }}
-                exit={{ opacity: 0, x: -20 }}
-                whileHover={{ scale: 1.01 }}
-                transition={{ duration: 0.2 }}
-                onClick={() => handleSelectPerson(person)}
-                style={{
-                  padding: '12px',
-                  background: selectedPerson?.id === person.id 
-                    ? 'linear-gradient(135deg, rgba(102, 126, 234, 0.15), rgba(118, 75, 162, 0.15))'
-                    : darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)',
-                  borderRadius: '16px',
-                  border: `1px solid ${selectedPerson?.id === person.id 
-                    ? 'rgba(102, 126, 234, 0.5)'
-                    : darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.06)'}`,
-                  cursor: 'pointer'
-                }}
-              >
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                  <div style={{
-                    width: '40px',
-                    height: '40px',
-                    borderRadius: '20px',
-                    background: person.gender === 'Male' 
-                      ? 'linear-gradient(135deg, #1e3a5f, #0f2b45)'
-                      : 'linear-gradient(135deg, #8b1a4a, #5c0d32)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: '20px'
-                  }}>
-                    {person.gender === 'Male' ? '👨' : '👩'}
-                  </div>
-                  <div style={{ flex: 1 }}>
-                    <div style={{ fontWeight: 600, fontSize: '14px', color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '2px' }}>
-                      {person.name}
-                    </div>
-                    <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                      {person.dod ? `⚰️ ${person.dod}` : 'Still alive'}
-                    </div>
-                  </div>
-                  {person.properties?.length > 0 && (
-                    <div style={{
-                      background: 'rgba(102, 126, 234, 0.15)',
-                      color: '#667eea',
-                      borderRadius: '20px',
-                      padding: '2px 8px',
-                      fontSize: '10px',
-                      fontWeight: 600
-                    }}>
-                      {person.properties.length} 🏠
-                    </div>
-                  )}
-                </div>
-              </motion.div>
-            ))}
-          </AnimatePresence>
-        </div>
-        
-        {decedents.length === 0 && (
-          <motion.div 
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{ textAlign: 'center', padding: '40px 20px' }}
-          >
-            <div style={{ fontSize: '56px', marginBottom: '16px' }}>🏛️</div>
-            <h3 style={{ color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '8px', fontSize: '16px', fontWeight: 600 }}>Welcome to Property Divider</h3>
-            <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '12px', lineHeight: '1.5' }}>
-              Click "Add New Person" to start<br />
-              building your estate plan
-            </p>
-          </motion.div>
-        )}
-      </div>
-    </div>
-  );
-
-  const RightPanel = () => (
-    <div style={{
-      flex: 1,
-      overflowY: 'auto',
-      background: darkMode ? '#0a0c10' : '#f0f2f5',
-      padding: isMobile ? '16px' : '28px'
-    }}>
-      {isMobile && !isMobileMenuOpen && (
-        <button
-          onClick={() => setIsMobileMenuOpen(true)}
-          style={{
-            position: 'fixed',
-            bottom: '20px',
-            right: '20px',
-            zIndex: 200,
-            width: '56px',
-            height: '56px',
-            borderRadius: '28px',
-            background: 'linear-gradient(135deg, #667eea 0%, #764ba2 100%)',
-            border: 'none',
-            color: 'white',
-            fontSize: '24px',
-            cursor: 'pointer',
-            boxShadow: '0 4px 12px rgba(0,0,0,0.3)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center'
-          }}
-        >
-          ☰
-        </button>
-      )}
-      
-      <AnimatePresence mode="wait">
-        {selectedPerson ? (
-          <motion.div
-            key={selectedPerson.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-          >
-            {/* Header Card */}
-            <div style={{
-              background: darkMode 
-                ? 'linear-gradient(135deg, #1a1e2e 0%, #0f1220 100%)'
-                : 'linear-gradient(135deg, #ffffff 0%, #f8f9ff 100%)',
-              borderRadius: '24px',
-              padding: '20px',
-              marginBottom: '20px',
-              border: `1px solid ${darkMode ? 'rgba(255,255,255,0.06)' : 'rgba(0,0,0,0.04)'}`,
-              boxShadow: darkMode ? 'none' : '0 8px 32px rgba(0,0,0,0.04)'
-            }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: '16px' }}>
-                <div style={{ display: 'flex', gap: '16px', alignItems: 'center' }}>
-                  <div style={{
-                    width: isMobile ? '60px' : '80px',
-                    height: isMobile ? '60px' : '80px',
-                    borderRadius: '30px',
-                    background: selectedPerson.gender === 'Male' 
-                      ? 'linear-gradient(135deg, #667eea, #764ba2)'
-                      : 'linear-gradient(135deg, #f093fb, #f5576c)',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    fontSize: isMobile ? '30px' : '40px',
-                    boxShadow: '0 8px 20px rgba(102, 126, 234, 0.3)',
-                    flexShrink: 0
-                  }}>
-                    {selectedPerson.gender === 'Male' ? '👨' : '👩'}
-                  </div>
-                  <div>
-                    <h1 style={{ fontSize: isMobile ? '24px' : '32px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '6px' }}>
-                      {selectedPerson.name}
-                    </h1>
-                    <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap' }}>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                        <span style={{ fontSize: '12px' }}>⚰️</span>
-                        <span style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                          {selectedPerson.dod || 'Still alive'}
-                        </span>
-                      </div>
-                      {selectedPerson.spouseId && (
-                        <div style={{ display: 'flex', alignItems: 'center', gap: '4px' }}>
-                          <span style={{ fontSize: '12px' }}>💍</span>
-                          <span style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                            Spouse of {decedents.find(p => p.id === selectedPerson.spouseId)?.name}
-                          </span>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-                <button
-                  onClick={() => {
-                    setEditingPerson(selectedPerson);
-                    setPersonForm({
-                      name: selectedPerson.name,
-                      dod: selectedPerson.dod || '',
-                      gender: selectedPerson.gender,
-                      spouseId: selectedPerson.spouseId,
-                      parentId: selectedPerson.parentId,
-                      isDeceased: selectedPerson.isDeceased
-                    });
-                    setShowPersonModal(true);
-                  }}
-                  style={{
-                    padding: '8px 20px',
-                    background: 'transparent',
-                    border: `1.5px solid ${darkMode ? 'rgba(102, 126, 234, 0.5)' : '#667eea'}`,
-                    borderRadius: '40px',
-                    fontSize: '13px',
-                    fontWeight: 600,
-                    cursor: 'pointer',
-                    color: '#667eea',
-                    width: isMobile ? '100%' : 'auto'
-                  }}
-                >
-                  ✏️ Edit Profile
-                </button>
-              </div>
-            </div>
-            
-            {/* Person Card Content */}
-            <PersonCardContent person={selectedPerson} />
-            
-            {/* Add Property Button for Living Persons */}
-            {!selectedPerson.isDeceased && (
-              <div style={{ marginTop: '16px' }}>
-                <button
-                  onClick={addPropertyToPerson}
-                  style={{
-                    width: '100%',
-                    padding: '12px',
-                    background: 'linear-gradient(135deg, #10b981, #059669)',
-                    color: 'white',
-                    border: 'none',
-                    borderRadius: '40px',
-                    fontSize: '14px',
-                    fontWeight: 600,
-                    cursor: 'pointer'
-                  }}
-                >
-                  + Add Property
-                </button>
-              </div>
-            )}
-          </motion.div>
-        ) : (
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              justifyContent: 'center',
-              minHeight: 'calc(100vh - 40px)',
-              textAlign: 'center',
-              padding: '20px'
-            }}
-          >
-            <div>
-              <div style={{ fontSize: '60px', marginBottom: '20px' }}>🏛️</div>
-              <h2 style={{ fontSize: isMobile ? '22px' : '28px', fontWeight: 600, marginBottom: '10px', color: darkMode ? '#fff' : '#1a1a2e' }}>Select a Person</h2>
-              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-                Click on any person from the left panel to view<br />
-                their properties and inheritance details.
-              </p>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
+  const filteredDecedents = useMemo(() => 
+    decedents.filter(person =>
+      person.name.toLowerCase().includes(searchQuery.toLowerCase())
+    ),
+    [decedents, searchQuery]
   );
 
   return (
     <div style={{
       display: 'flex',
-      height: '100%',
-      width: '100%',
-      background: darkMode ? '#0a0c10' : '#f0f2f5',
-      borderRadius: isMobile ? '0' : '28px',
-      overflow: 'hidden',
+      flexDirection: 'column',
+      height: '100vh',
+      width: '100vw',
+      background: darkMode ? '#0a0c10' : '#f8fafc',
       fontFamily: "'Inter', 'SF Pro Display', -apple-system, BlinkMacSystemFont, sans-serif",
-      position: 'relative'
+      overflow: 'hidden'
     }}>
-      {isMobile && isMobileMenuOpen && (
-        <div
-          onClick={() => setIsMobileMenuOpen(false)}
+      {/* Top Toolbar */}
+      <div style={{
+        padding: '12px 20px',
+        background: darkMode ? '#14161f' : '#ffffff',
+        borderBottom: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        justifyContent: 'space-between',
+        gap: '8px',
+        flexShrink: 0
+      }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
+          <span style={{ fontSize: '24px' }}>🏛️</span>
+          <h1 style={{ fontSize: '18px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', margin: 0 }}>
+            Estate Divider
+          </h1>
+          <div style={{
+            display: 'flex',
+            gap: '4px',
+            background: darkMode ? '#0a0c10' : '#f1f5f9',
+            borderRadius: '40px',
+            padding: '3px',
+            marginLeft: '8px'
+          }}>
+            <button
+              onClick={() => setViewMode('story')}
+              type="button"
+              style={{
+                padding: '4px 14px',
+                borderRadius: '40px',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                background: viewMode === 'story' ? (darkMode ? '#667eea' : '#667eea') : 'transparent',
+                color: viewMode === 'story' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                transition: 'all 0.2s'
+              }}
+            >
+              📖 Story
+            </button>
+            <button
+              onClick={() => setViewMode('map')}
+              type="button"
+              style={{
+                padding: '4px 14px',
+                borderRadius: '40px',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                background: viewMode === 'map' ? (darkMode ? '#667eea' : '#667eea') : 'transparent',
+                color: viewMode === 'map' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                transition: 'all 0.2s'
+              }}
+            >
+              🗺️ Map
+            </button>
+          </div>
+        </div>
+        
+        <div style={{ display: 'flex', alignItems: 'center', gap: '8px', flexWrap: 'wrap' }}>
+          <button
+            onClick={addNewPerson}
+            type="button"
+            style={{
+              padding: '6px 16px',
+              background: 'linear-gradient(135deg, #667eea, #764ba2)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '40px',
+              fontSize: '13px',
+              fontWeight: 500,
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            + Add Person
+          </button>
+          <button
+            onClick={() => setShowBulkModal(true)}
+            type="button"
+            style={{
+              padding: '6px 14px',
+              background: 'transparent',
+              color: darkMode ? '#94a3b8' : '#64748b',
+              border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+              borderRadius: '40px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Bulk Add
+          </button>
+          <button
+            onClick={() => setShowClearConfirm(true)}
+            type="button"
+            style={{
+              padding: '6px 14px',
+              background: 'transparent',
+              color: '#ef4444',
+              border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+              borderRadius: '40px',
+              fontSize: '12px',
+              cursor: 'pointer',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            Clear
+          </button>
+        </div>
+      </div>
+
+      {/* Search Bar */}
+      <div style={{
+        padding: '8px 20px',
+        background: darkMode ? '#14161f' : '#ffffff',
+        borderBottom: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+        display: 'flex',
+        alignItems: 'center',
+        gap: '12px',
+        flexShrink: 0
+      }}>
+        <input
+          type="text"
+          placeholder="🔍 Search people..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
           style={{
+            flex: 1,
+            maxWidth: '300px',
+            padding: '6px 14px',
+            border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+            borderRadius: '40px',
+            background: darkMode ? '#0a0c10' : '#f8fafc',
+            color: darkMode ? '#fff' : '#000',
+            fontSize: '13px',
+            outline: 'none'
+          }}
+        />
+        <div style={{ 
+          fontSize: '12px', 
+          color: darkMode ? '#94a3b8' : '#64748b',
+          display: 'flex',
+          gap: '16px',
+          flexWrap: 'wrap'
+        }}>
+          <span>👤 {decedents.length}</span>
+          <span>🏠 {decedents.reduce((sum, p) => sum + (p.properties?.length || 0), 0)}</span>
+          {totalEstateValue > 0 && (
+            <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+              💰 {formatNumber(totalEstateValue)} sqm
+            </span>
+          )}
+        </div>
+      </div>
+
+      {/* Main Content */}
+      <div style={{
+        flex: 1,
+        overflow: 'hidden',
+        background: darkMode ? '#0a0c10' : '#f8fafc',
+        minHeight: 0
+      }}>
+        {viewMode === 'story' ? (
+          <StoryMode 
+            decedents={decedents}
+            inheritanceSummary={inheritanceSummary}
+            inheritanceTransfers={inheritanceTransfers}
+            totalEstateValue={totalEstateValue}
+            darkMode={darkMode}
+            formatNumber={formatNumber}
+            onSelectPerson={handleSelectPerson}
+          />
+        ) : (
+          <FamilyMap 
+            decedents={filteredDecedents}
+            selectedPersonId={selectedPersonId}
+            onSelectPerson={handleSelectPerson}
+            darkMode={darkMode}
+          />
+        )}
+      </div>
+
+      {/* Modals */}
+      <AnimatePresence>
+        {showDetailModal && selectedPerson && (
+          <PersonDetailModal
+            person={selectedPerson}
+            decedents={decedents}
+            inheritanceResult={inheritanceResult}
+            inheritanceTransfers={inheritanceTransfers}
+            totalEstateValue={totalEstateValue}
+            onClose={() => {
+              setShowDetailModal(false);
+              setSelectedPersonId(null);
+            }}
+            onEdit={editPerson}
+            onAddProperty={addPropertyToPerson}
+            onEditProperty={editProperty}
+            onDeleteProperty={deleteProperty}
+            darkMode={darkMode}
+            formatNumber={formatNumber}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPersonModal && (
+          <PersonModalComponent 
+            key={editingPersonId || 'new'}
+            isOpen={showPersonModal}
+            onClose={() => {
+              setShowPersonModal(false);
+              setEditingPersonId(null);
+            }}
+            onSave={handleSavePerson}
+            editingPerson={editingPerson}
+            decedents={decedents}
+            darkMode={darkMode}
+            isMobile={false}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showPropertyModal && (
+          <PropertyModalComponent
+            isOpen={showPropertyModal}
+            onClose={() => {
+              setShowPropertyModal(false);
+              setEditingProperty(null);
+            }}
+            onSave={handleSaveProperty}
+            editingProperty={editingProperty}
+            darkMode={darkMode}
+            isMobile={false}
+          />
+        )}
+      </AnimatePresence>
+
+      <AnimatePresence>
+        {showBulkModal && (
+          <BulkAddModal
+            isOpen={showBulkModal}
+            onClose={() => setShowBulkModal(false)}
+            onSave={handleBulkAdd}
+            darkMode={darkMode}
+          />
+        )}
+      </AnimatePresence>
+
+      {/* Clear All Confirmation */}
+      <AnimatePresence>
+        {showClearConfirm && (
+          <div style={{
             position: 'fixed',
             top: 0,
             left: 0,
             right: 0,
             bottom: 0,
-            background: 'rgba(0,0,0,0.5)',
-            zIndex: 99
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '16px'
           }}
-        />
-      )}
-      
-      <LeftPanel />
-      <RightPanel />
-      
-      {/* Clear Data Confirmation Modal */}
-      {showClearConfirm && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 2000, backdropFilter: 'blur(8px)', padding: '16px' }}>
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            style={{
+          onClick={() => setShowClearConfirm(false)}
+          >
+            <div style={{
               background: darkMode ? '#1e1e2e' : '#ffffff',
               borderRadius: '24px',
-              padding: '24px',
-              width: '400px',
-              maxWidth: '90%',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+              padding: '32px',
+              maxWidth: '400px',
+              width: '100%'
             }}
-          >
-            <div style={{ textAlign: 'center', marginBottom: '20px' }}>
-              <div style={{ fontSize: '48px', marginBottom: '12px' }}>⚠️</div>
-              <h3 style={{ fontSize: '20px', fontWeight: 600, marginBottom: '10px', color: darkMode ? '#fff' : '#1a1a2e' }}>Clear All Data?</h3>
-              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px', lineHeight: '1.5' }}>
-                This action cannot be undone. All persons, properties, and inheritance data will be permanently deleted.
+            onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                ⚠️ Clear All Data?
+              </h3>
+              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '24px' }}>
+                This will permanently delete all people and properties. This action cannot be undone.
               </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => setShowClearConfirm(false)}
+                  type="button"
+                  style={{
+                    padding: '10px 20px',
+                    background: 'transparent',
+                    border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                    borderRadius: '40px',
+                    color: darkMode ? '#fff' : '#1a1a2e',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={clearAllData}
+                  type="button"
+                  style={{
+                    padding: '10px 24px',
+                    background: '#ef4444',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '40px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Delete All
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'center', flexDirection: isMobile ? 'column' : 'row' }}>
-              <button
-                onClick={() => setShowClearConfirm(false)}
-                style={{
-                  padding: '10px 20px',
-                  background: 'transparent',
-                  border: `1px solid ${darkMode ? '#475569' : '#cbd5e1'}`,
-                  borderRadius: '40px',
-                  fontSize: '13px',
-                  fontWeight: 500,
-                  cursor: 'pointer',
-                  color: darkMode ? '#fff' : '#1a1a2e'
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                onClick={clearAllData}
-                style={{
-                  padding: '10px 20px',
-                  background: '#ef4444',
-                  color: 'white',
-                  border: 'none',
-                  borderRadius: '40px',
-                  fontSize: '13px',
-                  fontWeight: 600,
-                  cursor: 'pointer'
-                }}
-              >
-                Yes, Clear Everything
-              </button>
-            </div>
-          </motion.div>
-        </div>
-      )}
-      
-      {/* Add/Edit Person Modal */}
-      {showPersonModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)', padding: '16px' }}>
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            style={{
+          </div>
+        )}
+      </AnimatePresence>
+
+      {/* Delete Person Confirmation */}
+      <AnimatePresence>
+        {showDeleteConfirm && personToDelete && (
+          <div style={{
+            position: 'fixed',
+            top: 0,
+            left: 0,
+            right: 0,
+            bottom: 0,
+            background: 'rgba(0,0,0,0.8)',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            zIndex: 10000,
+            padding: '16px'
+          }}
+          onClick={() => {
+            setShowDeleteConfirm(false);
+            setPersonToDelete(null);
+          }}
+          >
+            <div style={{
               background: darkMode ? '#1e1e2e' : '#ffffff',
               borderRadius: '24px',
-              padding: '24px',
-              width: '500px',
-              maxWidth: '100%',
-              maxHeight: '90vh',
-              overflowY: 'auto',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
+              padding: '32px',
+              maxWidth: '400px',
+              width: '100%'
             }}
-          >
-            <h3 style={{ marginBottom: '20px', fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              {editingPerson ? 'Edit Person' : 'Add New Person'}
-            </h3>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Full Name *</label>
-            <input type="text" placeholder="e.g., Juan Dela Cruz" value={personForm.name} onChange={(e) => setPersonForm({...personForm, name: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000', fontSize: '14px' }} />
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>⚰️ Date of Death (leave blank if still alive)</label>
-            <input type="date" value={personForm.dod} onChange={(e) => setPersonForm({...personForm, dod: e.target.value, isDeceased: !!e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Gender</label>
-            <select value={personForm.gender} onChange={(e) => setPersonForm({...personForm, gender: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="Male">Male</option>
-              <option value="Female">Female</option>
-            </select>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>💍 Spouse (if married)</label>
-            <select value={personForm.spouseId || ''} onChange={(e) => setPersonForm({...personForm, spouseId: e.target.value ? parseInt(e.target.value) : null})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="">No Spouse / Select Spouse</option>
-              {decedents.filter(p => p.id !== (editingPerson?.id || 0) && p.gender !== personForm.gender).map(p => (
-                <option key={p.id} value={p.id}>{p.name} {p.dod ? '(Deceased)' : '(Alive)'}</option>
-              ))}
-            </select>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>👪 Parent (who is the father/mother of this person?)</label>
-            <select value={personForm.parentId || ''} onChange={(e) => setPersonForm({...personForm, parentId: e.target.value ? parseInt(e.target.value) : null})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="">No Parent / Select Parent</option>
-              {decedents.filter(p => p.id !== (editingPerson?.id || 0)).map(p => (
-                <option key={p.id} value={p.id}>{p.name} {p.dod ? '(Deceased)' : '(Alive)'}</option>
-              ))}
-            </select>
-            
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
-              <button onClick={() => setShowPersonModal(false)} style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>
-              <button onClick={savePerson} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Save Person</button>
+            onClick={(e) => e.stopPropagation()}
+            >
+              <h3 style={{ fontSize: '18px', fontWeight: 600, marginBottom: '12px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                Delete {personToDelete.name}?
+              </h3>
+              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '24px' }}>
+                This will remove {personToDelete.name} and any relationships they have.
+              </p>
+              <div style={{ display: 'flex', gap: '12px', justifyContent: 'flex-end' }}>
+                <button
+                  onClick={() => {
+                    setShowDeleteConfirm(false);
+                    setPersonToDelete(null);
+                  }}
+                  type="button"
+                  style={{
+                    padding: '10px 20px',
+                    background: 'transparent',
+                    border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
+                    borderRadius: '40px',
+                    color: darkMode ? '#fff' : '#1a1a2e',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => deletePerson(personToDelete.id)}
+                  type="button"
+                  style={{
+                    padding: '10px 24px',
+                    background: '#ef4444',
+                    color: 'white',
+                    border: 'none',
+                    borderRadius: '40px',
+                    cursor: 'pointer'
+                  }}
+                >
+                  Delete
+                </button>
+              </div>
             </div>
-          </motion.div>
-        </div>
-      )}
-      
-      {/* Add Property Modal */}
-      {showPropertyModal && (
-        <div style={{ position: 'fixed', top: 0, left: 0, right: 0, bottom: 0, background: 'rgba(0,0,0,0.8)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 1000, backdropFilter: 'blur(8px)', padding: '16px' }}>
-          <motion.div
-            initial={{ scale: 0.9, opacity: 0 }}
-            animate={{ scale: 1, opacity: 1 }}
-            style={{
-              background: darkMode ? '#1e1e2e' : '#ffffff',
-              borderRadius: '24px',
-              padding: '24px',
-              width: '450px',
-              maxWidth: '100%',
-              boxShadow: '0 25px 50px -12px rgba(0,0,0,0.25)'
-            }}
-          >
-            <h3 style={{ marginBottom: '20px', fontSize: '20px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              {editingProperty ? 'Edit Property' : 'Add Property'}
-            </h3>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Property Name</label>
-            <input type="text" placeholder="e.g., Family Home, Lot A" value={propertyForm.name} onChange={(e) => setPropertyForm({...propertyForm, name: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Property Type</label>
-            <select value={propertyForm.type} onChange={(e) => setPropertyForm({...propertyForm, type: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="Land">Land</option>
-              <option value="Building">Building</option>
-              <option value="Land & Building">Land & Building</option>
-            </select>
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Total Area (Square Meters)</label>
-            <input type="number" placeholder="e.g., 300" value={propertyForm.totalSqm} onChange={(e) => setPropertyForm({...propertyForm, totalSqm: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '16px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }} />
-            
-            <label style={{ display: 'block', fontSize: '11px', fontWeight: 600, marginBottom: '4px', color: darkMode ? '#94a3b8' : '#64748b' }}>Classification</label>
-            <select value={propertyForm.classification} onChange={(e) => setPropertyForm({...propertyForm, classification: e.target.value})} style={{ width: '100%', padding: '12px', marginBottom: '20px', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '12px', background: darkMode ? '#0f1220' : '#fff', color: darkMode ? '#fff' : '#000' }}>
-              <option value="Exclusive">Exclusive - 100% belongs to decedent</option>
-              <option value="Conjugal">Conjugal/Community - 50% to spouse, 50% to estate</option>
-            </select>
-            
-            <div style={{ display: 'flex', gap: '10px', justifyContent: 'flex-end', flexDirection: isMobile ? 'column' : 'row' }}>
-              <button onClick={() => setShowPropertyModal(false)} style={{ padding: '10px 20px', cursor: 'pointer', background: 'transparent', border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`, borderRadius: '40px', fontSize: '13px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>Cancel</button>
-              <button onClick={saveProperty} style={{ padding: '10px 24px', background: 'linear-gradient(135deg, #667eea, #764ba2)', color: 'white', border: 'none', borderRadius: '40px', fontSize: '13px', fontWeight: 600, cursor: 'pointer' }}>Save Property</button>
-            </div>
-          </motion.div>
-        </div>
-      )}
+          </div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };

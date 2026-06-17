@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
 import TaxSettings from '../components/Settings/TaxSettings';
+import TaxHelpers from '../components/TaxHelpers/TaxHelpers'; // NEW IMPORT
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -28,7 +29,8 @@ import {
   BellIcon,
   ArrowRightOnRectangleIcon,
   HomeIcon,
-  Cog6ToothIcon
+  Cog6ToothIcon,
+  ClipboardDocumentCheckIcon // NEW ICON for Tax Helpers
 } from '@heroicons/react/24/outline';
 import UserManagement from '../components/Admin/UserManagement';
 import FeatureToggles from '../components/Admin/FeatureToggles';
@@ -83,6 +85,7 @@ const SuperAdminDashboard = () => {
   const tabs = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon },
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon },
+    { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon }, // NEW TAB
     { id: 'usermanagement', label: 'User Management', icon: UsersIcon },
     { id: 'calculations', label: 'Calculations', icon: DocumentTextIcon },
     { id: 'audit', label: 'Audit Trail', icon: ShieldCheckIcon },
@@ -225,6 +228,20 @@ const SuperAdminDashboard = () => {
             <div className="property-divider-wrapper">
               <PropertyDivider />
             </div>
+          </motion.div>
+        );
+
+      case 'taxhelpers': // NEW CASE
+        return (
+          <motion.div
+            key="taxhelpers"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <TaxHelpers />
           </motion.div>
         );
 
