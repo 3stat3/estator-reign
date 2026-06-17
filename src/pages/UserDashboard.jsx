@@ -3,11 +3,13 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
+import TaxHelpers from '../components/TaxHelpers/TaxHelpers'; // NEW IMPORT
 import {
   CalculatorIcon,
   UserGroupIcon,
   UserIcon,
   DocumentTextIcon,
+  ClipboardDocumentCheckIcon, // NEW ICON for Tax Helpers
   SunIcon,
   MoonIcon,
   BellIcon,
@@ -35,10 +37,11 @@ const UserDashboard = () => {
   // Feature access hooks
   const { isEnabled: calculatorEnabled, loading: calcLoading } = useFeatureAccess('tax_calculator');
   const { isEnabled: dividerEnabled, loading: dividerLoading } = useFeatureAccess('property_divider');
+  const { isEnabled: helpersEnabled, loading: helpersLoading } = useFeatureAccess('tax_helpers'); // NEW
 
   // Notifications array
   const notifications = [
-    { id: 1, title: 'Welcome to Estator Reign', message: 'Start using the Tax Calculator and Property Divider', time: 'Just now', read: false },
+    { id: 1, title: 'Welcome to Estator Reign', message: 'Start using the Tax Calculator, Property Divider, and Tax Helpers', time: 'Just now', read: false },
   ];
 
   const toggleTheme = () => {
@@ -78,6 +81,7 @@ const UserDashboard = () => {
   const allTabs = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon, enabled: calculatorEnabled },
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon, enabled: dividerEnabled },
+    { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon, enabled: helpersEnabled }, // NEW TAB
   ];
 
   // Maintenance Message Component for locked features
@@ -143,6 +147,21 @@ const UserDashboard = () => {
           </motion.div>
         );
 
+      case 'taxhelpers': // NEW CASE
+        if (!helpersEnabled) return <MaintenanceMessage featureName="Tax Helpers" />;
+        return (
+          <motion.div
+            key="taxhelpers"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <TaxHelpers />
+          </motion.div>
+        );
+
       case 'profile':
         return (
           <motion.div
@@ -191,7 +210,7 @@ const UserDashboard = () => {
     }
   };
 
-  if (calcLoading || dividerLoading) {
+  if (calcLoading || dividerLoading || helpersLoading) {
     return (
       <div className="loading-container">
         <div className="loading-spinner"></div>
