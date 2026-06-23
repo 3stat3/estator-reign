@@ -1,6 +1,6 @@
 {
   "version": 2,
-  "buildCommand": "npm install --force --no-optional && npm run build",
+  "buildCommand": "npm install --force --no-optional && npx vite build",
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
   "installCommand": "npm install --force --no-optional",
