@@ -1,18 +1,9 @@
 {
   "version": 2,
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "nodeVersion": "20.x"
-      }
-    }
-  ],
-  "buildCommand": "npm install --force && npm run build",
+  "buildCommand": "npm install --force --no-optional && npm run build",
   "outputDirectory": "dist",
   "devCommand": "npm run dev",
-  "installCommand": "npm install --force",
+  "installCommand": "npm install --force --no-optional",
   "framework": "vite",
   "rewrites": [
     {
@@ -22,11 +13,11 @@
   ],
   "headers": [
     {
-      "source": "/(.*)",
+      "source": "/assets/(.*)",
       "headers": [
         {
           "key": "Cache-Control",
-          "value": "public, max-age=0, must-revalidate"
+          "value": "public, max-age=31536000, immutable"
         }
       ]
     }
