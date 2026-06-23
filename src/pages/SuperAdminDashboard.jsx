@@ -1,10 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
 import TaxSettings from '../components/Settings/TaxSettings';
-import TaxHelpers from '../components/TaxHelpers/TaxHelpers'; // NEW IMPORT
+import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -14,23 +14,17 @@ import {
   ChartBarIcon,
   ArrowTrendingUpIcon,
   ClockIcon,
-  MagnifyingGlassIcon,
-  FunnelIcon,
-  ArrowPathIcon,
   ChevronDownIcon,
   ExclamationTriangleIcon,
   CheckBadgeIcon,
-  UserPlusIcon,
-  KeyIcon,
-  PencilIcon,
-  TrashIcon,
   SunIcon,
   MoonIcon,
   BellIcon,
   ArrowRightOnRectangleIcon,
   HomeIcon,
   Cog6ToothIcon,
-  ClipboardDocumentCheckIcon // NEW ICON for Tax Helpers
+  ClipboardDocumentCheckIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline';
 import UserManagement from '../components/Admin/UserManagement';
 import FeatureToggles from '../components/Admin/FeatureToggles';
@@ -39,15 +33,17 @@ const SuperAdminDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('calculator');
   const [isMobile, setIsMobile] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
-  const [showFilters, setShowFilters] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
+  const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) return savedTheme;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
+  
+  const dropdownRef = useRef(null);
+  const buttonRef = useRef(null);
 
   const toggleTheme = () => {
     const newTheme = theme === 'light' ? 'dark' : 'light';
@@ -77,20 +73,28 @@ const SuperAdminDashboard = () => {
       if (showNotifications && !e.target.closest('.notifications-container')) {
         setShowNotifications(false);
       }
+      if (showEstateTaxMenu && !e.target.closest('.estate-tax-menu-container')) {
+        setShowEstateTaxMenu(false);
+      }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showUserMenu, showNotifications]);
+  }, [showUserMenu, showNotifications, showEstateTaxMenu]);
 
-  const tabs = [
+  // Estate Tax sub-menu items (now includes Tax Settings renamed to Estate Tax Settings)
+  const estateTaxItems = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon },
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon },
-    { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon }, // NEW TAB
+    { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon },
+    { id: 'taxsettings', label: 'Estate Tax Settings', icon: Cog6ToothIcon },
+  ];
+
+  // Other navigation items (Tax Settings removed from here)
+  const otherTabs = [
     { id: 'usermanagement', label: 'User Management', icon: UsersIcon },
     { id: 'calculations', label: 'Calculations', icon: DocumentTextIcon },
     { id: 'audit', label: 'Audit Trail', icon: ShieldCheckIcon },
     { id: 'analytics', label: 'Analytics', icon: ChartBarIcon },
-    { id: 'taxsettings', label: 'Tax Settings', icon: Cog6ToothIcon },
     { id: 'featuretoggles', label: 'Feature Toggles', icon: Cog6ToothIcon },
   ];
 
@@ -231,7 +235,7 @@ const SuperAdminDashboard = () => {
           </motion.div>
         );
 
-      case 'taxhelpers': // NEW CASE
+      case 'taxhelpers':
         return (
           <motion.div
             key="taxhelpers"
@@ -242,6 +246,20 @@ const SuperAdminDashboard = () => {
             className="content-card"
           >
             <TaxHelpers />
+          </motion.div>
+        );
+
+      case 'taxsettings':
+        return (
+          <motion.div
+            key="taxsettings"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <TaxSettings />
           </motion.div>
         );
 
@@ -343,20 +361,6 @@ const SuperAdminDashboard = () => {
           </motion.div>
         );
 
-      case 'taxsettings':
-        return (
-          <motion.div
-            key="taxsettings"
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            exit={{ opacity: 0, y: -20 }}
-            transition={{ duration: 0.3 }}
-            className="content-card"
-          >
-            <TaxSettings />
-          </motion.div>
-        );
-
       case 'featuretoggles':
         return (
           <motion.div
@@ -378,7 +382,6 @@ const SuperAdminDashboard = () => {
 
   return (
     <div className={`dashboard-container ${theme}`} data-theme={theme}>
-      {/* Top Navigation Bar */}
       <nav className="dashboard-nav">
         <div className="nav-container">
           <div className="nav-brand">
@@ -391,7 +394,63 @@ const SuperAdminDashboard = () => {
           </div>
 
           <div className="nav-tabs">
-            {tabs.map((tab) => (
+            {/* Estate Tax Dropdown Menu */}
+            <div className="estate-tax-menu-container" ref={dropdownRef}>
+              <button
+                ref={buttonRef}
+                className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowEstateTaxMenu(!showEstateTaxMenu)}
+                onMouseEnter={() => setShowEstateTaxMenu(true)}
+                onMouseLeave={() => {
+                  setTimeout(() => {
+                    if (!document.querySelector('.dropdown-menu:hover')) {
+                      setShowEstateTaxMenu(false);
+                    }
+                  }, 150);
+                }}
+              >
+                <Squares2X2Icon className="tab-icon" />
+                <span>Estate Tax Services</span>
+                <ChevronDownIcon className={`dropdown-chevron ${showEstateTaxMenu ? 'rotated' : ''}`} />
+                {estateTaxItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showEstateTaxMenu && (
+                  <motion.div
+                    className="dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    onMouseEnter={() => setShowEstateTaxMenu(true)}
+                    onMouseLeave={() => setShowEstateTaxMenu(false)}
+                  >
+                    {estateTaxItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowEstateTaxMenu(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        {activeTab === item.id && (
+                          <CheckBadgeIcon className="dropdown-item-check" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Other Navigation Tabs */}
+            {otherTabs.map((tab) => (
               <button
                 key={tab.id}
                 onClick={() => setActiveTab(tab.id)}
@@ -545,7 +604,7 @@ const SuperAdminDashboard = () => {
           border-bottom: 1px solid var(--border-color);
           position: sticky;
           top: 0;
-          z-index: 50;
+          z-index: 1000;
         }
 
         .nav-container {
@@ -587,8 +646,9 @@ const SuperAdminDashboard = () => {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          overflow-x: auto;
+          overflow-x: visible;
           scrollbar-width: none;
+          position: relative;
         }
 
         .nav-tabs::-webkit-scrollbar {
@@ -610,6 +670,7 @@ const SuperAdminDashboard = () => {
           transition: all 0.2s;
           position: relative;
           white-space: nowrap;
+          z-index: 1;
         }
 
         .nav-tab:hover {
@@ -635,6 +696,80 @@ const SuperAdminDashboard = () => {
           height: 2px;
           background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
           border-radius: 2px;
+        }
+
+        .estate-tax-menu-container {
+          position: relative;
+          display: inline-block;
+        }
+
+        .dropdown-trigger {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .dropdown-chevron {
+          width: 1rem;
+          height: 1rem;
+          transition: transform 0.2s ease;
+        }
+
+        .dropdown-chevron.rotated {
+          transform: rotate(180deg);
+        }
+
+        .dropdown-menu {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          min-width: 220px;
+          background: var(--card-bg);
+          border: 1px solid var(--border-color);
+          border-radius: 0.75rem;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+          padding: 0.5rem;
+          z-index: 9999;
+          overflow: visible;
+        }
+
+        .dropdown-item-nav {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          width: 100%;
+          padding: 0.625rem 0.875rem;
+          background: none;
+          border: none;
+          border-radius: 0.5rem;
+          cursor: pointer;
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          text-align: left;
+        }
+
+        .dropdown-item-nav:hover {
+          background: var(--hover-bg);
+          color: var(--text-primary);
+        }
+
+        .dropdown-item-nav.active {
+          background: rgba(102, 126, 234, 0.1);
+          color: var(--gradient-start);
+        }
+
+        .dropdown-item-icon {
+          width: 1.25rem;
+          height: 1.25rem;
+        }
+
+        .dropdown-item-check {
+          width: 1rem;
+          height: 1rem;
+          margin-left: auto;
+          color: var(--gradient-start);
         }
 
         .nav-actions {
@@ -1008,187 +1143,26 @@ const SuperAdminDashboard = () => {
           overflow: hidden;
         }
 
-        .search-section {
-          padding: 1.5rem;
-          border-bottom: 1px solid var(--border-color);
-          display: flex;
-          gap: 1rem;
-          flex-wrap: wrap;
-        }
-
-        .search-wrapper {
-          flex: 1;
-          position: relative;
-        }
-
-        .search-wrapper .search-icon {
-          position: absolute;
-          left: 1rem;
-          top: 50%;
-          transform: translateY(-50%);
-          width: 1.25rem;
-          height: 1.25rem;
-          color: var(--text-tertiary);
-        }
-
-        .search-wrapper .search-input {
-          width: 100%;
-          padding: 0.625rem 1rem 0.625rem 2.75rem;
-          border: 1px solid var(--border-color);
-          border-radius: 0.5rem;
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-          font-size: 0.875rem;
-        }
-
-        .filter-btn {
-          display: flex;
-          align-items: center;
-          gap: 0.5rem;
-          padding: 0.625rem 1rem;
-          border: 1px solid var(--border-color);
-          border-radius: 0.5rem;
-          background: var(--bg-secondary);
-          color: var(--text-primary);
-          cursor: pointer;
-          transition: all 0.2s;
-        }
-
-        .filter-btn:hover {
-          background: var(--hover-bg);
-        }
-
-        .filter-chevron {
-          width: 1rem;
-          height: 1rem;
-          transition: transform 0.2s;
-        }
-
-        .filter-chevron.rotated {
-          transform: rotate(180deg);
-        }
-
-        .users-table-container {
-          overflow-x: auto;
-          padding: 1.5rem;
-        }
-
-        .users-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-
-        .users-table th {
-          text-align: left;
-          padding: 0.75rem;
-          font-size: 0.75rem;
-          font-weight: 600;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          color: var(--text-secondary);
-          border-bottom: 1px solid var(--border-color);
-        }
-
-        .users-table td {
-          padding: 1rem 0.75rem;
-          border-bottom: 1px solid var(--border-color);
-          color: var(--text-primary);
-          font-size: 0.875rem;
-        }
-
-        .user-cell {
-          display: flex;
-          align-items: center;
-          gap: 0.75rem;
-        }
-
-        .user-avatar {
-          width: 2.5rem;
-          height: 2.5rem;
-          border-radius: 50%;
-          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          color: white;
-          font-weight: 600;
-          font-size: 0.875rem;
-        }
-
-        .user-name {
-          font-weight: 600;
-          margin-bottom: 0.25rem;
-        }
-
-        .user-email {
-          font-size: 0.75rem;
-          color: var(--text-secondary);
-        }
-
-        .role-badge, .status-badge {
-          display: inline-flex;
-          padding: 0.25rem 0.75rem;
-          border-radius: 2rem;
-          font-size: 0.75rem;
-          font-weight: 500;
-        }
-
-        .role-badge.admin {
-          background: rgba(139, 92, 246, 0.1);
-          color: #8b5cf6;
-        }
-
-        .role-badge.officer {
-          background: rgba(16, 185, 129, 0.1);
-          color: #10b981;
-        }
-
-        .status-badge.active {
-          background: rgba(16, 185, 129, 0.1);
-          color: #10b981;
-        }
-
-        .status-badge.pending {
-          background: rgba(245, 158, 11, 0.1);
-          color: #f59e0b;
-        }
-
-        .action-buttons {
-          display: flex;
-          gap: 0.5rem;
-        }
-
-        .action-btn-icon {
-          background: none;
-          border: none;
-          cursor: pointer;
-          padding: 0.25rem;
-          color: var(--text-secondary);
-          transition: color 0.2s;
-          display: flex;
-          align-items: center;
-        }
-
-        .action-btn-icon svg {
-          width: 1.125rem;
-          height: 1.125rem;
-        }
-
-        .action-btn-icon:hover {
-          color: var(--gradient-start);
-        }
-
         @media (max-width: 1024px) {
           .nav-tabs {
             gap: 0.25rem;
           }
           
-          .nav-tab span {
+          .nav-tab span,
+          .dropdown-trigger span {
             display: none;
           }
           
           .nav-tab {
             padding: 0.5rem;
+          }
+
+          .dropdown-trigger {
+            padding: 0.5rem;
+          }
+
+          .dropdown-menu {
+            min-width: 180px;
           }
         }
 
@@ -1214,11 +1188,21 @@ const SuperAdminDashboard = () => {
             flex-direction: column;
             align-items: flex-start;
           }
+
+          .dropdown-menu {
+            left: -4rem;
+            min-width: 200px;
+          }
         }
 
         @media (max-width: 640px) {
           .nav-brand .logo-text {
             display: none;
+          }
+
+          .dropdown-menu {
+            left: -6rem;
+            min-width: 180px;
           }
         }
       `}</style>

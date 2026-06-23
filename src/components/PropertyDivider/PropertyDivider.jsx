@@ -14,6 +14,7 @@ import ReactFlow, {
 } from 'reactflow';
 import 'reactflow/dist/style.css';
 import { calculateAllInheritance, AssetLedger } from './inheritance/index.js';
+import { ExampleDataLoader, exampleData } from './ExampleDataLoader.jsx';
 
 // ==================== PERSON MODAL COMPONENT ====================
 const PersonModalComponent = ({ 
@@ -551,7 +552,7 @@ const PersonDetailModal = ({
           )}
         </div>
 
-        {/* Enhanced Inheritance Summary - Now includes all transfer details */}
+        {/* Enhanced Inheritance Summary */}
         {inheritanceResult && (
           <div style={{
             background: darkMode ? '#14161f' : '#f8fafc',
@@ -563,7 +564,6 @@ const PersonDetailModal = ({
               💰 Inheritance Summary
             </h3>
             
-            {/* Show total estate for decedents */}
             {inheritanceResult.isDecedent ? (
               <div>
                 <div style={{ 
@@ -612,192 +612,126 @@ const PersonDetailModal = ({
                 )}
               </div>
             ) : inheritanceResult.isHeir ? (
-  <div>
-    {/* Show total inherited estate */}
-    <div style={{ 
-      padding: '12px',
-      background: darkMode ? '#1e2d3d' : '#eef2ff',
-      borderRadius: '8px',
-      marginBottom: '12px'
-    }}>
-      <div style={{ fontSize: '14px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-        Total Estate Holdings
-      </div>
-      <div style={{ fontSize: '24px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-        {formatNumber(inheritanceResult.totalEstateValue || 0)} sqm
-      </div>
-      <div style={{ fontSize: '13px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '4px' }}>
-        {inheritanceResult.heirRelationship}
-      </div>
-    </div>
-    
-    {/* Show conjugal share owned by this person (automatic 50% of conjugal properties) */}
-    {inheritanceResult.conjugalShareOwned > 0 && (
-      <div style={{
-        padding: '10px 14px',
-        marginBottom: '10px',
-        borderRadius: '8px',
-        background: darkMode ? '#1e2d3d' : '#eef2ff',
-        border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-            💍 Conjugal Share Owned (50% of conjugal properties)
-          </span>
-          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-            {formatNumber(inheritanceResult.conjugalShareOwned)} sqm
-          </span>
-        </div>
-        <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
-          This is the spouse's automatic 50% share of conjugal properties
-        </div>
-      </div>
-    )}
-    
-    {/* Show conjugal share received from inheritance */}
-    {inheritanceResult.totalConjugal > 0 && (
-      <div style={{
-        padding: '10px 14px',
-        marginBottom: '10px',
-        borderRadius: '8px',
-        background: darkMode ? '#1e2d3d' : '#eef2ff',
-        border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-            💍 Conjugal Share (from deceased spouse's estate)
-          </span>
-          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-            {formatNumber(inheritanceResult.totalConjugal)} sqm
-          </span>
-        </div>
-        <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
-          Inherited conjugal share from deceased spouse
-        </div>
-      </div>
-    )}
-    
-    {/* Show inheritance received */}
-    {inheritanceResult.totalInherited > 0 && (
-      <div style={{
-        padding: '10px 14px',
-        marginBottom: '10px',
-        borderRadius: '8px',
-        background: darkMode ? '#0a0c10' : '#ffffff',
-        border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-            📦 Inheritance Received
-          </span>
-          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-            {formatNumber(inheritanceResult.totalInherited)} sqm
-          </span>
-        </div>
-        <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
-          Inheritance from deceased spouse's estate
-        </div>
-      </div>
-    )}
-    
-    {/* Show exclusive properties owned */}
-    {totalExclusive > 0 && !person.isDeceased && (
-      <div style={{
-        padding: '10px 14px',
-        marginBottom: '10px',
-        borderRadius: '8px',
-        background: darkMode ? '#0a0c10' : '#ffffff',
-        border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-          <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-            📦 Exclusive Properties Owned
-          </span>
-          <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-            {formatNumber(totalExclusive)} sqm
-          </span>
-        </div>
-      </div>
-    )}
-    
-    {/* Show breakdown of inheritance received */}
-    {inheritanceResult.transfers && inheritanceResult.transfers.filter(t => t.toId === inheritanceResult.person.id).length > 0 && (
-      <div>
-        <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-          📥 Received From:
-        </div>
-        {inheritanceResult.transfers.filter(t => t.toId === inheritanceResult.person.id).map((t, i) => (
-          <div key={i} style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            marginBottom: '4px',
-            borderRadius: '6px',
-            background: darkMode ? '#0a0c10' : '#ffffff',
-            borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : '#2196F3'}`
-          }}>
-            <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
-              ← {t.fromName} 
-              {t.conjugal ? ' (Conjugal Share)' : ' (Inheritance)'}
-              {t.represents && ` (${t.represents})`}
-            </span>
-            <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              {formatNumber(t.amount)} sqm
-            </span>
-          </div>
-        ))}
-      </div>
-    )}
-    
-    {/* Show what they gave (if they are also a decedent) */}
-    {inheritanceResult.transfers.filter(t => t.fromId === inheritanceResult.person.id).length > 0 && (
-      <div style={{ marginTop: '12px' }}>
-        <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
-          📤 Distributed To Others:
-        </div>
-        {inheritanceResult.transfers.filter(t => t.fromId === inheritanceResult.person.id).map((t, i) => (
-          <div key={i} style={{
-            display: 'flex',
-            justifyContent: 'space-between',
-            padding: '8px 12px',
-            marginBottom: '4px',
-            borderRadius: '6px',
-            background: darkMode ? '#0a0c10' : '#ffffff',
-            borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : '#FF9800'}`
-          }}>
-            <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
-              → {t.toName} 
-              {t.conjugal ? ' (Conjugal Share)' : ' (Inheritance)'}
-            </span>
-            <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              {formatNumber(t.amount)} sqm
-            </span>
-          </div>
-        ))}
-      </div>
-    )}
-    
-    {/* Net inheritance */}
-    <div style={{
-      marginTop: '12px',
-      padding: '12px 14px',
-      borderRadius: '8px',
-      background: darkMode ? '#1e2d3d' : '#eef2ff',
-      border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
-    }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-        <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-          Net Inheritance (Received - Given):
-        </span>
-        <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>
-          {formatNumber((inheritanceResult.totalInherited || 0) + (inheritanceResult.totalConjugal || 0) - (inheritanceResult.totalGiven || 0))} sqm
-        </strong>
-      </div>
-      <div style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginTop: '4px' }}>
-        This includes conjugal share, inheritance, and excludes what was given
-      </div>
-    </div>
-  </div>
+              <div>
+                <div style={{ 
+                  padding: '12px',
+                  background: darkMode ? '#1e2d3d' : '#eef2ff',
+                  borderRadius: '8px',
+                  marginBottom: '12px'
+                }}>
+                  <div style={{ fontSize: '14px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    Total Estate Holdings
+                  </div>
+                  <div style={{ fontSize: '24px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {formatNumber(inheritanceResult.totalEstateValue || 0)} sqm
+                  </div>
+                  <div style={{ fontSize: '13px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '4px' }}>
+                    {inheritanceResult.heirRelationship}
+                  </div>
+                </div>
+                
+                {inheritanceResult.conjugalShareOwned > 0 && (
+                  <div style={{
+                    padding: '10px 14px',
+                    marginBottom: '10px',
+                    borderRadius: '8px',
+                    background: darkMode ? '#1e2d3d' : '#eef2ff',
+                    border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                        💍 Conjugal Share Owned (50% of conjugal properties)
+                      </span>
+                      <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                        {formatNumber(inheritanceResult.conjugalShareOwned)} sqm
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {inheritanceResult.totalConjugal > 0 && (
+                  <div style={{
+                    padding: '10px 14px',
+                    marginBottom: '10px',
+                    borderRadius: '8px',
+                    background: darkMode ? '#1e2d3d' : '#eef2ff',
+                    border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                        💍 Conjugal Share (from deceased spouse's estate)
+                      </span>
+                      <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                        {formatNumber(inheritanceResult.totalConjugal)} sqm
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {inheritanceResult.totalInherited > 0 && (
+                  <div style={{
+                    padding: '10px 14px',
+                    marginBottom: '10px',
+                    borderRadius: '8px',
+                    background: darkMode ? '#0a0c10' : '#ffffff',
+                    border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                      <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                        📦 Inheritance Received
+                      </span>
+                      <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                        {formatNumber(inheritanceResult.totalInherited)} sqm
+                      </span>
+                    </div>
+                  </div>
+                )}
+                
+                {inheritanceResult.transfers && inheritanceResult.transfers.filter(t => t.toId === inheritanceResult.person.id).length > 0 && (
+                  <div>
+                    <div style={{ fontSize: '14px', fontWeight: 500, marginBottom: '8px', color: darkMode ? '#fff' : '#1a1a2e' }}>
+                      📥 Received From:
+                    </div>
+                    {inheritanceResult.transfers.filter(t => t.toId === inheritanceResult.person.id).map((t, i) => (
+                      <div key={i} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '8px 12px',
+                        marginBottom: '4px',
+                        borderRadius: '6px',
+                        background: darkMode ? '#0a0c10' : '#ffffff',
+                        borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : '#2196F3'}`
+                      }}>
+                        <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
+                          ← {t.fromName} 
+                          {t.conjugal ? ' (Conjugal Share)' : ' (Inheritance)'}
+                          {t.represents && ` (${t.represents})`}
+                        </span>
+                        <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                          {formatNumber(t.amount)} sqm
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                )}
+                
+                <div style={{
+                  marginTop: '12px',
+                  padding: '12px 14px',
+                  borderRadius: '8px',
+                  background: darkMode ? '#1e2d3d' : '#eef2ff',
+                  border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
+                }}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
+                      Net Inheritance (Received - Given):
+                    </span>
+                    <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>
+                      {formatNumber((inheritanceResult.totalInherited || 0) + (inheritanceResult.totalConjugal || 0) - (inheritanceResult.totalGiven || 0))} sqm
+                    </strong>
+                  </div>
+                </div>
+              </div>
             ) : (
               <p style={{ color: darkMode ? '#64748b' : '#94a3b8', textAlign: 'center', padding: '10px 0' }}>
                 No inheritance records found
@@ -1240,10 +1174,125 @@ const BulkAddModal = ({ isOpen, onClose, onSave, darkMode }) => {
   );
 };
 
-// ==================== STORY MODE COMPONENT ====================
-const StoryMode = ({ decedents, inheritanceSummary, inheritanceTransfers, totalEstateValue, darkMode, formatNumber, onSelectPerson }) => {
-  const [expandedChapter, setExpandedChapter] = useState(null);
-  
+// ==================== PORTFOLIO MODE COMPONENT ====================
+const PortfolioMode = ({ 
+  decedents, 
+  selectedPersonId, 
+  onSelectPerson, 
+  darkMode, 
+  formatNumber,
+  inheritanceSummary,
+  inheritanceTransfers,
+  totalEstateValue,
+  onAddPerson,
+  onBulkAdd,
+  searchQuery,
+  setSearchQuery,
+  onClearAll,
+  onLoadExample
+}) => {
+  const [filter, setFilter] = useState('all');
+  const [sortBy, setSortBy] = useState('name');
+  const [expandedPersonId, setExpandedPersonId] = useState(null);
+
+  const getPersonStats = useCallback((person) => {
+    const props = person.properties || [];
+    const totalSqm = props.reduce((sum, p) => sum + p.totalSqm, 0);
+    const conjugalProps = props.filter(p => p.classification === 'Conjugal');
+    const exclusiveProps = props.filter(p => p.classification === 'Exclusive');
+    const conjugalShare = conjugalProps.reduce((sum, p) => sum + (p.totalSqm / 2), 0);
+    const exclusiveTotal = exclusiveProps.reduce((sum, p) => sum + p.totalSqm, 0);
+    
+    const isDecedent = inheritanceSummary.some(s => s.decedentId === person.id);
+    const isHeir = inheritanceSummary.some(s => 
+      s.heirs.some(h => h.id === person.id)
+    );
+    
+    let inheritanceAmount = 0;
+    const heirRecord = inheritanceSummary.flatMap(s => 
+      s.heirs.filter(h => h.id === person.id)
+    );
+    if (heirRecord.length > 0) {
+      inheritanceAmount = heirRecord.reduce((sum, h) => sum + h.share, 0);
+    }
+    
+    return {
+      totalProperties: props.length,
+      totalSqm,
+      conjugalShare,
+      exclusiveTotal,
+      isDecedent,
+      isHeir,
+      inheritanceAmount,
+      hasSpouse: !!person.spouseId,
+      hasChildren: decedents.some(c => c.parentId === person.id)
+    };
+  }, [decedents, inheritanceSummary]);
+
+  const filteredPeople = useMemo(() => {
+    let filtered = decedents.filter(person =>
+      person.name.toLowerCase().includes(searchQuery.toLowerCase())
+    );
+    
+    if (filter === 'deceased') {
+      filtered = filtered.filter(p => p.isDeceased);
+    } else if (filter === 'living') {
+      filtered = filtered.filter(p => !p.isDeceased);
+    } else if (filter === 'heirs') {
+      filtered = filtered.filter(p => 
+        inheritanceSummary.some(s => s.heirs.some(h => h.id === p.id))
+      );
+    }
+    
+    if (sortBy === 'properties') {
+      filtered.sort((a, b) => (b.properties?.length || 0) - (a.properties?.length || 0));
+    } else if (sortBy === 'estate') {
+      const getTotal = (p) => p.properties?.reduce((sum, prop) => sum + prop.totalSqm, 0) || 0;
+      filtered.sort((a, b) => getTotal(b) - getTotal(a));
+    } else {
+      filtered.sort((a, b) => a.name.localeCompare(b.name));
+    }
+    
+    return filtered;
+  }, [decedents, searchQuery, filter, sortBy, inheritanceSummary]);
+
+  const getStatusColor = (person) => {
+    if (person.isDeceased) return '#ef4444';
+    return '#22c55e';
+  };
+
+  const getStatusLabel = (person) => {
+    if (person.isDeceased) return 'Deceased';
+    return 'Living';
+  };
+
+  const getPersonInheritance = (person) => {
+    const stats = getPersonStats(person);
+    if (stats.isDecedent) {
+      const record = inheritanceSummary.find(s => s.decedentId === person.id);
+      return record ? record.totalAssets : 0;
+    }
+    if (stats.isHeir) {
+      return stats.inheritanceAmount;
+    }
+    return 0;
+  };
+
+  const topDecedent = useMemo(() => {
+    return decedents
+      .filter(p => p.isDeceased && p.properties?.length > 0)
+      .sort((a, b) => (b.properties?.length || 0) - (a.properties?.length || 0))[0];
+  }, [decedents]);
+
+  const handleCardClick = (person) => {
+    if (selectedPersonId === person.id) {
+      setExpandedPersonId(expandedPersonId === person.id ? null : person.id);
+    } else {
+      onSelectPerson(person);
+      setExpandedPersonId(null);
+    }
+  };
+
   if (decedents.length === 0) {
     return (
       <div style={{
@@ -1256,250 +1305,50 @@ const StoryMode = ({ decedents, inheritanceSummary, inheritanceTransfers, totalE
         color: darkMode ? '#94a3b8' : '#64748b',
         textAlign: 'center'
       }}>
-        <div style={{ fontSize: '64px', marginBottom: '24px' }}>📖</div>
+        <div style={{ fontSize: '64px', marginBottom: '24px' }}>🏛️</div>
         <h3 style={{ fontSize: '24px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '12px' }}>
-          Estate Story
+          Estate Portfolio
         </h3>
-        <p style={{ maxWidth: '400px' }}>
-          Start by adding people to your family tree. The story of your estate will unfold here.
+        <p style={{ maxWidth: '400px', marginBottom: '24px' }}>
+          Start by adding people to your family tree. Build your estate portfolio view.
         </p>
+        <div style={{ display: 'flex', gap: '12px', flexWrap: 'wrap', justifyContent: 'center' }}>
+          <button
+            onClick={onAddPerson}
+            type="button"
+            style={{
+              padding: '10px 24px',
+              background: 'linear-gradient(135deg, #667eea, #764ba2)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '40px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            + Add First Person
+          </button>
+          <button
+            onClick={onLoadExample}
+            type="button"
+            style={{
+              padding: '10px 24px',
+              background: 'linear-gradient(135deg, #f093fb, #f5576c)',
+              color: 'white',
+              border: 'none',
+              borderRadius: '40px',
+              fontSize: '14px',
+              fontWeight: 600,
+              cursor: 'pointer'
+            }}
+          >
+            📋 Load Example
+          </button>
+        </div>
       </div>
     );
   }
-
-  // Find the decedent (first deceased person with properties or first in list)
-  const decedent = decedents.find(p => p.isDeceased && p.properties?.length > 0) || decedents[0];
-  const spouse = decedents.find(p => p.id === decedent?.spouseId);
-  const children = decedents.filter(p => p.parentId === decedent?.id);
-  const parents = decedents.filter(p => p.id === decedent?.parentId);
-  
-  // Get inheritance for decedent
-  const decedentInheritance = inheritanceSummary.find(s => s.decedentId === decedent?.id);
-  const hasInheritance = decedentInheritance && decedentInheritance.heirs.length > 0;
-
-  const chapters = [
-    {
-      id: 'decedent',
-      icon: '👤',
-      title: 'The Decedent',
-      content: (
-        <div>
-          <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '8px' }}>
-            <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{decedent?.name}</strong>
-            {decedent?.dod ? ` passed away on ${new Date(decedent.dod).toLocaleDateString()}.` : ' is the central figure of this estate.'}
-          </p>
-          {decedent?.dod && (
-            <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '14px' }}>
-              ⚰️ Age at passing: {Math.floor((new Date(decedent.dod) - new Date(new Date().getFullYear() - 80, 0, 1)) / (1000 * 60 * 60 * 24 * 365.25))} years
-            </p>
-          )}
-        </div>
-      )
-    },
-    {
-      id: 'family',
-      icon: '👨‍👩‍👧‍👦',
-      title: 'The Family',
-      content: (
-        <div>
-          {spouse && (
-            <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '6px' }}>
-              💍 <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{spouse.name}</strong> - Spouse
-              {spouse.isDeceased ? ' ⚰️ (Deceased)' : ' 💚 (Living)'}
-            </p>
-          )}
-          {parents.length > 0 && parents.map(p => (
-            <p key={p.id} style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '6px' }}>
-              👪 <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{p.name}</strong> - Parent
-              {p.isDeceased ? ' ⚰️ (Deceased)' : ' 💚 (Living)'}
-            </p>
-          ))}
-          {children.length > 0 && children.map(c => (
-            <p key={c.id} style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '6px' }}>
-              👨‍👧‍👦 <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{c.name}</strong> - Child
-              {c.isDeceased ? ' ⚰️ (Deceased)' : ' 💚 (Living)'}
-            </p>
-          ))}
-          {!spouse && parents.length === 0 && children.length === 0 && (
-            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
-              No family members linked yet. Add relationships to build the family story.
-            </p>
-          )}
-        </div>
-      )
-    },
-    {
-      id: 'estate',
-      icon: '🏠',
-      title: 'The Estate',
-      content: (
-        <div>
-          {decedent?.properties && decedent.properties.length > 0 ? (
-            <div>
-              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '12px' }}>
-                <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{decedent.name}</strong> left behind:
-              </p>
-              {decedent.properties.map(prop => (
-                <div key={prop.id} style={{
-                  padding: '10px 14px',
-                  marginBottom: '8px',
-                  borderRadius: '8px',
-                  background: darkMode ? '#0a0c10' : '#f8fafc',
-                  border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`
-                }}>
-                  <div style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                    {prop.name}
-                  </div>
-                  <div style={{ fontSize: '13px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                    {prop.type} • {prop.totalSqm} sqm • {prop.classification}
-                  </div>
-                </div>
-              ))}
-              <div style={{
-                marginTop: '12px',
-                padding: '12px',
-                borderRadius: '8px',
-                background: darkMode ? '#1e2d3d' : '#eef2ff',
-                border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
-              }}>
-                <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-                  Total Estate Value:
-                </span>
-                <strong style={{ color: darkMode ? '#fff' : '#1a1a2e', fontSize: '18px', display: 'block', marginTop: '4px' }}>
-                  {formatNumber(totalEstateValue)} sqm
-                </strong>
-              </div>
-            </div>
-          ) : (
-            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
-              No properties added yet. Add properties to build the estate story.
-            </p>
-          )}
-        </div>
-      )
-    },
-    {
-      id: 'distribution',
-      icon: '💰',
-      title: 'Distribution',
-      content: (
-        <div>
-          {hasInheritance && decedentInheritance.heirs.length > 0 ? (
-            <div>
-              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '12px' }}>
-                The estate of <strong style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{decedent.name}</strong> is distributed as follows:
-              </p>
-              {decedentInheritance.heirs.map((heir, index) => {
-                const person = decedents.find(p => p.id === heir.id);
-                return (
-                  <div key={index} style={{
-                    display: 'flex',
-                    justifyContent: 'space-between',
-                    alignItems: 'center',
-                    padding: '10px 14px',
-                    marginBottom: '8px',
-                    borderRadius: '8px',
-                    background: darkMode ? '#0a0c10' : '#f8fafc',
-                    border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
-                    cursor: person ? 'pointer' : 'default',
-                  }}
-                  onClick={() => person && onSelectPerson(person)}
-                  >
-                    <div>
-                      <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                        {heir.name}
-                      </span>
-                      <span style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', marginLeft: '8px' }}>
-                        {heir.relationship}
-                        {heir.isRepresentative && ` (Represents ${heir.represents})`}
-                      </span>
-                    </div>
-                    <span style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                      {formatNumber(heir.share)} sqm
-                      {heir.conjugalShare > 0 && ` (${formatNumber(heir.conjugalShare)} conjugal)`}
-                    </span>
-                  </div>
-                );
-              })}
-              <div style={{
-                marginTop: '12px',
-                padding: '12px 14px',
-                borderRadius: '8px',
-                background: darkMode ? '#1e2d3d' : '#eef2ff',
-                border: `1px solid ${darkMode ? '#2d3d4d' : '#dde6ff'}`
-              }}>
-                <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-                  Total Distributed:
-                </span>
-                <strong style={{ color: darkMode ? '#fff' : '#1a1a2e', display: 'block', marginTop: '4px' }}>
-                  {formatNumber(decedentInheritance.totalAssets)} sqm
-                </strong>
-              </div>
-            </div>
-          ) : (
-            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
-              No inheritance distribution calculated yet. Add properties and relationships to see the distribution.
-            </p>
-          )}
-        </div>
-      )
-    },
-    {
-      id: 'audit',
-      icon: '📋',
-      title: 'Audit Trail',
-      content: (
-        <div>
-          {inheritanceTransfers.length > 0 ? (
-            <div>
-              <p style={{ color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '12px' }}>
-                Transaction history of all inheritance transfers:
-              </p>
-              {inheritanceTransfers.slice(0, 10).map((t, index) => (
-                <div key={index} style={{
-                  display: 'flex',
-                  justifyContent: 'space-between',
-                  alignItems: 'center',
-                  padding: '8px 14px',
-                  marginBottom: '6px',
-                  borderRadius: '6px',
-                  background: darkMode ? '#0a0c10' : '#ffffff',
-                  borderLeft: `4px solid ${t.conjugal ? '#4CAF50' : t.represents ? '#FF9800' : '#2196F3'}`
-                }}>
-                  <div>
-                    <span style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '13px' }}>
-                      {t.fromName} → {t.toName}
-                    </span>
-                    {t.represents && (
-                      <span style={{ fontSize: '11px', color: darkMode ? '#64748b' : '#94a3b8', marginLeft: '8px' }}>
-                        (Representing {t.represents})
-                      </span>
-                    )}
-                  </div>
-                  <span style={{ fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                    {formatNumber(t.amount)} sqm
-                  </span>
-                </div>
-              ))}
-              {inheritanceTransfers.length > 10 && (
-                <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontSize: '13px', textAlign: 'center', marginTop: '8px' }}>
-                  + {inheritanceTransfers.length - 10} more transfers
-                </p>
-              )}
-            </div>
-          ) : (
-            <p style={{ color: darkMode ? '#64748b' : '#94a3b8', fontStyle: 'italic' }}>
-              No transactions recorded yet.
-            </p>
-          )}
-        </div>
-      )
-    }
-  ];
-
-  const toggleChapter = (id) => {
-    setExpandedChapter(expandedChapter === id ? null : id);
-  };
 
   return (
     <div style={{
@@ -1507,159 +1356,421 @@ const StoryMode = ({ decedents, inheritanceSummary, inheritanceTransfers, totalE
       overflow: 'auto',
       padding: '20px',
       background: darkMode ? '#0a0c10' : '#f8fafc',
-      position: 'relative'
     }}>
-      {/* Header */}
+      {/* Hero Stats */}
       <div style={{
-        marginBottom: '24px',
-        textAlign: 'center',
-        padding: '20px',
-        borderRadius: '16px',
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
+        gap: '16px',
+        marginBottom: '24px'
+      }}>
+        <div style={{
+          padding: '20px',
+          borderRadius: '16px',
+          background: darkMode ? 'rgba(30,30,46,0.8)' : 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(10px)',
+          border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+        }}>
+          <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', fontWeight: 500 }}>
+            Total Estate Value
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginTop: '4px' }}>
+            {formatNumber(totalEstateValue)} <span style={{ fontSize: '14px', fontWeight: 400, color: darkMode ? '#94a3b8' : '#64748b' }}>sqm</span>
+          </div>
+        </div>
+
+        <div style={{
+          padding: '20px',
+          borderRadius: '16px',
+          background: darkMode ? 'rgba(30,30,46,0.8)' : 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(10px)',
+          border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+        }}>
+          <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', fontWeight: 500 }}>
+            Total Properties
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginTop: '4px' }}>
+            {decedents.reduce((sum, p) => sum + (p.properties?.length || 0), 0)}
+          </div>
+          <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '4px' }}>
+            Across {decedents.length} people
+          </div>
+        </div>
+
+        <div style={{
+          padding: '20px',
+          borderRadius: '16px',
+          background: darkMode ? 'rgba(30,30,46,0.8)' : 'rgba(255,255,255,0.9)',
+          backdropFilter: 'blur(10px)',
+          border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+          boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+        }}>
+          <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', fontWeight: 500 }}>
+            Family Members
+          </div>
+          <div style={{ fontSize: '28px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginTop: '4px' }}>
+            {decedents.length}
+          </div>
+          <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '4px' }}>
+            {decedents.filter(p => p.isDeceased).length} deceased, {decedents.filter(p => !p.isDeceased).length} living
+          </div>
+        </div>
+
+        {topDecedent && (
+          <div style={{
+            padding: '20px',
+            borderRadius: '16px',
+            background: darkMode ? 'rgba(30,30,46,0.8)' : 'rgba(255,255,255,0.9)',
+            backdropFilter: 'blur(10px)',
+            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+            boxShadow: '0 4px 12px rgba(0,0,0,0.05)'
+          }}>
+            <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b', fontWeight: 500 }}>
+              Largest Estate
+            </div>
+            <div style={{ fontSize: '20px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', marginTop: '4px' }}>
+              {topDecedent.name}
+            </div>
+            <div style={{ fontSize: '14px', color: darkMode ? '#94a3b8' : '#64748b', marginTop: '2px' }}>
+              {topDecedent.properties?.length || 0} properties
+            </div>
+          </div>
+        )}
+      </div>
+
+      {/* Controls */}
+      <div style={{
+        display: 'flex',
+        flexWrap: 'wrap',
+        alignItems: 'center',
+        gap: '12px',
+        marginBottom: '20px',
+        padding: '12px 16px',
+        borderRadius: '12px',
         background: darkMode ? 'rgba(30,30,46,0.6)' : 'rgba(255,255,255,0.8)',
         backdropFilter: 'blur(10px)',
         border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
       }}>
-        <div style={{ fontSize: '40px', marginBottom: '8px' }}>📖</div>
-        <h2 style={{ fontSize: '24px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', margin: 0 }}>
-          Estate Story
-        </h2>
-        <p style={{ color: darkMode ? '#94a3b8' : '#64748b', fontSize: '14px', marginTop: '4px' }}>
-          The narrative of your family's legacy and inheritance
-        </p>
-      </div>
-
-      {/* Quick Stats */}
-      <div style={{
-        display: 'grid',
-        gridTemplateColumns: 'repeat(auto-fit, minmax(120px, 1fr))',
-        gap: '12px',
-        marginBottom: '24px'
-      }}>
-        {[
-          { icon: '👤', label: 'Members', value: decedents.length },
-          { icon: '🏠', label: 'Properties', value: decedents.reduce((sum, p) => sum + (p.properties?.length || 0), 0) },
-          { icon: '💰', label: 'Total Estate', value: formatNumber(totalEstateValue) + ' sqm' },
-          { icon: '💍', label: 'Couples', value: Math.floor(decedents.filter(p => p.spouseId).length / 2) },
-        ].map((stat, index) => (
-          <div key={index} style={{
-            padding: '12px 16px',
-            borderRadius: '12px',
-            background: darkMode ? 'rgba(30,30,46,0.4)' : 'rgba(255,255,255,0.6)',
-            backdropFilter: 'blur(10px)',
-            border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
-            textAlign: 'center'
-          }}>
-            <div style={{ fontSize: '20px' }}>{stat.icon}</div>
-            <div style={{ fontSize: '18px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e' }}>
-              {stat.value}
-            </div>
-            <div style={{ fontSize: '11px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-              {stat.label}
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Story Chapters */}
-      <div style={{
-        display: 'flex',
-        flexDirection: 'column',
-        gap: '12px'
-      }}>
-        {chapters.map((chapter, index) => (
-          <motion.div
-            key={chapter.id}
-            initial={{ opacity: 0, y: 20 }}
-            animate={{ opacity: 1, y: 0 }}
-            transition={{ delay: index * 0.1 }}
+        <div style={{ display: 'flex', gap: '4px', flexWrap: 'wrap' }}>
+          {[
+            { key: 'all', label: 'All' },
+            { key: 'deceased', label: '⚰️ Deceased' },
+            { key: 'living', label: '💚 Living' },
+            { key: 'heirs', label: '💰 Heirs' }
+          ].map(opt => (
+            <button
+              key={opt.key}
+              onClick={() => setFilter(opt.key)}
+              type="button"
+              style={{
+                padding: '4px 14px',
+                borderRadius: '40px',
+                border: 'none',
+                fontSize: '12px',
+                fontWeight: 500,
+                cursor: 'pointer',
+                background: filter === opt.key ? (darkMode ? '#667eea' : '#667eea') : 'transparent',
+                color: filter === opt.key ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                transition: 'all 0.2s'
+              }}
+            >
+              {opt.label}
+            </button>
+          ))}
+        </div>
+        <div style={{ flex: 1, minWidth: '100px' }} />
+        <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+          <select
+            value={sortBy}
+            onChange={(e) => setSortBy(e.target.value)}
             style={{
-              borderRadius: '16px',
-              background: darkMode ? 'rgba(30,30,46,0.6)' : 'rgba(255,255,255,0.8)',
-              backdropFilter: 'blur(10px)',
-              border: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
-              overflow: 'hidden',
-              transition: 'all 0.3s ease',
+              padding: '4px 12px',
+              borderRadius: '40px',
+              border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
+              background: darkMode ? '#0a0c10' : '#fff',
+              color: darkMode ? '#fff' : '#000',
+              fontSize: '12px',
+              outline: 'none'
             }}
           >
-            <div
-              onClick={() => toggleChapter(chapter.id)}
+            <option value="name">Sort by Name</option>
+            <option value="properties">Sort by Properties</option>
+            <option value="estate">Sort by Estate</option>
+          </select>
+        </div>
+      </div>
+
+      {/* Person Cards Grid */}
+      <div style={{
+        display: 'grid',
+        gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))',
+        gap: '16px'
+      }}>
+        {filteredPeople.map((person) => {
+          const stats = getPersonStats(person);
+          const isSelected = selectedPersonId === person.id;
+          const isExpanded = expandedPersonId === person.id;
+          const isHeir = stats.isHeir;
+          const isDecedent = stats.isDecedent;
+
+          return (
+            <motion.div
+              key={person.id}
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ duration: 0.3 }}
               style={{
-                display: 'flex',
-                alignItems: 'center',
-                justifyContent: 'space-between',
-                padding: '16px 20px',
+                borderRadius: '16px',
+                background: darkMode ? 'rgba(30,30,46,0.8)' : 'rgba(255,255,255,0.9)',
+                backdropFilter: 'blur(10px)',
+                border: isSelected 
+                  ? `2px solid #667eea`
+                  : `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
+                boxShadow: isSelected 
+                  ? '0 8px 32px rgba(102, 126, 234, 0.3)'
+                  : '0 4px 12px rgba(0,0,0,0.05)',
+                overflow: 'hidden',
                 cursor: 'pointer',
-                transition: 'background 0.2s',
-                ...(expandedChapter === chapter.id ? {
-                  background: darkMode ? 'rgba(99,102,241,0.1)' : 'rgba(99,102,241,0.05)',
-                } : {})
+                transition: 'all 0.2s ease'
               }}
+              onClick={() => handleCardClick(person)}
               onMouseEnter={(e) => {
-                if (expandedChapter !== chapter.id) {
-                  e.currentTarget.style.background = darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.02)';
+                if (!isSelected) {
+                  e.currentTarget.style.boxShadow = '0 8px 24px rgba(0,0,0,0.1)';
                 }
               }}
               onMouseLeave={(e) => {
-                if (expandedChapter !== chapter.id) {
-                  e.currentTarget.style.background = 'transparent';
+                if (!isSelected) {
+                  e.currentTarget.style.boxShadow = '0 4px 12px rgba(0,0,0,0.05)';
                 }
               }}
             >
-              <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                <span style={{ fontSize: '24px' }}>{chapter.icon}</span>
-                <div>
-                  <div style={{ fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
-                    Chapter {index + 1}: {chapter.title}
+              {/* Card Header */}
+              <div style={{
+                padding: '16px 20px',
+                display: 'flex',
+                alignItems: 'center',
+                gap: '16px',
+                borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+              }}>
+                <div style={{
+                  width: '48px',
+                  height: '48px',
+                  borderRadius: '50%',
+                  background: person.isDeceased 
+                    ? 'linear-gradient(135deg, #f093fb, #f5576c)'
+                    : 'linear-gradient(135deg, #4facfe, #00f2fe)',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '20px',
+                  flexShrink: 0
+                }}>
+                  {person.isDeceased ? '⚰️' : '💚'}
+                </div>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{
+                    fontWeight: 600,
+                    color: darkMode ? '#fff' : '#1a1a2e',
+                    fontSize: '16px',
+                    overflow: 'hidden',
+                    textOverflow: 'ellipsis',
+                    whiteSpace: 'nowrap'
+                  }}>
+                    {person.name}
                   </div>
-                  <div style={{ fontSize: '12px', color: darkMode ? '#94a3b8' : '#64748b' }}>
-                    {expandedChapter === chapter.id ? 'Click to collapse' : 'Click to expand'}
+                  <div style={{
+                    display: 'flex',
+                    gap: '8px',
+                    flexWrap: 'wrap',
+                    marginTop: '2px'
+                  }}>
+                    <span style={{
+                      fontSize: '11px',
+                      padding: '2px 10px',
+                      borderRadius: '20px',
+                      background: getStatusColor(person) + '22',
+                      color: getStatusColor(person)
+                    }}>
+                      {getStatusLabel(person)}
+                    </span>
+                    {stats.isDecedent && (
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '2px 10px',
+                        borderRadius: '20px',
+                        background: '#ef444422',
+                        color: '#ef4444'
+                      }}>
+                        Decedent
+                      </span>
+                    )}
+                    {stats.isHeir && (
+                      <span style={{
+                        fontSize: '11px',
+                        padding: '2px 10px',
+                        borderRadius: '20px',
+                        background: '#8b5cf622',
+                        color: '#8b5cf6'
+                      }}>
+                        Heir
+                      </span>
+                    )}
+                  </div>
+                </div>
+                <div style={{
+                  fontSize: '12px',
+                  color: darkMode ? '#94a3b8' : '#64748b',
+                  textAlign: 'right'
+                }}>
+                  {stats.totalProperties} props
+                </div>
+              </div>
+
+              {/* Card Stats */}
+              <div style={{
+                padding: '12px 20px',
+                display: 'grid',
+                gridTemplateColumns: 'repeat(3, 1fr)',
+                gap: '8px',
+                borderBottom: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+              }}>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {stats.totalSqm}
+                  </div>
+                  <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    Total Sqm
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {stats.conjugalShare > 0 ? formatNumber(stats.conjugalShare) : '-'}
+                  </div>
+                  <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    Conjugal Share
+                  </div>
+                </div>
+                <div style={{ textAlign: 'center' }}>
+                  <div style={{ fontSize: '18px', fontWeight: 600, color: darkMode ? '#fff' : '#1a1a2e' }}>
+                    {stats.isDecedent ? formatNumber(getPersonInheritance(person)) : 
+                     stats.isHeir ? formatNumber(stats.inheritanceAmount) : '-'}
+                  </div>
+                  <div style={{ fontSize: '10px', color: darkMode ? '#94a3b8' : '#64748b' }}>
+                    {stats.isDecedent ? 'Estate' : stats.isHeir ? 'Inherited' : 'N/A'}
                   </div>
                 </div>
               </div>
+
+              {/* Relationship Tags */}
               <div style={{
-                fontSize: '20px',
-                color: darkMode ? '#94a3b8' : '#64748b',
-                transform: expandedChapter === chapter.id ? 'rotate(180deg)' : 'rotate(0deg)',
-                transition: 'transform 0.3s ease',
+                padding: '10px 20px',
+                display: 'flex',
+                gap: '6px',
+                flexWrap: 'wrap'
               }}>
-                ▼
+                {stats.hasSpouse && (
+                  <span style={{
+                    fontSize: '11px',
+                    padding: '2px 10px',
+                    borderRadius: '20px',
+                    background: darkMode ? '#1e2d3d' : '#eef2ff',
+                    color: darkMode ? '#94a3b8' : '#64748b'
+                  }}>
+                    💍 Married
+                  </span>
+                )}
+                {stats.hasChildren && (
+                  <span style={{
+                    fontSize: '11px',
+                    padding: '2px 10px',
+                    borderRadius: '20px',
+                    background: darkMode ? '#1e2d3d' : '#eef2ff',
+                    color: darkMode ? '#94a3b8' : '#64748b'
+                  }}>
+                    👨‍👧‍👦 Parent
+                  </span>
+                )}
+                {person.dod && (
+                  <span style={{
+                    fontSize: '11px',
+                    padding: '2px 10px',
+                    borderRadius: '20px',
+                    background: darkMode ? '#1e2d3d' : '#eef2ff',
+                    color: darkMode ? '#94a3b8' : '#64748b'
+                  }}>
+                    ⚰️ {new Date(person.dod).toLocaleDateString()}
+                  </span>
+                )}
               </div>
-            </div>
-            
-            <AnimatePresence>
-              {expandedChapter === chapter.id && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{ height: 'auto', opacity: 1 }}
-                  exit={{ height: 0, opacity: 0 }}
-                  transition={{ duration: 0.3, ease: 'easeInOut' }}
-                  style={{
-                    overflow: 'hidden',
-                    padding: '0 20px 20px 20px',
-                    borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`,
-                  }}
-                >
-                  {chapter.content}
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
+
+              {/* Expandable Details */}
+              <AnimatePresence>
+                {isExpanded && person.properties && person.properties.length > 0 && (
+                  <motion.div
+                    initial={{ height: 0, opacity: 0 }}
+                    animate={{ height: 'auto', opacity: 1 }}
+                    exit={{ height: 0, opacity: 0 }}
+                    style={{
+                      overflow: 'hidden',
+                      padding: '0 20px 16px 20px',
+                      borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.05)' : 'rgba(0,0,0,0.05)'}`
+                    }}
+                  >
+                    <div style={{ fontSize: '13px', fontWeight: 500, color: darkMode ? '#94a3b8' : '#64748b', marginBottom: '8px', marginTop: '12px' }}>
+                      Properties:
+                    </div>
+                    {person.properties.map(prop => (
+                      <div key={prop.id} style={{
+                        display: 'flex',
+                        justifyContent: 'space-between',
+                        padding: '6px 8px',
+                        borderRadius: '6px',
+                        background: darkMode ? '#0a0c10' : '#f8fafc',
+                        marginBottom: '4px',
+                        fontSize: '13px'
+                      }}>
+                        <span style={{ color: darkMode ? '#fff' : '#1a1a2e' }}>{prop.name}</span>
+                        <span style={{ color: darkMode ? '#94a3b8' : '#64748b' }}>
+                          {prop.totalSqm} sqm • {prop.classification}
+                        </span>
+                      </div>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+
+              {/* Click indicator */}
+              <div style={{
+                padding: '8px 20px',
+                textAlign: 'center',
+                fontSize: '11px',
+                color: darkMode ? '#64748b' : '#94a3b8',
+                borderTop: `1px solid ${darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'}`
+              }}>
+                {isSelected ? 'Click to view details' : 'Click to select'}
+              </div>
+            </motion.div>
+          );
+        })}
       </div>
 
-      {/* Footer */}
-      <div style={{
-        marginTop: '24px',
-        padding: '16px',
-        textAlign: 'center',
-        borderRadius: '12px',
-        background: darkMode ? 'rgba(30,30,46,0.3)' : 'rgba(255,255,255,0.4)',
-        border: `1px solid ${darkMode ? 'rgba(255,255,255,0.03)' : 'rgba(0,0,0,0.03)'}`
-      }}>
-        <p style={{ fontSize: '12px', color: darkMode ? '#64748b' : '#94a3b8' }}>
-          💡 Click on any name to view their detailed profile and inheritance information
-        </p>
-      </div>
+      {/* Empty state for filtered results */}
+      {filteredPeople.length === 0 && (
+        <div style={{
+          textAlign: 'center',
+          padding: '60px 20px',
+          color: darkMode ? '#94a3b8' : '#64748b'
+        }}>
+          <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
+          <h3 style={{ fontSize: '20px', fontWeight: 500, color: darkMode ? '#fff' : '#1a1a2e', marginBottom: '8px' }}>
+            No people found
+          </h3>
+          <p>Try adjusting your search or filter criteria</p>
+        </div>
+      )}
     </div>
   );
 };
@@ -1689,7 +1800,7 @@ const PropertyDivider = () => {
   const [inheritanceDetails, setInheritanceDetails] = useState(null);
   const [isCalculating, setIsCalculating] = useState(false);
   const [totalEstateValue, setTotalEstateValue] = useState(0);
-  const [viewMode, setViewMode] = useState('story'); // 'story' or 'map'
+  const [viewMode, setViewMode] = useState('portfolio');
   const previousDecedentsRef = useRef();
 
   const selectedPerson = useMemo(() => 
@@ -1819,6 +1930,18 @@ const PropertyDivider = () => {
     setShowBulkModal(false);
   }, [decedents]);
 
+  const loadExampleData = useCallback(() => {
+    if (decedents.length > 0) {
+      if (!window.confirm('Loading example data will replace your current data. Continue?')) {
+        return;
+      }
+    }
+    setDecedents(exampleData);
+    setSelectedPersonId(null);
+    setInheritanceResult(null);
+    setShowDetailModal(false);
+  }, [decedents]);
+
   const calculateAllInheritances = useCallback(() => {
     if (decedents.length === 0) {
       setInheritanceSummary([]);
@@ -1912,102 +2035,79 @@ const PropertyDivider = () => {
     }
   }, [decedents, selectedPersonId]);
 
-  // In the main PropertyDivider component, update the updateSelectedPersonData function:
-
-const updateSelectedPersonData = useCallback((personId, records, transfers) => {
-  const person = decedents.find(p => p.id === personId);
-  if (!person) return;
-  
-  // Find all inheritance records where this person is involved
-  const personInheritance = records.find(r => 
-    r.decedent === person.name || 
-    r.decedentId === personId ||
-    r.heirs.some(h => h.id === personId || h.name === person.name)
-  );
-  
-  // Find all transfers involving this person
-  const personTransfers = transfers.filter(t => 
-    t.fromId === personId || t.toId === personId
-  );
-  
-  // Calculate total received (all amounts going TO this person)
-  const totalReceived = personTransfers
-    .filter(t => t.toId === personId)
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  // Calculate total given (all amounts going FROM this person)
-  const totalGiven = personTransfers
-    .filter(t => t.fromId === personId)
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  // Find if this person is a decedent
-  const isDecedent = records.some(r => r.decedentId === personId);
-  
-  // Find if this person is an heir
-  const heirInfo = records.flatMap(r => r.heirs).find(h => h.id === personId);
-  const isHeir = !!heirInfo;
-  
-  // Get the decedent's estate if this person is a decedent
-  const decedentRecord = records.find(r => r.decedentId === personId);
-  const decedentEstate = decedentRecord?.totalAssets || 0;
-  
-  // Calculate total inherited amount (for heirs)
-  const totalInherited = personTransfers
-    .filter(t => t.toId === personId && !t.conjugal)
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  // Calculate conjugal share received
-  const totalConjugalReceived = personTransfers
-    .filter(t => t.toId === personId && t.conjugal)
-    .reduce((sum, t) => sum + t.amount, 0);
-  
-  // --- NEW: Calculate the spouse's conjugal share from their own properties ---
-  // A living spouse always owns 50% of conjugal properties
-  let conjugalShareOwned = 0;
-  if (!person.isDeceased) {
-    // Calculate 50% of all conjugal properties owned by this person
-    // This represents the spouse's share of conjugal properties
-    person.properties?.forEach(prop => {
-      if (prop.classification === 'Conjugal') {
-        conjugalShareOwned += prop.totalSqm / 2;
-      }
-    });
-  }
-  
-  // The total estate value for this person
-  let totalEstate = 0;
-  let heirShare = 0;
-  let heirRelationship = null;
-  
-  if (isDecedent) {
-    totalEstate = decedentEstate;
-  } else if (isHeir) {
-    heirShare = totalInherited;
-    heirRelationship = heirInfo?.relationship || 'Heir';
-    totalEstate = totalInherited + totalConjugalReceived + conjugalShareOwned;
-  } else {
-    // If not an heir and not a decedent, still show their conjugal share
-    totalEstate = conjugalShareOwned;
-  }
-  
-  const result = {
-    person: person,
-    isDecedent: isDecedent,
-    isHeir: isHeir,
-    heirShare: heirShare,
-    heirRelationship: heirRelationship,
-    totalInherited: totalInherited,
-    totalConjugal: totalConjugalReceived,
-    totalGiven: totalGiven,
-    netInheritance: totalInherited + totalConjugalReceived - totalGiven,
-    transfers: personTransfers,
-    decedentEstate: decedentEstate,
-    totalEstateValue: totalEstate,
-    conjugalShareOwned: conjugalShareOwned, // Add this to track owned conjugal share
-  };
-  
-  setInheritanceResult(result);
-}, [decedents]);
+  const updateSelectedPersonData = useCallback((personId, records, transfers) => {
+    const person = decedents.find(p => p.id === personId);
+    if (!person) return;
+    
+    const personTransfers = transfers.filter(t => 
+      t.fromId === personId || t.toId === personId
+    );
+    
+    const totalReceived = personTransfers
+      .filter(t => t.toId === personId)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalGiven = personTransfers
+      .filter(t => t.fromId === personId)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const isDecedent = records.some(r => r.decedentId === personId);
+    
+    const heirInfo = records.flatMap(r => r.heirs).find(h => h.id === personId);
+    const isHeir = !!heirInfo;
+    
+    const decedentRecord = records.find(r => r.decedentId === personId);
+    const decedentEstate = decedentRecord?.totalAssets || 0;
+    
+    const totalInherited = personTransfers
+      .filter(t => t.toId === personId && !t.conjugal)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    const totalConjugalReceived = personTransfers
+      .filter(t => t.toId === personId && t.conjugal)
+      .reduce((sum, t) => sum + t.amount, 0);
+    
+    let conjugalShareOwned = 0;
+    if (!person.isDeceased) {
+      person.properties?.forEach(prop => {
+        if (prop.classification === 'Conjugal') {
+          conjugalShareOwned += prop.totalSqm / 2;
+        }
+      });
+    }
+    
+    let totalEstate = 0;
+    let heirShare = 0;
+    let heirRelationship = null;
+    
+    if (isDecedent) {
+      totalEstate = decedentEstate;
+    } else if (isHeir) {
+      heirShare = totalInherited;
+      heirRelationship = heirInfo?.relationship || 'Heir';
+      totalEstate = totalInherited + totalConjugalReceived + conjugalShareOwned;
+    } else {
+      totalEstate = conjugalShareOwned;
+    }
+    
+    const result = {
+      person: person,
+      isDecedent: isDecedent,
+      isHeir: isHeir,
+      heirShare: heirShare,
+      heirRelationship: heirRelationship,
+      totalInherited: totalInherited,
+      totalConjugal: totalConjugalReceived,
+      totalGiven: totalGiven,
+      netInheritance: totalInherited + totalConjugalReceived - totalGiven,
+      transfers: personTransfers,
+      decedentEstate: decedentEstate,
+      totalEstateValue: totalEstate,
+      conjugalShareOwned: conjugalShareOwned,
+    };
+    
+    setInheritanceResult(result);
+  }, [decedents]);
 
   const handleSelectPerson = useCallback((person) => {
     setSelectedPersonId(person.id);
@@ -2160,7 +2260,7 @@ const updateSelectedPersonData = useCallback((personId, records, transfers) => {
         <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
           <span style={{ fontSize: '24px' }}>🏛️</span>
           <h1 style={{ fontSize: '18px', fontWeight: 700, color: darkMode ? '#fff' : '#1a1a2e', margin: 0 }}>
-            Estate Divider
+            Estate Portfolio
           </h1>
           <div style={{
             display: 'flex',
@@ -2171,7 +2271,7 @@ const updateSelectedPersonData = useCallback((personId, records, transfers) => {
             marginLeft: '8px'
           }}>
             <button
-              onClick={() => setViewMode('story')}
+              onClick={() => setViewMode('portfolio')}
               type="button"
               style={{
                 padding: '4px 14px',
@@ -2180,12 +2280,12 @@ const updateSelectedPersonData = useCallback((personId, records, transfers) => {
                 fontSize: '12px',
                 fontWeight: 500,
                 cursor: 'pointer',
-                background: viewMode === 'story' ? (darkMode ? '#667eea' : '#667eea') : 'transparent',
-                color: viewMode === 'story' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
+                background: viewMode === 'portfolio' ? (darkMode ? '#667eea' : '#667eea') : 'transparent',
+                color: viewMode === 'portfolio' ? '#fff' : (darkMode ? '#94a3b8' : '#64748b'),
                 transition: 'all 0.2s'
               }}
             >
-              📖 Story
+              📊 Portfolio
             </button>
             <button
               onClick={() => setViewMode('map')}
@@ -2241,6 +2341,7 @@ const updateSelectedPersonData = useCallback((personId, records, transfers) => {
           >
             Bulk Add
           </button>
+          <ExampleDataLoader onLoad={loadExampleData} />
           <button
             onClick={() => setShowClearConfirm(true)}
             type="button"
@@ -2311,15 +2412,22 @@ const updateSelectedPersonData = useCallback((personId, records, transfers) => {
         background: darkMode ? '#0a0c10' : '#f8fafc',
         minHeight: 0
       }}>
-        {viewMode === 'story' ? (
-          <StoryMode 
+        {viewMode === 'portfolio' ? (
+          <PortfolioMode 
             decedents={decedents}
+            selectedPersonId={selectedPersonId}
+            onSelectPerson={handleSelectPerson}
+            darkMode={darkMode}
+            formatNumber={formatNumber}
             inheritanceSummary={inheritanceSummary}
             inheritanceTransfers={inheritanceTransfers}
             totalEstateValue={totalEstateValue}
-            darkMode={darkMode}
-            formatNumber={formatNumber}
-            onSelectPerson={handleSelectPerson}
+            onAddPerson={addNewPerson}
+            onBulkAdd={() => setShowBulkModal(true)}
+            searchQuery={searchQuery}
+            setSearchQuery={setSearchQuery}
+            onClearAll={() => setShowClearConfirm(true)}
+            onLoadExample={loadExampleData}
           />
         ) : (
           <FamilyMap 

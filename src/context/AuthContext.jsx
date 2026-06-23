@@ -17,27 +17,63 @@ export const AuthProvider = ({ children }) => {
     useEffect(() => {
         // Check for existing session
         const checkSession = async () => {
-            const { data: { session } } = await supabase.auth.getSession();
-            if (session) {
-                await fetchUser(session.user.id);
+            try {
+                const { data: { session } } = await supabase.auth.getSession();
+                
+                if (session) {
+                    // Try to get user from localStorage first for faster load
+                    const storedUser = localStorage.getItem('user');
+                    if (storedUser) {
+                        try {
+                            const parsedUser = JSON.parse(storedUser);
+                            // Verify the stored user ID matches the session
+                            if (parsedUser.id === session.user.id) {
+                                setUser(parsedUser);
+                                setLoading(false);
+                                // Still fetch fresh data in background
+                                await fetchUser(session.user.id);
+                                return;
+                            }
+                        } catch (e) {
+                            console.error('Error parsing stored user:', e);
+                            localStorage.removeItem('user');
+                        }
+                    }
+                    
+                    // If no stored user or mismatch, fetch fresh
+                    await fetchUser(session.user.id);
+                }
+            } catch (error) {
+                console.error('Session check error:', error);
+                // If there's an error, clear any stale data
+                localStorage.removeItem('user');
+                setUser(null);
+            } finally {
+                setLoading(false);
             }
-            setLoading(false);
         };
         
         checkSession();
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
+            console.log('Auth state changed:', event);
+            
             if (event === 'SIGNED_IN' && session) {
                 await fetchUser(session.user.id);
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
                 localStorage.removeItem('user');
+            } else if (event === 'TOKEN_REFRESHED') {
+                // Token refreshed, but user data should remain
+                console.log('Token refreshed');
             }
             setLoading(false);
         });
 
-        return () => subscription.unsubscribe();
+        return () => {
+            subscription.unsubscribe();
+        };
     }, []);
 
     useEffect(() => {
@@ -51,13 +87,23 @@ export const AuthProvider = ({ children }) => {
 
     const fetchUser = async (userId) => {
         try {
+            console.log('Fetching user data for ID:', userId);
+            
             const { data: profile, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
                 .single();
 
-            if (error) throw error;
+            if (error) {
+                console.error('Profile fetch error:', error);
+                throw error;
+            }
+
+            if (!profile) {
+                console.error('No profile found for user ID:', userId);
+                throw new Error('Profile not found');
+            }
 
             const userData = {
                 id: profile.id,
@@ -69,18 +115,25 @@ export const AuthProvider = ({ children }) => {
                 position: profile.position
             };
             
+            console.log('User data loaded:', userData);
             setUser(userData);
             localStorage.setItem('user', JSON.stringify(userData));
+            
+            return userData;
         } catch (error) {
             console.error('Error fetching user:', error);
             setUser(null);
+            localStorage.removeItem('user');
+            throw error;
         }
     };
 
     const register = async (email, password, username, fullName, position) => {
         setError(null);
         try {
-            // Register with Supabase Auth - Using explicit URL instead of window.location.origin
+            // Get the current origin dynamically
+            const redirectUrl = window.location.origin + '/email-confirmation';
+            
             const { data: authData, error: signUpError } = await supabase.auth.signUp({
                 email: email,
                 password: password,
@@ -90,14 +143,13 @@ export const AuthProvider = ({ children }) => {
                         full_name: fullName,
                         position: position
                     },
-                    emailRedirectTo: 'http://localhost:5173/email-confirmation'
+                    emailRedirectTo: redirectUrl
                 }
             });
 
             if (signUpError) throw signUpError;
 
             if (authData.user) {
-                // Insert into profiles table
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .insert([{
@@ -112,7 +164,6 @@ export const AuthProvider = ({ children }) => {
 
                 if (profileError) throw profileError;
                 
-                // Store email for potential resend
                 sessionStorage.setItem('pendingVerificationEmail', email);
                 
                 return { success: true, user: authData.user };
@@ -126,8 +177,8 @@ export const AuthProvider = ({ children }) => {
 
     const login = async (email, password, deviceInfo) => {
         setError(null);
+        setLoading(true);
         try {
-            // Sign in with Supabase
             const { data, error: signInError } = await supabase.auth.signInWithPassword({
                 email: email,
                 password: password
@@ -136,28 +187,7 @@ export const AuthProvider = ({ children }) => {
             if (signInError) throw signInError;
 
             if (data.user) {
-                // Get user profile
-                const { data: profile, error: profileError } = await supabase
-                    .from('profiles')
-                    .select('*')
-                    .eq('id', data.user.id)
-                    .single();
-
-                if (profileError) throw profileError;
-
-                const userData = {
-                    id: profile.id,
-                    email: profile.email,
-                    username: profile.username,
-                    full_name: profile.full_name,
-                    role: profile.role,
-                    approval_status: profile.approval_status,
-                    position: profile.position
-                };
-                
-                setUser(userData);
-                localStorage.setItem('user', JSON.stringify(userData));
-                
+                const userData = await fetchUser(data.user.id);
                 return { user: userData };
             }
             
@@ -166,26 +196,35 @@ export const AuthProvider = ({ children }) => {
             console.error('Login error:', error);
             setError(error.message);
             return { error: error.message };
+        } finally {
+            setLoading(false);
         }
     };
 
     const logout = async () => {
-        const { error } = await supabase.auth.signOut();
-        if (error) {
+        try {
+            const { error } = await supabase.auth.signOut();
+            if (error) {
+                console.error('Logout error:', error);
+            }
+        } catch (error) {
             console.error('Logout error:', error);
+        } finally {
+            setUser(null);
+            localStorage.removeItem('user');
+            // Force reload to clear any cached state
+            // window.location.href = '/login';
         }
-        setUser(null);
-        localStorage.removeItem('user');
     };
 
     const toggleDarkMode = () => setDarkMode(prev => !prev);
 
-    // Additional functions for Login.jsx
     const sendMagicLink = async (email) => {
+        const redirectUrl = window.location.origin + '/dashboard';
         const { error } = await supabase.auth.signInWithOtp({
             email: email,
             options: {
-                emailRedirectTo: 'http://localhost:5173/dashboard'
+                emailRedirectTo: redirectUrl
             }
         });
         if (error) throw error;
@@ -193,25 +232,22 @@ export const AuthProvider = ({ children }) => {
     };
 
     const loginWithBiometrics = async () => {
-        // Biometric login not directly supported by Supabase
         return { success: false, error: 'Biometric login not configured' };
     };
 
     const loginWith2FA = async (code) => {
-        // 2FA would need to be implemented with a custom solution
         return { success: false, error: '2FA not configured' };
     };
 
-    // Forgot password function
     const forgotPassword = async (email) => {
         setError(null);
         try {
+            const redirectUrl = window.location.origin + '/reset-password';
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: 'http://localhost:5173/reset-password',
+                redirectTo: redirectUrl,
             });
             
             if (error) throw error;
-            
             return { success: true };
         } catch (error) {
             console.error('Forgot password error:', error);
@@ -220,16 +256,15 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // Resend reset link function
     const resendResetLink = async (email) => {
         setError(null);
         try {
+            const redirectUrl = window.location.origin + '/reset-password';
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
-                redirectTo: 'http://localhost:5173/reset-password',
+                redirectTo: redirectUrl,
             });
             
             if (error) throw error;
-            
             return { success: true };
         } catch (error) {
             console.error('Resend reset link error:', error);
@@ -251,7 +286,9 @@ export const AuthProvider = ({ children }) => {
         loginWithBiometrics,
         loginWith2FA,
         forgotPassword,
-        resendResetLink
+        resendResetLink,
+        // Expose fetchUser for manual refresh if needed
+        refreshUser: () => user ? fetchUser(user.id) : null
     };
 
     return (
