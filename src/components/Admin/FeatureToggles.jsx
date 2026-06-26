@@ -7,15 +7,56 @@ import {
   LockOpenIcon,
   Cog6ToothIcon,
   CheckCircleIcon,
-  ExclamationTriangleIcon
+  ExclamationTriangleIcon,
+  ClipboardDocumentCheckIcon,
+  AdjustmentsHorizontalIcon,
+  DocumentTextIcon,
+  ChartBarIcon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { supabase } from '../../../supabase';
 
+// Define all available features dynamically
+const ALL_FEATURES = {
+  tax_calculator: { 
+    name: 'Estate Tax Calculator', 
+    icon: CalculatorIcon,
+    description: 'Calculate estate taxes with comprehensive tax tables and exemptions.'
+  },
+  property_divider: { 
+    name: 'Property Divider', 
+    icon: UserGroupIcon,
+    description: 'Divide property among heirs with fair distribution calculations.'
+  },
+  tax_helpers: { 
+    name: 'Tax Helpers', 
+    icon: ClipboardDocumentCheckIcon,
+    description: 'Helper tools for tax planning and estimated tax calculations.'
+  },
+  tax_settings: { 
+    name: 'Estate Tax Settings', 
+    icon: AdjustmentsHorizontalIcon,
+    description: 'Configure tax rates, exemptions, and other estate tax parameters.'
+  },
+  user_management: { 
+    name: 'User Management', 
+    icon: ShieldCheckIcon,
+    description: 'Manage user accounts, roles, and permissions.'
+  },
+  calculations: { 
+    name: 'Calculations History', 
+    icon: DocumentTextIcon,
+    description: 'View and analyze historical estate tax calculations.'
+  },
+  analytics: { 
+    name: 'Analytics Dashboard', 
+    icon: ChartBarIcon,
+    description: 'View insights, trends, and analytics for estate tax calculations.'
+  }
+};
+
 const FeatureToggles = () => {
-  const [features, setFeatures] = useState({
-    tax_calculator: { enabled: true, name: 'Estate Tax Calculator', icon: CalculatorIcon },
-    property_divider: { enabled: true, name: 'Property Divider', icon: UserGroupIcon }
-  });
+  const [features, setFeatures] = useState({});
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState(null);
@@ -27,31 +68,48 @@ const FeatureToggles = () => {
   const loadFeatures = async () => {
     setLoading(true);
     try {
+      // Get all feature keys
+      const featureKeys = Object.keys(ALL_FEATURES).map(key => `feature_${key}`);
+      
+      // Fetch all feature settings from database
       const { data, error } = await supabase
         .from('system_settings')
         .select('*')
-        .in('setting_key', ['feature_tax_calculator', 'feature_property_divider']);
+        .in('setting_key', featureKeys);
 
       if (error) throw error;
 
+      // Initialize features with defaults (enabled by default)
+      const initialFeatures = {};
+      Object.keys(ALL_FEATURES).forEach(key => {
+        initialFeatures[key] = {
+          ...ALL_FEATURES[key],
+          enabled: true // Default to enabled
+        };
+      });
+
+      // Override with database values if they exist
       if (data && data.length > 0) {
         data.forEach(setting => {
-          if (setting.setting_key === 'feature_tax_calculator') {
-            setFeatures(prev => ({
-              ...prev,
-              tax_calculator: { ...prev.tax_calculator, enabled: setting.setting_value === 'enabled' }
-            }));
-          }
-          if (setting.setting_key === 'feature_property_divider') {
-            setFeatures(prev => ({
-              ...prev,
-              property_divider: { ...prev.property_divider, enabled: setting.setting_value === 'enabled' }
-            }));
+          const featureKey = setting.setting_key.replace('feature_', '');
+          if (initialFeatures[featureKey]) {
+            initialFeatures[featureKey].enabled = setting.setting_value === 'enabled';
           }
         });
       }
+
+      setFeatures(initialFeatures);
     } catch (err) {
       console.error('Error loading features:', err);
+      // Fallback: enable all features
+      const fallbackFeatures = {};
+      Object.keys(ALL_FEATURES).forEach(key => {
+        fallbackFeatures[key] = {
+          ...ALL_FEATURES[key],
+          enabled: true
+        };
+      });
+      setFeatures(fallbackFeatures);
     } finally {
       setLoading(false);
     }
@@ -99,6 +157,46 @@ const FeatureToggles = () => {
     }
   };
 
+  // Initialize missing features in database
+  const initializeMissingFeatures = async () => {
+    setSaving(true);
+    try {
+      const featureKeys = Object.keys(ALL_FEATURES);
+      
+      for (const key of featureKeys) {
+        const { data, error } = await supabase
+          .from('system_settings')
+          .select('setting_key')
+          .eq('setting_key', `feature_${key}`)
+          .single();
+
+        // If feature doesn't exist, create it
+        if (!data && !error) {
+          await supabase
+            .from('system_settings')
+            .insert({
+              setting_key: `feature_${key}`,
+              setting_value: 'enabled',
+              updated_at: new Date().toISOString()
+            });
+        }
+      }
+
+      setMessage({
+        type: 'success',
+        text: 'All missing features have been initialized successfully.'
+      });
+
+      // Reload features
+      await loadFeatures();
+      setTimeout(() => setMessage(null), 3000);
+    } catch (err) {
+      console.error('Error initializing features:', err);
+    } finally {
+      setSaving(false);
+    }
+  };
+
   if (loading) {
     return (
       <div className="loading-container">
@@ -118,6 +216,13 @@ const FeatureToggles = () => {
             <p>Control which features are available to Regular Users</p>
           </div>
         </div>
+        <button 
+          className="btn-initialize"
+          onClick={initializeMissingFeatures}
+          disabled={saving}
+        >
+          Initialize Missing Features
+        </button>
       </div>
 
       {message && (
@@ -159,10 +264,11 @@ const FeatureToggles = () => {
               </div>
 
               <div className="toggle-description">
+                <p>{feature.description}</p>
                 {feature.enabled ? (
-                  <p>Users can access and use this feature.</p>
+                  <p className="feature-status-text enabled">✓ Users can access this feature.</p>
                 ) : (
-                  <p>Users cannot access this feature. They will see a maintenance message.</p>
+                  <p className="feature-status-text disabled">✕ Users cannot access this feature.</p>
                 )}
               </div>
 
@@ -194,7 +300,12 @@ const FeatureToggles = () => {
         }
 
         .toggles-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
           margin-bottom: 2rem;
+          flex-wrap: wrap;
+          gap: 1rem;
         }
 
         .header-left {
@@ -220,6 +331,32 @@ const FeatureToggles = () => {
           color: var(--text-secondary);
           font-size: 0.875rem;
           margin: 0;
+        }
+
+        .btn-initialize {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.5rem 1rem;
+          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+          color: white;
+          border: none;
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+          white-space: nowrap;
+        }
+
+        .btn-initialize:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+        }
+
+        .btn-initialize:disabled {
+          opacity: 0.6;
+          cursor: not-allowed;
         }
 
         .message-banner {
@@ -287,6 +424,7 @@ const FeatureToggles = () => {
           display: flex;
           align-items: center;
           justify-content: center;
+          flex-shrink: 0;
         }
 
         .toggle-icon svg {
@@ -327,7 +465,20 @@ const FeatureToggles = () => {
         .toggle-description p {
           color: var(--text-secondary);
           font-size: 0.813rem;
-          margin: 0;
+          margin: 0 0 0.5rem 0;
+        }
+
+        .feature-status-text {
+          font-size: 0.75rem;
+          font-weight: 500;
+        }
+
+        .feature-status-text.enabled {
+          color: #10b981;
+        }
+
+        .feature-status-text.disabled {
+          color: #ef4444;
         }
 
         .toggle-btn {
@@ -398,6 +549,16 @@ const FeatureToggles = () => {
         @media (max-width: 768px) {
           .toggles-grid {
             grid-template-columns: 1fr;
+          }
+
+          .toggles-header {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .btn-initialize {
+            width: 100%;
+            justify-content: center;
           }
         }
       `}</style>

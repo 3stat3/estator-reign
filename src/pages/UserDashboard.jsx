@@ -20,7 +20,8 @@ import {
   ExclamationTriangleIcon,
   LockClosedIcon,
   Squares2X2Icon,
-  CheckBadgeIcon
+  CheckBadgeIcon,
+  XMarkIcon
 } from '@heroicons/react/24/outline';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
 
@@ -36,6 +37,9 @@ const UserDashboard = () => {
     if (savedTheme) return savedTheme;
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
+  const [showDisabledWarning, setShowDisabledWarning] = useState(false);
+  const [disabledFeatureName, setDisabledFeatureName] = useState('');
+  const [pendingFeatureTab, setPendingFeatureTab] = useState(null);
 
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
@@ -84,6 +88,46 @@ const UserDashboard = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showUserMenu, showNotifications, showEstateTaxMenu]);
 
+  // Check if current active tab is disabled, show warning
+  useEffect(() => {
+    const featureMap = {
+      calculator: { enabled: calculatorEnabled, name: 'Estate Tax Calculator' },
+      propertydivider: { enabled: dividerEnabled, name: 'Property Divider' },
+      taxhelpers: { enabled: helpersEnabled, name: 'Tax Helpers' }
+    };
+
+    const currentFeature = featureMap[activeTab];
+    if (currentFeature && !currentFeature.enabled) {
+      setShowDisabledWarning(true);
+      setDisabledFeatureName(currentFeature.name);
+    } else {
+      setShowDisabledWarning(false);
+      setDisabledFeatureName('');
+    }
+  }, [activeTab, calculatorEnabled, dividerEnabled, helpersEnabled]);
+
+  const handleFeatureClick = (item) => {
+    // Always close the dropdown
+    setShowEstateTaxMenu(false);
+    
+    if (item.enabled) {
+      // If enabled, switch to the tab
+      setActiveTab(item.id);
+      setShowDisabledWarning(false);
+      setDisabledFeatureName('');
+    } else {
+      // If disabled, show the maintenance message
+      setActiveTab(item.id); // Switch to the tab to show maintenance message
+      setShowDisabledWarning(true);
+      setDisabledFeatureName(item.label);
+      
+      // Auto-hide the toast after 4 seconds (but maintenance message stays)
+      setTimeout(() => {
+        setShowDisabledWarning(false);
+      }, 4000);
+    }
+  };
+
   // Estate Tax sub-menu items (no Tax Settings for regular users)
   const estateTaxItems = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon, enabled: calculatorEnabled },
@@ -95,12 +139,17 @@ const UserDashboard = () => {
   const otherTabs = [];
 
   const MaintenanceMessage = ({ featureName }) => (
-    <div className="maintenance-card">
+    <motion.div 
+      className="maintenance-card"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+    >
       <div className="maintenance-icon">
         <LockClosedIcon />
       </div>
       <h2>Feature Temporarily Unavailable</h2>
-      <p>The {featureName} is currently <strong>under maintenance or being upgraded</strong>.</p>
+      <p>The <strong>{featureName}</strong> is currently <strong>under maintenance or being upgraded</strong>.</p>
       <div className="maintenance-details">
         <ExclamationTriangleIcon />
         <div>
@@ -111,7 +160,40 @@ const UserDashboard = () => {
       <div className="maintenance-estimate">
         <p>Please check back later. Thank you for your patience.</p>
       </div>
-    </div>
+      <button 
+        className="maintenance-back-btn"
+        onClick={() => {
+          // Find the first enabled feature and switch to it
+          const firstEnabled = estateTaxItems.find(item => item.enabled);
+          if (firstEnabled) {
+            setActiveTab(firstEnabled.id);
+            setShowDisabledWarning(false);
+            setDisabledFeatureName('');
+          }
+        }}
+      >
+        Go to Available Features
+      </button>
+    </motion.div>
+  );
+
+  const DisabledFeatureToast = ({ featureName, onClose }) => (
+    <motion.div 
+      className="disabled-feature-toast"
+      initial={{ opacity: 0, y: -20, scale: 0.95 }}
+      animate={{ opacity: 1, y: 0, scale: 1 }}
+      exit={{ opacity: 0, y: -20, scale: 0.95 }}
+    >
+      <div className="toast-content">
+        <ExclamationTriangleIcon />
+        <div>
+          <strong>{featureName}</strong> is currently disabled by the administrator.
+        </div>
+      </div>
+      <button className="toast-close" onClick={onClose}>
+        <XMarkIcon />
+      </button>
+    </motion.div>
   );
 
   const renderContent = () => {
@@ -187,6 +269,16 @@ const UserDashboard = () => {
 
   return (
     <div className={`dashboard-container ${theme}`} data-theme={theme}>
+      {/* Disabled Feature Toast Notification */}
+      <AnimatePresence>
+        {showDisabledWarning && (
+          <DisabledFeatureToast 
+            featureName={disabledFeatureName}
+            onClose={() => setShowDisabledWarning(false)}
+          />
+        )}
+      </AnimatePresence>
+
       {/* Top Navigation Bar */}
       <nav className="dashboard-nav">
         <div className="nav-container">
@@ -238,13 +330,8 @@ const UserDashboard = () => {
                       <button
                         key={item.id}
                         className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''} ${!item.enabled ? 'disabled-item' : ''}`}
-                        onClick={() => {
-                          if (item.enabled) {
-                            setActiveTab(item.id);
-                            setShowEstateTaxMenu(false);
-                          }
-                        }}
-                        disabled={!item.enabled}
+                        onClick={() => handleFeatureClick(item)}
+                        // REMOVED: disabled={!item.enabled} - Now clickable even when disabled
                       >
                         <item.icon className="dropdown-item-icon" />
                         <span>{item.label}</span>
@@ -340,8 +427,8 @@ const UserDashboard = () => {
                       <button 
                         key={tab.id} 
                         className={`dropdown-item ${!tab.enabled ? 'disabled-item' : ''}`} 
-                        onClick={() => tab.enabled && setActiveTab(tab.id)}
-                        disabled={!tab.enabled}
+                        onClick={() => handleFeatureClick(tab)}
+                        // REMOVED: disabled={!tab.enabled} - Now clickable even when disabled
                       >
                         <tab.icon />
                         {tab.label}
@@ -410,6 +497,80 @@ const UserDashboard = () => {
           min-height: 100vh;
           background: var(--bg-primary);
           transition: all 0.3s ease;
+          position: relative;
+        }
+
+        /* Disabled Feature Toast */
+        .disabled-feature-toast {
+          position: fixed;
+          top: 90px;
+          left: 50%;
+          transform: translateX(-50%);
+          z-index: 9999;
+          background: #fef3c7;
+          border: 1px solid #f59e0b;
+          border-radius: 0.75rem;
+          padding: 1rem 1.5rem;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          gap: 1rem;
+          min-width: 320px;
+          max-width: 90%;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+        }
+
+        [data-theme="dark"] .disabled-feature-toast {
+          background: #1e293b;
+          border-color: #f59e0b;
+        }
+
+        .toast-content {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
+        .toast-content svg {
+          width: 1.5rem;
+          height: 1.5rem;
+          color: #f59e0b;
+          flex-shrink: 0;
+        }
+
+        .toast-content div {
+          color: #92400e;
+          font-size: 0.875rem;
+        }
+
+        .toast-content strong {
+          font-weight: 600;
+        }
+
+        [data-theme="dark"] .toast-content div {
+          color: #fcd34d;
+        }
+
+        .toast-close {
+          background: none;
+          border: none;
+          cursor: pointer;
+          padding: 0.25rem;
+          color: #92400e;
+          transition: transform 0.2s;
+        }
+
+        .toast-close:hover {
+          transform: scale(1.1);
+        }
+
+        [data-theme="dark"] .toast-close {
+          color: #fcd34d;
+        }
+
+        .toast-close svg {
+          width: 1.25rem;
+          height: 1.25rem;
         }
 
         .dashboard-nav {
@@ -496,17 +657,6 @@ const UserDashboard = () => {
           background: rgba(102, 126, 234, 0.1);
         }
 
-        .nav-tab.disabled-tab {
-          opacity: 0.6;
-          cursor: not-allowed;
-        }
-
-        .lock-icon-small {
-          width: 0.75rem;
-          height: 0.75rem;
-          color: #f59e0b;
-        }
-
         .tab-icon {
           width: 1.25rem;
           height: 1.25rem;
@@ -586,12 +736,12 @@ const UserDashboard = () => {
         }
 
         .dropdown-item-nav.disabled-item {
-          opacity: 0.5;
-          cursor: not-allowed;
+          opacity: 0.6;
+          cursor: pointer; /* Changed from not-allowed to pointer */
         }
 
         .dropdown-item-nav.disabled-item:hover {
-          background: none;
+          background: rgba(245, 158, 11, 0.1);
         }
 
         .dropdown-item-icon {
@@ -831,12 +981,12 @@ const UserDashboard = () => {
         }
 
         .dropdown-item.disabled-item {
-          opacity: 0.5;
-          cursor: not-allowed;
+          opacity: 0.6;
+          cursor: pointer;
         }
 
         .dropdown-item.disabled-item:hover {
-          background: none;
+          background: rgba(245, 158, 11, 0.1);
         }
 
         .dropdown-item.logout {
@@ -997,6 +1147,24 @@ const UserDashboard = () => {
           margin: 0;
         }
 
+        .maintenance-back-btn {
+          margin-top: 1.5rem;
+          padding: 0.625rem 1.5rem;
+          background: linear-gradient(135deg, var(--gradient-start), var(--gradient-end));
+          color: white;
+          border: none;
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .maintenance-back-btn:hover {
+          transform: translateY(-2px);
+          box-shadow: var(--shadow-md);
+        }
+
         /* Loading */
         .loading-container {
           display: flex;
@@ -1042,6 +1210,11 @@ const UserDashboard = () => {
           .dropdown-menu {
             min-width: 180px;
           }
+
+          .disabled-feature-toast {
+            min-width: 280px;
+            top: 80px;
+          }
         }
 
         @media (max-width: 768px) {
@@ -1084,6 +1257,16 @@ const UserDashboard = () => {
           .dropdown-menu {
             left: -4rem;
             min-width: 200px;
+          }
+
+          .disabled-feature-toast {
+            min-width: 90%;
+            top: 75px;
+            padding: 0.75rem 1rem;
+          }
+
+          .toast-content div {
+            font-size: 0.813rem;
           }
         }
 

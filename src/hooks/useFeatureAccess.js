@@ -4,6 +4,7 @@ import { supabase } from '../../supabase';
 export const useFeatureAccess = (featureName) => {
   const [isEnabled, setIsEnabled] = useState(true);
   const [loading, setLoading] = useState(true);
+  const [showWarning, setShowWarning] = useState(false);
 
   useEffect(() => {
     checkFeatureAccess();
@@ -18,16 +19,23 @@ export const useFeatureAccess = (featureName) => {
         .eq('setting_key', `feature_${featureName}`)
         .single();
 
-      if (error) throw error;
-      
-      setIsEnabled(data?.setting_value === 'enabled');
+      if (error) {
+        // If feature doesn't exist in DB, it's enabled by default
+        setIsEnabled(true);
+        setShowWarning(false);
+      } else {
+        const enabled = data?.setting_value === 'enabled';
+        setIsEnabled(enabled);
+        setShowWarning(!enabled);
+      }
     } catch (err) {
       console.error('Error checking feature access:', err);
       setIsEnabled(true);
+      setShowWarning(false);
     } finally {
       setLoading(false);
     }
   };
 
-  return { isEnabled, loading };
+  return { isEnabled, loading, showWarning };
 };

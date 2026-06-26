@@ -30,31 +30,26 @@ import UserManagement from '../components/Admin/UserManagement';
 import FeatureToggles from '../components/Admin/FeatureToggles';
 
 const SuperAdminDashboard = () => {
-  const { user, logout } = useAuth();
+  const { user, logout, darkMode, toggleDarkMode } = useAuth();
   const [activeTab, setActiveTab] = useState('calculator');
   const [isMobile, setIsMobile] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
-  const [theme, setTheme] = useState(() => {
-    const savedTheme = localStorage.getItem('theme');
-    if (savedTheme) return savedTheme;
-    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
-  });
   
   const dropdownRef = useRef(null);
   const buttonRef = useRef(null);
 
-  const toggleTheme = () => {
-    const newTheme = theme === 'light' ? 'dark' : 'light';
-    setTheme(newTheme);
-    localStorage.setItem('theme', newTheme);
-    document.documentElement.setAttribute('data-theme', newTheme);
-  };
-
+  // Apply dark mode class to document
   useEffect(() => {
-    document.documentElement.setAttribute('data-theme', theme);
-  }, [theme]);
+    if (darkMode) {
+      document.documentElement.classList.add('dark');
+      document.documentElement.setAttribute('data-theme', 'dark');
+    } else {
+      document.documentElement.classList.remove('dark');
+      document.documentElement.setAttribute('data-theme', 'light');
+    }
+  }, [darkMode]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -81,7 +76,7 @@ const SuperAdminDashboard = () => {
     return () => document.removeEventListener('click', handleClickOutside);
   }, [showUserMenu, showNotifications, showEstateTaxMenu]);
 
-  // Estate Tax sub-menu items (now includes Tax Settings renamed to Estate Tax Settings)
+  // Estate Tax sub-menu items
   const estateTaxItems = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon },
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon },
@@ -89,7 +84,7 @@ const SuperAdminDashboard = () => {
     { id: 'taxsettings', label: 'Estate Tax Settings', icon: Cog6ToothIcon },
   ];
 
-  // Other navigation items (Tax Settings removed from here)
+  // Other navigation items
   const otherTabs = [
     { id: 'usermanagement', label: 'User Management', icon: UsersIcon },
     { id: 'calculations', label: 'Calculations', icon: DocumentTextIcon },
@@ -219,19 +214,9 @@ const SuperAdminDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="property-divider-container"
+            className="property-divider-container-full"
           >
-            <div className="content-header">
-              <div>
-                <h2 className="content-title">Property Divider</h2>
-                <p className="content-description">
-                  Divide properties among heirs based on Philippine estate laws. Add decedents, classify properties (Exclusive/Conjugal), define heirs, and see automatic sqm division.
-                </p>
-              </div>
-            </div>
-            <div className="property-divider-wrapper">
-              <PropertyDivider />
-            </div>
+            <PropertyDivider />
           </motion.div>
         );
 
@@ -275,9 +260,7 @@ const SuperAdminDashboard = () => {
           >
             <UserManagement 
               currentAdminRole="super_admin"
-              onUserUpdate={(updatedUser) => {
-                console.log('User updated:', updatedUser);
-              }}
+              onUserUpdate={() => {}}
             />
           </motion.div>
         );
@@ -381,7 +364,7 @@ const SuperAdminDashboard = () => {
   };
 
   return (
-    <div className={`dashboard-container ${theme}`} data-theme={theme}>
+    <div className={`dashboard-container ${darkMode ? 'dark' : 'light'}`} data-theme={darkMode ? 'dark' : 'light'}>
       <nav className="dashboard-nav">
         <div className="nav-container">
           <div className="nav-brand">
@@ -394,7 +377,6 @@ const SuperAdminDashboard = () => {
           </div>
 
           <div className="nav-tabs">
-            {/* Estate Tax Dropdown Menu */}
             <div className="estate-tax-menu-container" ref={dropdownRef}>
               <button
                 ref={buttonRef}
@@ -449,7 +431,6 @@ const SuperAdminDashboard = () => {
               </AnimatePresence>
             </div>
 
-            {/* Other Navigation Tabs */}
             {otherTabs.map((tab) => (
               <button
                 key={tab.id}
@@ -464,8 +445,8 @@ const SuperAdminDashboard = () => {
           </div>
 
           <div className="nav-actions">
-            <button className="icon-btn" onClick={toggleTheme}>
-              {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+            <button className="icon-btn" onClick={toggleDarkMode}>
+              {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
             
             <div className="notifications-container">
@@ -578,6 +559,22 @@ const SuperAdminDashboard = () => {
           --gradient-end: #764ba2;
         }
 
+        .dark {
+          --bg-primary: #0f172a;
+          --bg-secondary: #1e293b;
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --text-tertiary: #64748b;
+          --border-color: #334155;
+          --card-bg: #1e293b;
+          --nav-bg: #1e293b;
+          --hover-bg: #334155;
+          --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+          --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+          --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+        }
+
+        /* Also support data-theme for backward compatibility */
         [data-theme="dark"] {
           --bg-primary: #0f172a;
           --bg-secondary: #1e293b;
@@ -1128,19 +1125,35 @@ const SuperAdminDashboard = () => {
           font-size: 0.875rem;
         }
 
-        .property-divider-container {
+        /* ===== PROPERTY DIVIDER - FULL WIDTH ===== */
+        .property-divider-container-full {
+          background: var(--card-bg);
+          border-radius: 0;
+          border: none;
+          overflow: hidden;
+          height: calc(100vh - 70px);
+          display: flex;
+          flex-direction: column;
+          margin: 0;
+          padding: 0;
+        }
+
+        /* Other content cards keep their styling */
+        .content-card {
           background: var(--card-bg);
           border-radius: 1rem;
           border: 1px solid var(--border-color);
           overflow: hidden;
-          height: calc(100vh - 140px);
-          display: flex;
-          flex-direction: column;
         }
 
-        .property-divider-wrapper {
-          flex: 1;
-          overflow: hidden;
+        /* Remove padding from dashboard-main when Property Divider is active */
+        .dashboard-main:has(.property-divider-container-full) {
+          padding: 0;
+          max-width: 100%;
+        }
+
+        .calculator-container-wrapper {
+          width: 100%;
         }
 
         @media (max-width: 1024px) {
@@ -1180,6 +1193,10 @@ const SuperAdminDashboard = () => {
             padding: 1rem;
           }
           
+          .dashboard-main:has(.property-divider-container-full) {
+            padding: 0;
+          }
+          
           .stats-grid {
             grid-template-columns: 1fr;
           }
@@ -1192,6 +1209,10 @@ const SuperAdminDashboard = () => {
           .dropdown-menu {
             left: -4rem;
             min-width: 200px;
+          }
+
+          .property-divider-container-full {
+            height: calc(100vh - 70px);
           }
         }
 

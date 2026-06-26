@@ -105,7 +105,7 @@ const AppLoading = () => (
 
 // Main App Component
 function AppContent() {
-  const { user, loading, darkMode, toggleDarkMode } = useAuth();
+  const { user, loading } = useAuth();
 
   // Show loading at app level
   if (loading) {
@@ -116,37 +116,6 @@ function AppContent() {
     <div style={{ minHeight: '100vh', background: 'var(--bg-primary)' }}>
       <CheckHashForConfirmation />
       
-      {/* Dark mode toggle button - fixed position */}
-      <button
-        onClick={toggleDarkMode}
-        style={{
-          position: 'fixed',
-          bottom: '20px',
-          right: '20px',
-          width: '48px',
-          height: '48px',
-          borderRadius: '50%',
-          background: 'var(--card-bg)',
-          border: '1px solid var(--border)',
-          cursor: 'pointer',
-          zIndex: 1000,
-          boxShadow: '0 2px 8px rgba(0,0,0,0.2)',
-          fontSize: '24px',
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          transition: 'all 0.2s'
-        }}
-        onMouseEnter={(e) => {
-          e.currentTarget.style.transform = 'scale(1.05)';
-        }}
-        onMouseLeave={(e) => {
-          e.currentTarget.style.transform = 'scale(1)';
-        }}
-      >
-        {darkMode ? '☀️' : '🌙'}
-      </button>
-
       <Routes>
         <Route path="/login" element={
           !user ? <Login /> : <Navigate to="/dashboard" replace />

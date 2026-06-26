@@ -1,457 +1,298 @@
 // src/components/PropertyDivider/inheritance/index.js
 
 /**
- * Inheritance Calculator Engine
- * Handles complex estate division with chronological death ordering
+ * Calculate inheritance distribution for all decedents
+ * @param {Array} decedents - Array of person objects
+ * @returns {Object} - Inheritance calculation results
  */
+export const calculateAllInheritance = (decedents) => {
+  const results = [];
+  const allTransfers = [];
 
-/**
- * Main function to calculate all inheritance across multiple decedents
- * @param {Array} people - Array of person objects with properties, relationships, and death dates
- * @returns {Object} Comprehensive inheritance results
- */
-export function calculateAllInheritance(people) {
-  // Filter to only include deceased persons
-  const deceased = people.filter(p => p.isDeceased);
-  
-  if (deceased.length === 0) {
-    return {
-      results: [],
-      summary: {
-        totalEstate: 0,
-        transfers: [],
-        finalDistribution: {}
-      }
-    };
+  // Find all deceased persons
+  const deceasedPersons = decedents.filter(p => p.isDeceased);
+
+  if (deceasedPersons.length === 0) {
+    return { results: [], transfers: [] };
   }
 
-  // Sort by date of death (chronological)
-  const sortedDeceased = [...deceased].sort((a, b) => {
-    if (!a.dod) return 1;
-    if (!b.dod) return -1;
-    return new Date(a.dod) - new Date(b.dod);
-  });
-
-  // Copy people to track state changes
-  const state = {
-    people: people.map(p => ({
-      ...p,
-      properties: p.properties ? [...p.properties] : [],
-      inheritedProperties: []
-    })),
-    transfers: [],
-    results: []
-  };
-
-  // Process each death in chronological order
-  sortedDeceased.forEach(person => {
-    const result = processDeath(person, state);
+  // Process each deceased person
+  deceasedPersons.forEach(decedent => {
+    const result = calculateSingleInheritance(decedent, decedents);
     if (result) {
-      state.results.push(result);
+      results.push(result);
+      if (result.transfers) {
+        allTransfers.push(...result.transfers);
+      }
     }
   });
 
-  // Calculate final distribution
-  const finalDistribution = calculateFinalDistribution(state);
-
   return {
-    results: state.results,
-    transfers: state.transfers,
-    summary: {
-      totalEstate: state.results.reduce((sum, r) => sum + (r.assets?.totalEstate || 0), 0),
-      transfers: state.transfers,
-      finalDistribution
-    }
+    results: results,
+    transfers: allTransfers
   };
-}
+};
 
 /**
- * Process a single death event
+ * Calculate inheritance for a single decedent
+ * @param {Object} decedent - The deceased person
+ * @param {Array} decedents - All people in the system
+ * @returns {Object} - Inheritance result for this decedent
  */
-function processDeath(person, state) {
-  // Find the current person in state
-  const currentPerson = state.people.find(p => p.id === person.id);
-  if (!currentPerson) return null;
-
-  // Calculate total estate for this person
-  const assets = calculateEstate(currentPerson, state);
+const calculateSingleInheritance = (decedent, decedents) => {
+  // Calculate total assets
+  const assets = calculateAssets(decedent);
   
-  // If no assets, skip
-  if (assets.totalEstate === 0) {
-    return {
-      decedent: person.id,
-      deathDate: person.dod,
-      assets: assets,
-      distribution: { heirs: [], type: 'No Assets' }
-    };
-  }
-
-  // Find eligible heirs
-  const heirs = findEligibleHeirs(currentPerson, state);
+  // Find heirs based on family relationships
+  const heirs = findHeirs(decedent, decedents);
   
-  if (heirs.length === 0) {
-    // No eligible heirs - property goes to next of kin or state
-    return {
-      decedent: person.id,
-      deathDate: person.dod,
-      assets: assets,
-      distribution: { heirs: [], type: 'No Eligible Heirs' }
-    };
-  }
-
-  // Distribute the estate
-  const distribution = distributeEstate(assets, heirs, currentPerson, state);
-
-  // Record transfers
-  distribution.heirs.forEach(heir => {
-    if (heir.share > 0) {
-      state.transfers.push({
-        from: person.id,
-        fromName: person.name,
-        to: heir.id,
-        toName: heir.name,
-        amount: heir.share,
-        conjugal: heir.conjugal || false,
-        relationship: heir.relationship,
-        represents: heir.represents || null,
-        type: heir.conjugal ? 'Conjugal Share' : heir.represents ? 'Representation' : 'Inheritance'
-      });
-    }
-  });
+  // Calculate distribution
+  const distribution = distributeInheritance(assets, heirs, decedent, decedents);
+  
+  // Generate transfer records
+  const transfers = generateTransfers(decedent, distribution, decedents);
 
   return {
-    decedent: person.id,
-    deathDate: person.dod,
+    decedent: decedent.id,
+    deathDate: decedent.dod,
     assets: assets,
-    distribution: distribution
-  };
-}
-
-/**
- * Calculate the total estate for a person
- * Includes conjugal share and exclusive properties
- */
-function calculateEstate(person, state) {
-  const conjugalProperties = person.properties.filter(p => p.classification === 'Conjugal');
-  const exclusiveProperties = person.properties.filter(p => p.classification === 'Exclusive');
-  
-  // Conjugal share is 50% of conjugal properties
-  const conjugalShare = conjugalProperties.reduce((sum, p) => sum + (p.totalSqm / 2), 0);
-  
-  // Exclusive properties are 100% owned
-  const exclusiveTotal = exclusiveProperties.reduce((sum, p) => sum + p.totalSqm, 0);
-  
-  // Add inherited properties (from previous deaths)
-  const inheritedTotal = (person.inheritedProperties || []).reduce((sum, prop) => sum + prop.totalSqm, 0);
-  
-  const totalEstate = conjugalShare + exclusiveTotal + inheritedTotal;
-
-  return {
-    conjugalProperties,
-    exclusiveProperties,
-    conjugalShare,
-    exclusiveTotal,
-    inheritedTotal,
-    totalEstate,
-    // For compatibility with existing code
-    conjugal: conjugalProperties,
-    exclusive: exclusiveProperties
-  };
-}
-
-/**
- * Find eligible heirs for a decedent
- * Following Philippine inheritance law (Civil Code)
- */
-function findEligibleHeirs(decedent, state) {
-  const heirs = [];
-  const currentDate = new Date();
-  
-  // 1. Surviving Spouse (if alive at time of death)
-  if (decedent.spouseId) {
-    const spouse = state.people.find(p => p.id === decedent.spouseId);
-    if (spouse && !spouse.isDeceased) {
-      heirs.push({
-        id: spouse.id,
-        name: spouse.name,
-        relationship: 'Surviving Spouse',
-        isSpouse: true,
-        priority: 1
-      });
+    heirs: distribution,
+    transfers: transfers,
+    distribution: {
+      heirs: distribution
     }
-  }
+  };
+};
 
-  // 2. Children (direct descendants)
-  const children = state.people.filter(p => p.parentId === decedent.id);
-  children.forEach(child => {
-    if (child.isDeceased) {
-      // Pre-deceased child - check for representation (children of the deceased child)
-      const grandchildren = state.people.filter(p => p.parentId === child.id);
-      if (grandchildren.length > 0) {
-        grandchildren.forEach(grandchild => {
-          heirs.push({
-            id: grandchild.id,
-            name: grandchild.name,
-            relationship: 'Grandchild (Representation)',
-            represents: child.id,
-            representsName: child.name,
-            isRepresentative: true,
-            priority: 2
-          });
-        });
-      }
-    } else {
-      heirs.push({
-        id: child.id,
-        name: child.name,
-        relationship: 'Child',
-        priority: 2
-      });
+/**
+ * Calculate all assets for a person
+ */
+const calculateAssets = (person) => {
+  const properties = person.properties || [];
+  
+  let conjugalTotal = 0;
+  let exclusiveTotal = 0;
+  let conjugalShare = 0;
+  
+  properties.forEach(prop => {
+    if (prop.classification === 'Conjugal') {
+      conjugalTotal += prop.totalSqm;
+      conjugalShare += prop.totalSqm / 2; // Spouse gets 50%
+    } else if (prop.classification === 'Exclusive') {
+      exclusiveTotal += prop.totalSqm;
     }
   });
 
-  // 3. Parents (if no spouse or children)
-  if (heirs.length === 0) {
-    // No spouse or children, check parents
-    if (decedent.parentId) {
-      const parent = state.people.find(p => p.id === decedent.parentId);
-      if (parent && !parent.isDeceased) {
-        heirs.push({
-          id: parent.id,
-          name: parent.name,
-          relationship: 'Parent',
-          priority: 3
-        });
-      }
-    }
+  const totalEstate = conjugalShare + exclusiveTotal;
+
+  return {
+    conjugalTotal: conjugalTotal,
+    exclusiveTotal: exclusiveTotal,
+    conjugalShare: conjugalShare,
+    totalEstate: totalEstate,
+    inheritedAmount: 0 // Will be calculated if they inherited from others
+  };
+};
+
+/**
+ * Find all heirs for a decedent
+ */
+const findHeirs = (decedent, decedents) => {
+  const heirs = [];
+  
+  // Find spouse
+  const spouse = decedents.find(p => p.id === decedent.spouseId);
+  if (spouse) {
+    heirs.push({
+      id: spouse.id,
+      name: spouse.name,
+      relationship: 'Spouse',
+      priority: 1
+    });
   }
 
-  // 4. Siblings (if no spouse, children, or parents)
-  if (heirs.length === 0 && decedent.parentId) {
-    const parent = state.people.find(p => p.id === decedent.parentId);
-    if (parent) {
-      // Find siblings (children of the same parent)
-      const siblings = state.people.filter(p => 
-        p.parentId === parent.id && 
-        p.id !== decedent.id
-      );
-      
-      siblings.forEach(sibling => {
-        if (sibling.isDeceased) {
-          // Pre-deceased sibling - check for representation
-          const niecesNephews = state.people.filter(p => p.parentId === sibling.id);
-          if (niecesNephews.length > 0) {
-            niecesNephews.forEach(niece => {
-              heirs.push({
-                id: niece.id,
-                name: niece.name,
-                relationship: 'Niece/Nephew (Representation)',
-                represents: sibling.id,
-                representsName: sibling.name,
-                isRepresentative: true,
-                priority: 4
-              });
+  // Find children
+  const children = decedents.filter(p => p.parentId === decedent.id);
+  if (children.length > 0) {
+    children.forEach(child => {
+      // Check if child is deceased and has descendants (representation)
+      if (child.isDeceased) {
+        const descendants = decedents.filter(p => p.parentId === child.id);
+        if (descendants.length > 0) {
+          // Represent deceased child
+          descendants.forEach(desc => {
+            heirs.push({
+              id: desc.id,
+              name: desc.name,
+              relationship: 'Grandchild (Representation)',
+              priority: 2,
+              isRepresentative: true,
+              represents: child.name
             });
-          }
-        } else {
-          heirs.push({
-            id: sibling.id,
-            name: sibling.name,
-            relationship: 'Sibling',
-            priority: 4
           });
+        } else {
+          // Deceased child with no descendants - skip
+          // Or could be handled differently based on rules
         }
+      } else {
+        heirs.push({
+          id: child.id,
+          name: child.name,
+          relationship: 'Child',
+          priority: 2
+        });
+      }
+    });
+  }
+
+  // Find parents if no spouse or children
+  if (heirs.length === 0) {
+    const parent = decedents.find(p => p.id === decedent.parentId);
+    if (parent) {
+      heirs.push({
+        id: parent.id,
+        name: parent.name,
+        relationship: 'Parent',
+        priority: 3
       });
     }
   }
+
+  // Find siblings if no spouse, children, or parents
+  if (heirs.length === 0 && decedent.parentId) {
+    const siblings = decedents.filter(p => 
+      p.parentId === decedent.parentId && p.id !== decedent.id
+    );
+    siblings.forEach(sibling => {
+      heirs.push({
+        id: sibling.id,
+        name: sibling.name,
+        relationship: 'Sibling',
+        priority: 4
+      });
+    });
+  }
+
+  // Sort by priority
+  heirs.sort((a, b) => a.priority - b.priority);
 
   return heirs;
-}
+};
 
 /**
- * Distribute estate among eligible heirs
- * Follows Philippine law: spouse gets 50% of conjugal property, children divide equally
+ * Distribute inheritance among heirs
  */
-function distributeEstate(assets, heirs, decedent, state) {
+const distributeInheritance = (assets, heirs, decedent, decedents) => {
+  if (heirs.length === 0) return [];
+  
   const totalEstate = assets.totalEstate;
+  if (totalEstate === 0) return heirs.map(h => ({ ...h, share: 0, conjugalShare: 0 }));
+
+  // Find if spouse is in heirs
+  const spouseIndex = heirs.findIndex(h => h.relationship === 'Spouse');
+  const hasSpouse = spouseIndex !== -1;
   
-  if (heirs.length === 0) {
-    return { heirs: [], totalEstate };
+  let conjugalShare = assets.conjugalShare;
+  let exclusiveShare = assets.exclusiveTotal;
+
+  // If spouse exists, they get conjugal share first
+  if (hasSpouse) {
+    // Spouse gets conjugal share
+    heirs[spouseIndex].conjugalShare = conjugalShare;
+    heirs[spouseIndex].share = conjugalShare;
   }
 
-  // Determine distribution strategy based on heir types
-  const hasSpouse = heirs.some(h => h.isSpouse);
-  const hasChildren = heirs.some(h => h.relationship === 'Child' || h.relationship.includes('Grandchild'));
-  const hasParents = heirs.some(h => h.relationship === 'Parent');
-
-  let distributedHeirs = [];
-
-  if (hasSpouse && hasChildren) {
-    // Spouse and children: Spouse gets 50% of conjugal share, children split the rest
-    const conjugalAmount = assets.conjugalShare;
-    const spouseShare = conjugalAmount * 0.5;
-    const childrenShare = conjugalAmount * 0.5 + assets.exclusiveTotal + (assets.inheritedTotal || 0);
+  // Remaining estate (exclusive + any conjugal not going to spouse)
+  const remainingEstate = exclusiveShare + (hasSpouse ? 0 : conjugalShare);
+  
+  if (remainingEstate > 0) {
+    // Distribute remaining among all heirs (excluding spouse if they already got conjugal share)
+    const eligibleHeirs = hasSpouse 
+      ? heirs.filter((_, i) => i !== spouseIndex)
+      : heirs;
     
-    // Distribute to spouse
-    const spouseHeirs = heirs.filter(h => h.isSpouse);
-    spouseHeirs.forEach(spouse => {
-      distributedHeirs.push({
-        ...spouse,
-        share: spouseShare,
-        conjugal: true,
-        totalShare: spouseShare
-      });
-    });
-
-    // Distribute to children
-    const childrenHeirs = heirs.filter(h => !h.isSpouse);
-    const childrenCount = childrenHeirs.length;
-    if (childrenCount > 0) {
-      const perChildShare = childrenShare / childrenCount;
-      childrenHeirs.forEach(child => {
-        distributedHeirs.push({
-          ...child,
-          share: perChildShare,
-          conjugal: false,
-          totalShare: perChildShare
-        });
+    if (eligibleHeirs.length > 0) {
+      const sharePerHeir = remainingEstate / eligibleHeirs.length;
+      eligibleHeirs.forEach(heir => {
+        heir.share = (heir.share || 0) + sharePerHeir;
+        heir.conjugalShare = (heir.conjugalShare || 0);
       });
     }
-  } else if (hasSpouse && !hasChildren) {
-    // Spouse only (or spouse + parents)
-    const spouseHeirs = heirs.filter(h => h.isSpouse);
-    spouseHeirs.forEach(spouse => {
-      distributedHeirs.push({
-        ...spouse,
-        share: totalEstate,
-        conjugal: true,
-        totalShare: totalEstate
-      });
-    });
-
-    // If there are parents, they get half of the estate
-    const parentHeirs = heirs.filter(h => h.relationship === 'Parent');
-    if (parentHeirs.length > 0) {
-      const parentShare = totalEstate * 0.5;
-      const perParentShare = parentShare / parentHeirs.length;
-      
-      // Adjust spouse share
-      distributedHeirs = distributedHeirs.map(h => {
-        if (h.isSpouse) {
-          return { ...h, share: totalEstate * 0.5, totalShare: totalEstate * 0.5 };
-        }
-        return h;
-      });
-
-      parentHeirs.forEach(parent => {
-        distributedHeirs.push({
-          ...parent,
-          share: perParentShare,
-          conjugal: false,
-          totalShare: perParentShare
-        });
-      });
-    }
-  } else if (hasChildren && !hasSpouse) {
-    // Children only
-    const childrenHeirs = heirs.filter(h => !h.isSpouse);
-    const perChildShare = totalEstate / childrenHeirs.length;
-    childrenHeirs.forEach(child => {
-      distributedHeirs.push({
-        ...child,
-        share: perChildShare,
-        conjugal: false,
-        totalShare: perChildShare
-      });
-    });
-  } else {
-    // Default: equal distribution among all heirs
-    const perHeirShare = totalEstate / heirs.length;
-    heirs.forEach(heir => {
-      distributedHeirs.push({
-        ...heir,
-        share: perHeirShare,
-        conjugal: false,
-        totalShare: perHeirShare
-      });
-    });
   }
 
-  return {
-    heirs: distributedHeirs,
-    totalEstate
-  };
-}
+  // Ensure all heirs have share property
+  heirs.forEach(h => {
+    h.share = h.share || 0;
+    h.conjugalShare = h.conjugalShare || 0;
+    h.totalShare = h.share + h.conjugalShare;
+  });
+
+  return heirs;
+};
 
 /**
- * Calculate final distribution after all deaths are processed
+ * Generate transfer records for each distribution
  */
-function calculateFinalDistribution(state) {
-  const finalDistribution = {};
+const generateTransfers = (decedent, distribution, decedents) => {
+  const transfers = [];
   
-  state.people.forEach(person => {
-    if (!person.isDeceased) {
-      // Calculate total properties for living persons
-      let total = 0;
-      
-      person.properties.forEach(prop => {
-        if (prop.classification === 'Conjugal') {
-          total += prop.totalSqm / 2;
-        } else {
-          total += prop.totalSqm;
-        }
+  distribution.forEach(heir => {
+    if (heir.totalShare > 0) {
+      transfers.push({
+        from: decedent.id,
+        to: heir.id,
+        amount: heir.totalShare,
+        relationship: heir.relationship,
+        conjugal: heir.conjugalShare > 0,
+        represents: heir.represents || null
       });
-      
-      // Add inherited properties
-      if (person.inheritedProperties) {
-        person.inheritedProperties.forEach(prop => {
-          total += prop.totalSqm;
-        });
-      }
-      
-      finalDistribution[person.id] = {
-        name: person.name,
-        total: total
-      };
     }
   });
-  
-  return finalDistribution;
-}
+
+  return transfers;
+};
 
 /**
- * Legacy function for backward compatibility
- */
-export function calculateInheritance(people) {
-  const result = calculateAllInheritance(people);
-  return result.results || [];
-}
-
-/**
- * Asset Ledger class for tracking property ownership
+ * AssetLedger class for tracking property transfers
  */
 export class AssetLedger {
   constructor() {
     this.entries = [];
   }
 
-  addEntry(personId, property) {
+  addEntry(from, to, amount, type, description) {
     this.entries.push({
-      personId,
-      ...property,
-      timestamp: Date.now()
+      from,
+      to,
+      amount,
+      type,
+      description,
+      timestamp: new Date().toISOString()
     });
   }
 
-  getPersonAssets(personId) {
-    return this.entries.filter(e => e.personId === personId);
+  getTransfersByPerson(personId) {
+    return this.entries.filter(e => e.from === personId || e.to === personId);
   }
 
-  getTotalValue(personId) {
-    return this.getPersonAssets(personId).reduce((sum, e) => sum + e.totalSqm, 0);
+  getTotalReceived(personId) {
+    return this.entries
+      .filter(e => e.to === personId)
+      .reduce((sum, e) => sum + e.amount, 0);
   }
 
-  clear() {
-    this.entries = [];
+  getTotalGiven(personId) {
+    return this.entries
+      .filter(e => e.from === personId)
+      .reduce((sum, e) => sum + e.amount, 0);
+  }
+
+  getNetBalance(personId) {
+    return this.getTotalReceived(personId) - this.getTotalGiven(personId);
   }
 }
+
+export default {
+  calculateAllInheritance,
+  AssetLedger
+};
