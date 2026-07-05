@@ -479,32 +479,8 @@ const UserDashboard = () => {
                       </div>
                     </div>
                     <div className="dropdown-divider"></div>
-                    {estateTaxItems.map((tab) => (
-                      <button 
-                        key={tab.id} 
-                        className={`dropdown-item ${!tab.enabled ? 'disabled-item' : ''}`} 
-                        onClick={() => handleFeatureClick(tab)}
-                      >
-                        <tab.icon />
-                        {tab.label}
-                        {!tab.enabled && <LockClosedIcon className="lock-icon-dropdown" />}
-                      </button>
-                    ))}
-                    <div className="dropdown-divider"></div>
-                    {helpfulToolsItems.map((item) => (
-                      <button 
-                        key={item.id} 
-                        className="dropdown-item" 
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          setShowUserMenu(false);
-                        }}
-                      >
-                        <item.icon />
-                        {item.label}
-                      </button>
-                    ))}
-                    <div className="dropdown-divider"></div>
+                    {/* REMOVED: Estate Tax Items - they're already in the main nav */}
+                    {/* REMOVED: Helpful Tools Items - they're already in the main nav */}
                     <button className="dropdown-item logout" onClick={logout}>
                       <ArrowRightOnRectangleIcon />
                       Logout
@@ -1046,15 +1022,6 @@ const UserDashboard = () => {
 
         .dropdown-item:hover {
           background: var(--hover-bg);
-        }
-
-        .dropdown-item.disabled-item {
-          opacity: 0.6;
-          cursor: pointer;
-        }
-
-        .dropdown-item.disabled-item:hover {
-          background: rgba(245, 158, 11, 0.1);
         }
 
         .dropdown-item.logout {

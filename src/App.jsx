@@ -6,6 +6,7 @@ import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import ForgotPassword from './pages/ForgotPassword';
+import ResetPassword from './pages/ResetPassword'; // Import the new component
 import EmailConfirmation from './pages/EmailConfirmation';
 import './index.css';
 
@@ -141,6 +142,8 @@ function AppContent() {
         <Route path="/forgot-password" element={
           !user ? <ForgotPassword /> : <Navigate to="/dashboard" replace />
         } />
+        {/* Add Reset Password Route - accessible even if logged in */}
+        <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/email-confirmation" element={<EmailConfirmation />} />
         <Route path="/dashboard" element={
           <ProtectedRoute>
