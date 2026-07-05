@@ -35,7 +35,6 @@ export const AuthProvider = ({ children }) => {
                                 return;
                             }
                         } catch (e) {
-                            console.error('Error parsing stored user:', e);
                             localStorage.removeItem('user');
                         }
                     }
@@ -44,7 +43,6 @@ export const AuthProvider = ({ children }) => {
                     await fetchUser(session.user.id);
                 }
             } catch (error) {
-                console.error('Session check error:', error);
                 // If there's an error, clear any stale data
                 localStorage.removeItem('user');
                 setUser(null);
@@ -57,16 +55,11 @@ export const AuthProvider = ({ children }) => {
 
         // Listen for auth changes
         const { data: { subscription } } = supabase.auth.onAuthStateChange(async (event, session) => {
-            console.log('Auth state changed:', event);
-            
             if (event === 'SIGNED_IN' && session) {
                 await fetchUser(session.user.id);
             } else if (event === 'SIGNED_OUT') {
                 setUser(null);
                 localStorage.removeItem('user');
-            } else if (event === 'TOKEN_REFRESHED') {
-                // Token refreshed, but user data should remain
-                console.log('Token refreshed');
             }
             setLoading(false);
         });
@@ -87,8 +80,6 @@ export const AuthProvider = ({ children }) => {
 
     const fetchUser = async (userId) => {
         try {
-            console.log('Fetching user data for ID:', userId);
-            
             const { data: profile, error } = await supabase
                 .from('profiles')
                 .select('*')
@@ -96,12 +87,10 @@ export const AuthProvider = ({ children }) => {
                 .single();
 
             if (error) {
-                console.error('Profile fetch error:', error);
                 throw error;
             }
 
             if (!profile) {
-                console.error('No profile found for user ID:', userId);
                 throw new Error('Profile not found');
             }
 
@@ -115,13 +104,11 @@ export const AuthProvider = ({ children }) => {
                 position: profile.position
             };
             
-            console.log('User data loaded:', userData);
             setUser(userData);
             localStorage.setItem('user', JSON.stringify(userData));
             
             return userData;
         } catch (error) {
-            console.error('Error fetching user:', error);
             setUser(null);
             localStorage.removeItem('user');
             throw error;
@@ -170,7 +157,6 @@ export const AuthProvider = ({ children }) => {
             }
             return { error: 'Registration failed' };
         } catch (error) {
-            console.error('Registration error:', error);
             return { error: error.message };
         }
     };
@@ -193,7 +179,6 @@ export const AuthProvider = ({ children }) => {
             
             return { user: null };
         } catch (error) {
-            console.error('Login error:', error);
             setError(error.message);
             return { error: error.message };
         } finally {
@@ -212,8 +197,6 @@ export const AuthProvider = ({ children }) => {
         } finally {
             setUser(null);
             localStorage.removeItem('user');
-            // Force reload to clear any cached state
-            // window.location.href = '/login';
         }
     };
 
@@ -250,7 +233,6 @@ export const AuthProvider = ({ children }) => {
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error('Forgot password error:', error);
             setError(error.message);
             throw error;
         }
@@ -267,7 +249,6 @@ export const AuthProvider = ({ children }) => {
             if (error) throw error;
             return { success: true };
         } catch (error) {
-            console.error('Resend reset link error:', error);
             setError(error.message);
             throw error;
         }
@@ -287,7 +268,6 @@ export const AuthProvider = ({ children }) => {
         loginWith2FA,
         forgotPassword,
         resendResetLink,
-        // Expose fetchUser for manual refresh if needed
         refreshUser: () => user ? fetchUser(user.id) : null
     };
 

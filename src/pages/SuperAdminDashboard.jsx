@@ -5,6 +5,7 @@ import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
 import TaxSettings from '../components/Settings/TaxSettings';
 import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
+import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -24,7 +25,9 @@ import {
   HomeIcon,
   Cog6ToothIcon,
   ClipboardDocumentCheckIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  WrenchScrewdriverIcon,
+  ChartPieIcon
 } from '@heroicons/react/24/outline';
 import UserManagement from '../components/Admin/UserManagement';
 import FeatureToggles from '../components/Admin/FeatureToggles';
@@ -36,9 +39,10 @@ const SuperAdminDashboard = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
+  const [showHelpfulToolsMenu, setShowHelpfulToolsMenu] = useState(false);
   
-  const dropdownRef = useRef(null);
-  const buttonRef = useRef(null);
+  const estateTaxDropdownRef = useRef(null);
+  const helpfulToolsDropdownRef = useRef(null);
 
   // Apply dark mode class to document
   useEffect(() => {
@@ -71,10 +75,13 @@ const SuperAdminDashboard = () => {
       if (showEstateTaxMenu && !e.target.closest('.estate-tax-menu-container')) {
         setShowEstateTaxMenu(false);
       }
+      if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
+        setShowHelpfulToolsMenu(false);
+      }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showUserMenu, showNotifications, showEstateTaxMenu]);
+  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu]);
 
   // Estate Tax sub-menu items
   const estateTaxItems = [
@@ -82,6 +89,13 @@ const SuperAdminDashboard = () => {
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon },
     { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon },
     { id: 'taxsettings', label: 'Estate Tax Settings', icon: Cog6ToothIcon },
+  ];
+
+  // Helpful Tools sub-menu items
+  const helpfulToolsItems = [
+    { id: 'onnet-tracker', label: 'ONNET and eLA Tracker', icon: ChartPieIcon },
+    { id: 'tool2', label: 'Tool 2', icon: WrenchScrewdriverIcon },
+    { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
   ];
 
   // Other navigation items
@@ -248,6 +262,20 @@ const SuperAdminDashboard = () => {
           </motion.div>
         );
 
+      case 'onnet-tracker':
+        return (
+          <motion.div
+            key="onnet-tracker"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <ONNETeLATracker />
+          </motion.div>
+        );
+
       case 'usermanagement':
         return (
           <motion.div
@@ -377,15 +405,14 @@ const SuperAdminDashboard = () => {
           </div>
 
           <div className="nav-tabs">
-            <div className="estate-tax-menu-container" ref={dropdownRef}>
+            <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
-                ref={buttonRef}
                 className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
                 onClick={() => setShowEstateTaxMenu(!showEstateTaxMenu)}
                 onMouseEnter={() => setShowEstateTaxMenu(true)}
                 onMouseLeave={() => {
                   setTimeout(() => {
-                    if (!document.querySelector('.dropdown-menu:hover')) {
+                    if (!document.querySelector('.estate-tax-menu-container .dropdown-menu:hover')) {
                       setShowEstateTaxMenu(false);
                     }
                   }, 150);
@@ -417,6 +444,60 @@ const SuperAdminDashboard = () => {
                         onClick={() => {
                           setActiveTab(item.id);
                           setShowEstateTaxMenu(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        {activeTab === item.id && (
+                          <CheckBadgeIcon className="dropdown-item-check" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Helpful Tools Dropdown */}
+            <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
+              <button
+                className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowHelpfulToolsMenu(!showHelpfulToolsMenu)}
+                onMouseEnter={() => setShowHelpfulToolsMenu(true)}
+                onMouseLeave={() => {
+                  setTimeout(() => {
+                    if (!document.querySelector('.helpful-tools-menu-container .dropdown-menu:hover')) {
+                      setShowHelpfulToolsMenu(false);
+                    }
+                  }, 150);
+                }}
+              >
+                <WrenchScrewdriverIcon className="tab-icon" />
+                <span>Helpful Tools</span>
+                <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
+                {helpfulToolsItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showHelpfulToolsMenu && (
+                  <motion.div
+                    className="dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    onMouseEnter={() => setShowHelpfulToolsMenu(true)}
+                    onMouseLeave={() => setShowHelpfulToolsMenu(false)}
+                  >
+                    {helpfulToolsItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowHelpfulToolsMenu(false);
                         }}
                       >
                         <item.icon className="dropdown-item-icon" />
@@ -695,7 +776,8 @@ const SuperAdminDashboard = () => {
           border-radius: 2px;
         }
 
-        .estate-tax-menu-container {
+        .estate-tax-menu-container,
+        .helpful-tools-menu-container {
           position: relative;
           display: inline-block;
         }

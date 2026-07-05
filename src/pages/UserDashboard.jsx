@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
 import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
+import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -21,7 +22,9 @@ import {
   LockClosedIcon,
   Squares2X2Icon,
   CheckBadgeIcon,
-  XMarkIcon
+  XMarkIcon,
+  WrenchScrewdriverIcon,
+  ChartPieIcon
 } from '@heroicons/react/24/outline';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
 
@@ -32,6 +35,7 @@ const UserDashboard = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
+  const [showHelpfulToolsMenu, setShowHelpfulToolsMenu] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) return savedTheme;
@@ -39,10 +43,9 @@ const UserDashboard = () => {
   });
   const [showDisabledWarning, setShowDisabledWarning] = useState(false);
   const [disabledFeatureName, setDisabledFeatureName] = useState('');
-  const [pendingFeatureTab, setPendingFeatureTab] = useState(null);
 
-  const dropdownRef = useRef(null);
-  const buttonRef = useRef(null);
+  const estateTaxDropdownRef = useRef(null);
+  const helpfulToolsDropdownRef = useRef(null);
 
   const { isEnabled: calculatorEnabled, loading: calcLoading } = useFeatureAccess('tax_calculator');
   const { isEnabled: dividerEnabled, loading: dividerLoading } = useFeatureAccess('property_divider');
@@ -83,10 +86,13 @@ const UserDashboard = () => {
       if (showEstateTaxMenu && !e.target.closest('.estate-tax-menu-container')) {
         setShowEstateTaxMenu(false);
       }
+      if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
+        setShowHelpfulToolsMenu(false);
+      }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showUserMenu, showNotifications, showEstateTaxMenu]);
+  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu]);
 
   // Check if current active tab is disabled, show warning
   useEffect(() => {
@@ -107,36 +113,36 @@ const UserDashboard = () => {
   }, [activeTab, calculatorEnabled, dividerEnabled, helpersEnabled]);
 
   const handleFeatureClick = (item) => {
-    // Always close the dropdown
     setShowEstateTaxMenu(false);
     
     if (item.enabled) {
-      // If enabled, switch to the tab
       setActiveTab(item.id);
       setShowDisabledWarning(false);
       setDisabledFeatureName('');
     } else {
-      // If disabled, show the maintenance message
-      setActiveTab(item.id); // Switch to the tab to show maintenance message
+      setActiveTab(item.id);
       setShowDisabledWarning(true);
       setDisabledFeatureName(item.label);
       
-      // Auto-hide the toast after 4 seconds (but maintenance message stays)
       setTimeout(() => {
         setShowDisabledWarning(false);
       }, 4000);
     }
   };
 
-  // Estate Tax sub-menu items (no Tax Settings for regular users)
+  // Estate Tax sub-menu items
   const estateTaxItems = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon, enabled: calculatorEnabled },
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon, enabled: dividerEnabled },
     { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon, enabled: helpersEnabled },
   ];
 
-  // Other tabs (none for regular users, all estate tax features are in the dropdown)
-  const otherTabs = [];
+  // Helpful Tools sub-menu items
+  const helpfulToolsItems = [
+    { id: 'onnet-tracker', label: 'ONNET and eLA Tracker', icon: ChartPieIcon },
+    { id: 'tool2', label: 'Tool 2', icon: WrenchScrewdriverIcon },
+    { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
+  ];
 
   const MaintenanceMessage = ({ featureName }) => (
     <motion.div 
@@ -163,7 +169,6 @@ const UserDashboard = () => {
       <button 
         className="maintenance-back-btn"
         onClick={() => {
-          // Find the first enabled feature and switch to it
           const firstEnabled = estateTaxItems.find(item => item.enabled);
           if (firstEnabled) {
             setActiveTab(firstEnabled.id);
@@ -253,6 +258,20 @@ const UserDashboard = () => {
           </motion.div>
         );
 
+      case 'onnet-tracker':
+        return (
+          <motion.div
+            key="onnet-tracker"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <ONNETeLATracker />
+          </motion.div>
+        );
+
       default:
         return null;
     }
@@ -269,7 +288,6 @@ const UserDashboard = () => {
 
   return (
     <div className={`dashboard-container ${theme}`} data-theme={theme}>
-      {/* Disabled Feature Toast Notification */}
       <AnimatePresence>
         {showDisabledWarning && (
           <DisabledFeatureToast 
@@ -279,7 +297,6 @@ const UserDashboard = () => {
         )}
       </AnimatePresence>
 
-      {/* Top Navigation Bar */}
       <nav className="dashboard-nav">
         <div className="nav-container">
           <div className="nav-brand">
@@ -293,15 +310,14 @@ const UserDashboard = () => {
 
           <div className="nav-tabs">
             {/* Estate Tax Dropdown Menu */}
-            <div className="estate-tax-menu-container" ref={dropdownRef}>
+            <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
-                ref={buttonRef}
                 className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
                 onClick={() => setShowEstateTaxMenu(!showEstateTaxMenu)}
                 onMouseEnter={() => setShowEstateTaxMenu(true)}
                 onMouseLeave={() => {
                   setTimeout(() => {
-                    if (!document.querySelector('.dropdown-menu:hover')) {
+                    if (!document.querySelector('.estate-tax-menu-container .dropdown-menu:hover')) {
                       setShowEstateTaxMenu(false);
                     }
                   }, 150);
@@ -331,7 +347,6 @@ const UserDashboard = () => {
                         key={item.id}
                         className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''} ${!item.enabled ? 'disabled-item' : ''}`}
                         onClick={() => handleFeatureClick(item)}
-                        // REMOVED: disabled={!item.enabled} - Now clickable even when disabled
                       >
                         <item.icon className="dropdown-item-icon" />
                         <span>{item.label}</span>
@@ -346,18 +361,59 @@ const UserDashboard = () => {
               </AnimatePresence>
             </div>
 
-            {/* Other Navigation Tabs - None for regular users, all in dropdown */}
-            {otherTabs.map((tab) => (
+            {/* Helpful Tools Dropdown */}
+            <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
+                className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowHelpfulToolsMenu(!showHelpfulToolsMenu)}
+                onMouseEnter={() => setShowHelpfulToolsMenu(true)}
+                onMouseLeave={() => {
+                  setTimeout(() => {
+                    if (!document.querySelector('.helpful-tools-menu-container .dropdown-menu:hover')) {
+                      setShowHelpfulToolsMenu(false);
+                    }
+                  }, 150);
+                }}
               >
-                <tab.icon className="tab-icon" />
-                <span>{tab.label}</span>
-                {activeTab === tab.id && <motion.div className="tab-indicator" layoutId="activeTab" />}
+                <WrenchScrewdriverIcon className="tab-icon" />
+                <span>Helpful Tools</span>
+                <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
+                {helpfulToolsItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
               </button>
-            ))}
+              
+              <AnimatePresence>
+                {showHelpfulToolsMenu && (
+                  <motion.div
+                    className="dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    onMouseEnter={() => setShowHelpfulToolsMenu(true)}
+                    onMouseLeave={() => setShowHelpfulToolsMenu(false)}
+                  >
+                    {helpfulToolsItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowHelpfulToolsMenu(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        {activeTab === item.id && (
+                          <CheckBadgeIcon className="dropdown-item-check" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
           </div>
 
           <div className="nav-actions">
@@ -428,11 +484,24 @@ const UserDashboard = () => {
                         key={tab.id} 
                         className={`dropdown-item ${!tab.enabled ? 'disabled-item' : ''}`} 
                         onClick={() => handleFeatureClick(tab)}
-                        // REMOVED: disabled={!tab.enabled} - Now clickable even when disabled
                       >
                         <tab.icon />
                         {tab.label}
                         {!tab.enabled && <LockClosedIcon className="lock-icon-dropdown" />}
+                      </button>
+                    ))}
+                    <div className="dropdown-divider"></div>
+                    {helpfulToolsItems.map((item) => (
+                      <button 
+                        key={item.id} 
+                        className="dropdown-item" 
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowUserMenu(false);
+                        }}
+                      >
+                        <item.icon />
+                        {item.label}
                       </button>
                     ))}
                     <div className="dropdown-divider"></div>
@@ -500,7 +569,6 @@ const UserDashboard = () => {
           position: relative;
         }
 
-        /* Disabled Feature Toast */
         .disabled-feature-toast {
           position: fixed;
           top: 90px;
@@ -672,8 +740,8 @@ const UserDashboard = () => {
           border-radius: 2px;
         }
 
-        /* Estate Tax Dropdown Styles */
-        .estate-tax-menu-container {
+        .estate-tax-menu-container,
+        .helpful-tools-menu-container {
           position: relative;
           display: inline-block;
         }
@@ -737,7 +805,7 @@ const UserDashboard = () => {
 
         .dropdown-item-nav.disabled-item {
           opacity: 0.6;
-          cursor: pointer; /* Changed from not-allowed to pointer */
+          cursor: pointer;
         }
 
         .dropdown-item-nav.disabled-item:hover {
@@ -1062,7 +1130,6 @@ const UserDashboard = () => {
           height: 100%;
         }
 
-        /* Maintenance Message */
         .maintenance-card {
           background: var(--card-bg);
           border-radius: 1rem;
@@ -1165,7 +1232,6 @@ const UserDashboard = () => {
           box-shadow: var(--shadow-md);
         }
 
-        /* Loading */
         .loading-container {
           display: flex;
           flex-direction: column;
