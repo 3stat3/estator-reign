@@ -1,6 +1,7 @@
 import React, { useEffect, useState } from 'react';
 import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
+import SplashScreen from './components/SplashScreen/SplashScreen';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
@@ -103,6 +104,23 @@ const AppLoading = () => (
 // Main App Component
 function AppContent() {
   const { user, loading } = useAuth();
+  const [showSplash, setShowSplash] = useState(true);
+
+  // Show splash screen on every page load/refresh
+  useEffect(() => {
+    // Show splash for 3 seconds then hide
+    const timer = setTimeout(() => {
+      setShowSplash(false);
+    }, 3000);
+
+    // Cleanup timer
+    return () => clearTimeout(timer);
+  }, []); // Empty dependency array ensures this runs on every mount (page load/refresh)
+
+  // If splash is showing, render it
+  if (showSplash) {
+    return <SplashScreen onComplete={() => setShowSplash(false)} />;
+  }
 
   // Show loading at app level
   if (loading) {
