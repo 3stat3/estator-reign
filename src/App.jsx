@@ -1,12 +1,12 @@
 import React, { useEffect, useState } from 'react';
-import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate, useNavigate, useLocation } from 'react-router-dom';
 import { useAuth, AuthProvider } from './context/AuthContext';
 import SplashScreen from './components/SplashScreen/SplashScreen';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
 import ForgotPassword from './pages/ForgotPassword';
-import ResetPassword from './pages/ResetPassword'; // Import the new component
+import ResetPassword from './pages/ResetPassword';
 import EmailConfirmation from './pages/EmailConfirmation';
 import './index.css';
 
@@ -16,13 +16,11 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const [isChecking, setIsChecking] = useState(true);
 
   useEffect(() => {
-    // Once auth is done loading, stop checking
     if (!loading) {
       setIsChecking(false);
     }
   }, [loading]);
 
-  // Show loading spinner while checking authentication
   if (loading || isChecking) {
     return (
       <div style={{ 
@@ -52,12 +50,10 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     );
   }
 
-  // If no user, redirect to login
   if (!user) {
     return <Navigate to="/login" replace />;
   }
 
-  // Check if user has required role
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
     return <Navigate to="/dashboard" replace />;
   }
@@ -65,17 +61,29 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   return children;
 };
 
-// Component to check for email confirmation in URL hash
+// Fixed: Only redirect email confirmations, not recovery
 function CheckHashForConfirmation() {
   const navigate = useNavigate();
+  const location = useLocation();
   
   useEffect(() => {
+    // Only run on the root path or login page
+    if (location.pathname !== '/' && location.pathname !== '/login') {
+      return;
+    }
+    
     const hash = window.location.hash;
     if (hash && hash.includes('access_token')) {
-      // If there's an access token in the hash, go to email confirmation
-      navigate('/email-confirmation', { replace: true });
+      const params = new URLSearchParams(hash.replace('#', '?'));
+      const type = params.get('type');
+      
+      // Only redirect to email confirmation for signup/email confirmations
+      if (type === 'signup' || type === 'email' || !type) {
+        navigate('/email-confirmation', { replace: true });
+      }
+      // For recovery type, let the ResetPassword component handle it
     }
-  }, [navigate]);
+  }, [navigate, location.pathname]);
   
   return null;
 }
@@ -107,23 +115,18 @@ function AppContent() {
   const { user, loading } = useAuth();
   const [showSplash, setShowSplash] = useState(true);
 
-  // Show splash screen on every page load/refresh
   useEffect(() => {
-    // Show splash for 3 seconds then hide
     const timer = setTimeout(() => {
       setShowSplash(false);
     }, 3000);
 
-    // Cleanup timer
     return () => clearTimeout(timer);
-  }, []); // Empty dependency array ensures this runs on every mount (page load/refresh)
+  }, []);
 
-  // If splash is showing, render it
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
 
-  // Show loading at app level
   if (loading) {
     return <AppLoading />;
   }
@@ -142,7 +145,7 @@ function AppContent() {
         <Route path="/forgot-password" element={
           !user ? <ForgotPassword /> : <Navigate to="/dashboard" replace />
         } />
-        {/* Add Reset Password Route - accessible even if logged in */}
+        {/* Reset Password route - must be before any catch-all routes */}
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/email-confirmation" element={<EmailConfirmation />} />
         <Route path="/dashboard" element={
@@ -158,7 +161,6 @@ function AppContent() {
         <Route path="/" element={
           <Navigate to={user ? "/dashboard" : "/login"} replace />
         } />
-        {/* Catch all route - redirect to dashboard or login */}
         <Route path="*" element={
           <Navigate to={user ? "/dashboard" : "/login"} replace />
         } />

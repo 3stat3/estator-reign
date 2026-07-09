@@ -1,483 +1,646 @@
 // src/components/PropertyDivider/PropertyDivider.jsx
-import React, { useState } from 'react';
-import { motion } from 'framer-motion';
+import React, { useState, useEffect } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import PersonManager from './modules/PersonManager';
 
 const PropertyDivider = ({ darkMode = false }) => {
-  // Placeholder data
-  const placeholderPeople = [
-    {
-      id: '1',
-      name: 'John Smith',
-      gender: 'Male',
-      isDeceased: false,
-      relationship: 'Father',
-      properties: [{ name: 'Main House', totalSqm: 250, classification: 'Residential' }]
-    },
-    {
-      id: '2',
-      name: 'Mary Smith',
-      gender: 'Female',
-      isDeceased: false,
-      relationship: 'Mother',
-      properties: [{ name: 'Beach House', totalSqm: 180, classification: 'Residential' }]
-    },
-    {
-      id: '3',
-      name: 'James Smith',
-      gender: 'Male',
-      isDeceased: false,
-      relationship: 'Son',
-      properties: []
-    },
-    {
-      id: '4',
-      name: 'Sarah Johnson',
-      gender: 'Female',
-      isDeceased: true,
-      dod: '2023-05-15',
-      relationship: 'Aunt',
-      properties: [{ name: 'City Apartment', totalSqm: 120, classification: 'Condominium' }]
-    },
-    {
-      id: '5',
-      name: 'Robert Brown',
-      gender: 'Male',
-      isDeceased: false,
-      relationship: 'Uncle',
-      properties: [{ name: 'Farm Land', totalSqm: 500, classification: 'Agricultural' }]
-    }
+  const [currentStep, setCurrentStep] = useState(1);
+  const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+
+  const [appState, setAppState] = useState({
+    persons: [],
+    properties: [],
+    decedentId: null,
+    estateType: 'intestate',
+    will: null,
+    divisionResults: null
+  });
+
+  useEffect(() => {
+    const handleResize = () => {
+      setIsMobile(window.innerWidth < 768);
+    };
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
+  }, []);
+
+  const steps = [
+    { id: 1, label: 'Add Persons', icon: '👤', module: 'persons' },
+    { id: 2, label: 'Add Properties', icon: '🏠', module: 'properties' },
+    { id: 3, label: 'Divide Estate', icon: '⚖️', module: 'division' }
   ];
 
-  const [selectedPerson, setSelectedPerson] = useState(null);
-  const [searchQuery, setSearchQuery] = useState('');
-
-  const filteredPeople = placeholderPeople.filter(person =>
-    person.name.toLowerCase().includes(searchQuery.toLowerCase())
-  );
-
-  const getStatusIcon = (person) => {
-    if (person.isDeceased) return '⚰️';
-    return '💚';
+  const canProceed = () => {
+    switch(currentStep) {
+      case 1: return appState.persons.length > 0;
+      case 2: return appState.properties.length > 0;
+      case 3: return true;
+      default: return false;
+    }
   };
 
-  const getGenderColor = (gender) => {
-    if (gender === 'Female') return '#ec4899';
-    return '#3b82f6';
+  const getStepStatus = (stepId) => {
+    if (stepId < currentStep) return 'completed';
+    if (stepId === currentStep) return 'active';
+    return 'upcoming';
   };
 
-  const getTotalProperties = (person) => {
-    return person.properties?.reduce((sum, p) => sum + (p.totalSqm || 0), 0) || 0;
+  const handleNext = () => {
+    if (currentStep < 3 && canProceed()) {
+      setCurrentStep(currentStep + 1);
+    }
   };
 
-  const styles = {
-    container: {
-      display: 'flex',
-      height: '100vh',
-      width: '100vw',
-      background: darkMode ? '#0a0c10' : '#f0f4f8',
-      fontFamily: "'Inter', -apple-system, sans-serif",
-      overflow: 'hidden',
-      transition: 'background 0.3s ease',
-    },
-    mainContent: {
-      flex: 1,
-      padding: '24px',
-      overflow: 'auto',
-    },
-    header: {
-      marginBottom: '24px',
-    },
-    title: {
-      fontSize: '28px',
-      fontWeight: 700,
-      color: darkMode ? '#ffffff' : '#1a202c',
-      margin: '0 0 8px 0',
-    },
-    subtitle: {
-      fontSize: '14px',
-      color: darkMode ? '#94a3b8' : '#64748b',
-      margin: 0,
-    },
-    searchBar: {
-      display: 'flex',
-      gap: '12px',
-      marginBottom: '24px',
-      flexWrap: 'wrap',
-    },
-    searchInput: {
-      flex: 1,
-      minWidth: '200px',
-      padding: '10px 16px',
-      border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
-      borderRadius: '10px',
-      fontSize: '14px',
-      outline: 'none',
-      background: darkMode ? '#14161f' : '#ffffff',
-      color: darkMode ? '#ffffff' : '#000000',
-      transition: 'border 0.2s',
-    },
-    grid: {
-      display: 'grid',
-      gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))',
-      gap: '16px',
-      marginBottom: '24px',
-    },
-    card: {
-      background: darkMode ? '#14161f' : '#ffffff',
-      borderRadius: '12px',
-      padding: '20px',
-      border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
-      cursor: 'pointer',
-      transition: 'all 0.2s ease',
-      boxShadow: darkMode ? '0 2px 8px rgba(0,0,0,0.3)' : '0 2px 8px rgba(0,0,0,0.06)',
-    },
-    cardHeader: {
-      display: 'flex',
-      alignItems: 'center',
-      gap: '12px',
-      marginBottom: '12px',
-    },
-    avatar: {
-      width: '48px',
-      height: '48px',
-      borderRadius: '50%',
-      display: 'flex',
-      alignItems: 'center',
-      justifyContent: 'center',
-      fontSize: '18px',
-      fontWeight: 700,
-      color: 'white',
-      flexShrink: 0,
-    },
-    cardName: {
-      fontSize: '16px',
-      fontWeight: 600,
-      color: darkMode ? '#ffffff' : '#1a202c',
-      margin: 0,
-    },
-    cardRelationship: {
-      fontSize: '13px',
-      color: darkMode ? '#94a3b8' : '#64748b',
-      margin: '2px 0 0 0',
-    },
-    cardDetails: {
-      display: 'flex',
-      gap: '12px',
-      flexWrap: 'wrap',
-      fontSize: '13px',
-      color: darkMode ? '#94a3b8' : '#64748b',
-    },
-    badge: {
-      padding: '2px 10px',
-      borderRadius: '20px',
-      fontSize: '12px',
-      display: 'inline-block',
-    },
-    sidebar: {
-      width: '380px',
-      background: darkMode ? '#14161f' : '#ffffff',
-      borderLeft: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
-      height: '100vh',
-      overflow: 'auto',
-      padding: '24px',
-    },
-    sidebarTitle: {
-      fontSize: '18px',
-      fontWeight: 600,
-      color: darkMode ? '#ffffff' : '#1a202c',
-      margin: '0 0 16px 0',
-    },
-    detailSection: {
-      background: darkMode ? '#1a1c2e' : '#f8fafc',
-      borderRadius: '12px',
-      padding: '16px',
-      marginBottom: '12px',
-      border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
-    },
-    detailLabel: {
-      fontSize: '12px',
-      fontWeight: 500,
-      color: darkMode ? '#94a3b8' : '#64748b',
-      margin: '0 0 4px 0',
-      textTransform: 'uppercase',
-      letterSpacing: '0.5px',
-    },
-    detailValue: {
-      fontSize: '14px',
-      color: darkMode ? '#ffffff' : '#1a202c',
-      margin: 0,
-    },
-    emptyState: {
-      flex: 1,
-      display: 'flex',
-      flexDirection: 'column',
-      alignItems: 'center',
-      justifyContent: 'center',
-      color: darkMode ? '#94a3b8' : '#94a3b8',
-      textAlign: 'center',
-      padding: '40px 20px',
-    },
-    emptyStateTitle: {
-      fontSize: '18px',
-      fontWeight: 600,
-      color: darkMode ? '#cbd5e1' : '#475569',
-      margin: '0 0 8px 0',
-    },
-    emptyStateText: {
-      fontSize: '14px',
-      margin: 0,
-    },
+  const handlePrev = () => {
+    if (currentStep > 1) {
+      setCurrentStep(currentStep - 1);
+    }
   };
 
-  const handleCardClick = (person) => {
-    setSelectedPerson(person);
+  const renderModule = () => {
+    switch(currentStep) {
+      case 1:
+        return (
+          <PersonManager 
+            darkMode={darkMode}
+            persons={appState.persons}
+            onUpdate={(data) => setAppState({...appState, persons: data})}
+          />
+        );
+      case 2:
+        return (
+          <div className="pd-placeholder">
+            <div className="pd-placeholder-icon">🏠</div>
+            <h2>Property Manager</h2>
+            <p>Add and classify properties for estate division</p>
+            <div className="pd-placeholder-stats">
+              📦 <span className="pd-badge">{appState.properties.length}</span> properties
+            </div>
+            <p className="pd-coming-soon">⏳ Property management will be implemented after PersonManager</p>
+          </div>
+        );
+      case 3:
+        return (
+          <div className="pd-placeholder">
+            <div className="pd-placeholder-icon">⚖️</div>
+            <h2>Division Engine</h2>
+            <p>Estate division will be calculated here</p>
+            <div className="pd-placeholder-stats">
+              👥 <span className="pd-badge">{appState.persons.length}</span> persons &nbsp;·&nbsp; 🏠 <span className="pd-badge">{appState.properties.length}</span> properties
+            </div>
+            <p className="pd-coming-soon">⏳ Coming soon: Philippine succession law implementation</p>
+          </div>
+        );
+      default:
+        return null;
+    }
   };
 
-  const handleSearchChange = (e) => {
-    setSearchQuery(e.target.value);
-  };
+  const progress = ((currentStep - 1) / (steps.length - 1)) * 100;
 
   return (
-    <div style={styles.container}>
-      {/* Main Content */}
-      <div style={styles.mainContent}>
-        <div style={styles.header}>
-          <h1 style={styles.title}>🏛️ Estate Divider</h1>
-          <p style={styles.subtitle}>Manage and visualize family estate distribution</p>
+    <div className="property-divider-wrapper">
+      {/* Top Navbar with Steps integrated */}
+      <div className="pd-navbar">
+        <div className="pd-navbar-left">
+          <div className="pd-logo">
+            <div className="pd-logo-icon">⚖️</div>
+            <div>
+              <p className="pd-logo-text">Estate Divider</p>
+              <p className="pd-logo-subtext">Philippine Succession System</p>
+            </div>
+          </div>
+          <div className="pd-version">v2.0</div>
         </div>
+        
+        {/* Steps - now in the navbar on the right */}
+        <div className="pd-stepper">
+          {steps.map((step, index) => {
+            const status = getStepStatus(step.id);
+            const isLast = index === steps.length - 1;
+            
+            return (
+              <div key={step.id} className="pd-step-item">
+                <div 
+                  className={`pd-step-circle ${status}`}
+                  onClick={() => status === 'completed' && setCurrentStep(step.id)}
+                >
+                  {status === 'completed' ? '✓' : step.id}
+                </div>
+                <span className={`pd-step-label ${status}`}>{step.label}</span>
+                {!isLast && (
+                  <div className={`pd-step-connector ${status === 'completed' ? 'active' : ''}`} />
+                )}
+              </div>
+            );
+          })}
+        </div>
+      </div>
 
-        <div style={styles.searchBar}>
-          <input
-            type="text"
-            placeholder="🔍 Search people..."
-            value={searchQuery}
-            onChange={handleSearchChange}
-            style={styles.searchInput}
-          />
-          <div style={{ 
-            padding: '10px 16px', 
-            background: darkMode ? '#14161f' : '#ffffff',
-            border: `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}`,
-            borderRadius: '10px',
-            fontSize: '14px',
-            color: darkMode ? '#94a3b8' : '#64748b',
-          }}>
-            👥 {filteredPeople.length} people
+      {/* Main Content */}
+      <div className="pd-content">
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentStep}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="pd-module-wrapper"
+          >
+            {renderModule()}
+          </motion.div>
+        </AnimatePresence>
+      </div>
+
+      {/* Footer */}
+      <div className="pd-footer">
+        <div className="pd-footer-left">
+          <div className="pd-progress">
+            <span>Step {currentStep}</span>
+            <div className="pd-progress-bar">
+              <div className="pd-progress-fill" style={{ width: `${progress}%` }} />
+            </div>
+            <span>{Math.round(progress)}%</span>
           </div>
         </div>
-
-        <div style={styles.grid}>
-          {filteredPeople.length > 0 ? (
-            filteredPeople.map((person) => (
-              <motion.div
-                key={person.id}
-                initial={{ opacity: 0, y: 20 }}
-                animate={{ opacity: 1, y: 0 }}
-                transition={{ duration: 0.3 }}
-                style={{
-                  ...styles.card,
-                  borderColor: selectedPerson?.id === person.id 
-                    ? '#8b5cf6' 
-                    : darkMode ? '#1e2d3d' : '#e2e8f0',
-                }}
-                onClick={() => handleCardClick(person)}
-                whileHover={{ scale: 1.02, transition: { duration: 0.2 } }}
-              >
-                <div style={styles.cardHeader}>
-                  <div style={{
-                    ...styles.avatar,
-                    background: person.isDeceased 
-                      ? '#dc2626' 
-                      : `linear-gradient(135deg, ${getGenderColor(person.gender)}, ${getGenderColor(person.gender)}dd)`,
-                  }}>
-                    {person.name.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
-                  </div>
-                  <div>
-                    <h3 style={styles.cardName}>
-                      {person.name} {getStatusIcon(person)}
-                    </h3>
-                    <p style={styles.cardRelationship}>
-                      {person.relationship || 'Family Member'}
-                    </p>
-                  </div>
-                </div>
-                <div style={styles.cardDetails}>
-                  <span>{person.gender || 'Unknown'}</span>
-                  <span>•</span>
-                  <span style={{
-                    ...styles.badge,
-                    background: person.isDeceased 
-                      ? (darkMode ? '#2d1f1f' : '#fef2f2') 
-                      : (darkMode ? '#1a2a1a' : '#f0fdf4'),
-                    color: person.isDeceased ? '#dc2626' : '#16a34a',
-                  }}>
-                    {person.isDeceased ? 'Deceased' : 'Living'}
-                  </span>
-                  {person.isDeceased && person.dod && (
-                    <>
-                      <span>•</span>
-                      <span>⚰️ {new Date(person.dod).toLocaleDateString()}</span>
-                    </>
-                  )}
-                  <span>•</span>
-                  <span>📦 {person.properties?.length || 0} properties</span>
-                  {getTotalProperties(person) > 0 && (
-                    <>
-                      <span>•</span>
-                      <span>{getTotalProperties(person)} sqm</span>
-                    </>
-                  )}
-                </div>
-              </motion.div>
-            ))
+        
+        <div className="pd-footer-right">
+          <button 
+            className="pd-btn pd-btn-secondary"
+            onClick={handlePrev}
+            disabled={currentStep === 1}
+          >
+            ← Back
+          </button>
+          
+          {currentStep < steps.length ? (
+            <button 
+              className="pd-btn pd-btn-primary"
+              onClick={handleNext}
+              disabled={!canProceed()}
+            >
+              {currentStep === 2 ? 'Calculate →' : 'Next →'}
+            </button>
           ) : (
-            <div style={{ gridColumn: '1 / -1' }}>
-              <div style={styles.emptyState}>
-                <div style={{ fontSize: '48px', marginBottom: '16px' }}>🔍</div>
-                <h3 style={styles.emptyStateTitle}>No results found</h3>
-                <p style={styles.emptyStateText}>
-                  Try adjusting your search terms
-                </p>
-              </div>
-            </div>
+            <button 
+              className="pd-btn pd-btn-primary"
+              onClick={() => alert('Export functionality coming soon!')}
+            >
+              📄 Export
+            </button>
           )}
         </div>
       </div>
 
-      {/* Sidebar - Person Details */}
-      <div style={styles.sidebar}>
-        <h2 style={styles.sidebarTitle}>👤 Person Details</h2>
-        
-        {selectedPerson ? (
-          <motion.div
-            initial={{ opacity: 0, x: 20 }}
-            animate={{ opacity: 1, x: 0 }}
-            transition={{ duration: 0.3 }}
-          >
-            {/* Basic Info */}
-            <div style={styles.detailSection}>
-              <h3 style={{ 
-                fontSize: '20px', 
-                fontWeight: 600, 
-                color: darkMode ? '#ffffff' : '#1a202c',
-                margin: '0 0 4px 0',
-              }}>
-                {selectedPerson.name} {getStatusIcon(selectedPerson)}
-              </h3>
-              <p style={{ 
-                fontSize: '14px', 
-                color: darkMode ? '#94a3b8' : '#64748b',
-                margin: '0 0 12px 0',
-              }}>
-                {selectedPerson.relationship || 'Family Member'}
-              </p>
-              <div style={{ display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <span style={{
-                  ...styles.badge,
-                  background: selectedPerson.gender === 'Female' 
-                    ? '#fdf2f8' 
-                    : '#eff6ff',
-                  color: selectedPerson.gender === 'Female' ? '#ec4899' : '#3b82f6',
-                }}>
-                  {selectedPerson.gender || 'Unknown'}
-                </span>
-                <span style={{
-                  ...styles.badge,
-                  background: selectedPerson.isDeceased ? '#fef2f2' : '#f0fdf4',
-                  color: selectedPerson.isDeceased ? '#dc2626' : '#16a34a',
-                }}>
-                  {selectedPerson.isDeceased ? '⚰️ Deceased' : '💚 Living'}
-                </span>
-              </div>
-            </div>
+      <style>{`
+        /* Property Divider - Uses Global CSS Variables */
+        .property-divider-wrapper {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          transition: background-color 0.3s ease, color 0.3s ease;
+          font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+        }
 
-            {/* Properties */}
-            <div style={styles.detailSection}>
-              <h4 style={{
-                fontSize: '14px',
-                fontWeight: 600,
-                color: darkMode ? '#ffffff' : '#1a202c',
-                margin: '0 0 12px 0',
-              }}>
-                📦 Properties ({selectedPerson.properties?.length || 0})
-              </h4>
-              {selectedPerson.properties?.length > 0 ? (
-                selectedPerson.properties.map((prop, index) => (
-                  <div
-                    key={index}
-                    style={{
-                      display: 'flex',
-                      justifyContent: 'space-between',
-                      padding: '8px 0',
-                      borderBottom: index < selectedPerson.properties.length - 1 
-                        ? `1px solid ${darkMode ? '#1e2d3d' : '#e2e8f0'}` 
-                        : 'none',
-                    }}
-                  >
-                    <div>
-                      <div style={{ 
-                        fontSize: '14px', 
-                        fontWeight: 500,
-                        color: darkMode ? '#ffffff' : '#1a202c',
-                      }}>
-                        {prop.name}
-                      </div>
-                      <div style={{ 
-                        fontSize: '12px', 
-                        color: darkMode ? '#94a3b8' : '#64748b',
-                      }}>
-                        {prop.classification || 'Property'}
-                      </div>
-                    </div>
-                    <div style={{ 
-                      fontSize: '14px', 
-                      fontWeight: 600,
-                      color: darkMode ? '#f59e0b' : '#d97706',
-                    }}>
-                      {prop.totalSqm} sqm
-                    </div>
-                  </div>
-                ))
-              ) : (
-                <p style={{ 
-                  fontSize: '13px', 
-                  color: darkMode ? '#94a3b8' : '#94a3b8',
-                  margin: 0,
-                }}>
-                  No properties assigned
-                </p>
-              )}
-            </div>
+        /* Navbar with integrated steps */
+        .pd-navbar {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 24px;
+          background: var(--bg-secondary);
+          border-bottom: 1px solid var(--border-color);
+          flex-shrink: 0;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
 
-            {/* Total Estate */}
-            {getTotalProperties(selectedPerson) > 0 && (
-              <div style={{
-                ...styles.detailSection,
-                background: darkMode ? '#1a2a1a' : '#f0fdf4',
-                borderColor: '#16a34a',
-              }}>
-                <p style={{ 
-                  fontSize: '14px', 
-                  fontWeight: 600,
-                  color: '#16a34a',
-                  margin: 0,
-                }}>
-                  Total Estate: {getTotalProperties(selectedPerson)} sqm
-                </p>
-              </div>
-            )}
-          </motion.div>
-        ) : (
-          <div style={styles.emptyState}>
-            <div style={{ fontSize: '48px', marginBottom: '16px' }}>👆</div>
-            <h3 style={styles.emptyStateTitle}>Select a person</h3>
-            <p style={styles.emptyStateText}>
-              Click on any person card<br />
-              to view their details and properties
-            </p>
-          </div>
-        )}
-      </div>
+        .pd-navbar-left {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          flex-shrink: 0;
+        }
+
+        .pd-logo {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .pd-logo-icon {
+          width: 36px;
+          height: 36px;
+          border-radius: 8px;
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 18px;
+          font-weight: 700;
+          color: #ffffff;
+        }
+
+        .pd-logo-text {
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0;
+          letter-spacing: -0.5px;
+        }
+
+        .pd-logo-subtext {
+          font-size: 11px;
+          color: var(--text-secondary);
+          margin: 0;
+          font-weight: 400;
+        }
+
+        .pd-version {
+          padding: 2px 10px;
+          border-radius: 6px;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-color);
+          font-size: 11px;
+          color: var(--text-secondary);
+        }
+
+        /* Stepper - now inline with navbar */
+        .pd-stepper {
+          display: flex;
+          align-items: center;
+          gap: 4px;
+          flex-shrink: 0;
+          overflow: auto;
+          padding: 4px 0;
+        }
+
+        .pd-step-item {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          flex-shrink: 0;
+        }
+
+        .pd-step-circle {
+          width: 30px;
+          height: 30px;
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          font-size: 12px;
+          font-weight: 600;
+          transition: all 0.3s ease;
+          cursor: default;
+          background: var(--border-color);
+          color: var(--text-secondary);
+        }
+
+        .pd-step-circle.completed {
+          background: #667eea;
+          color: #ffffff;
+          cursor: pointer;
+        }
+
+        .pd-step-circle.active {
+          background: rgba(102, 126, 234, 0.2);
+          color: #667eea;
+          border: 2px solid #667eea;
+        }
+
+        .pd-step-label {
+          font-size: 12px;
+          font-weight: 500;
+          color: var(--text-secondary);
+          transition: color 0.3s ease;
+          white-space: nowrap;
+        }
+
+        .pd-step-label.active {
+          color: #667eea;
+        }
+
+        .pd-step-label.completed {
+          color: var(--text-primary);
+        }
+
+        .pd-step-connector {
+          width: 24px;
+          height: 2px;
+          background: var(--border-color);
+          margin: 0 2px;
+          flex-shrink: 0;
+        }
+
+        .pd-step-connector.active {
+          background: linear-gradient(90deg, #667eea, #764ba2);
+        }
+
+        /* Content */
+        .pd-content {
+          flex: 1;
+          padding: 20px 24px;
+          overflow: auto;
+          background: var(--bg-primary);
+        }
+
+        .pd-module-wrapper {
+          height: 100%;
+        }
+
+        /* Footer */
+        .pd-footer {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 12px 24px;
+          background: var(--bg-secondary);
+          border-top: 1px solid var(--border-color);
+          flex-shrink: 0;
+        }
+
+        .pd-footer-left {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .pd-footer-right {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+        }
+
+        .pd-progress {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          font-size: 12px;
+          color: var(--text-secondary);
+        }
+
+        .pd-progress-bar {
+          width: 100px;
+          height: 4px;
+          border-radius: 2px;
+          background: var(--border-color);
+          overflow: hidden;
+        }
+
+        .pd-progress-fill {
+          height: 100%;
+          background: linear-gradient(90deg, #667eea, #764ba2);
+          border-radius: 2px;
+          transition: width 0.5s ease;
+        }
+
+        .pd-btn {
+          padding: 8px 20px;
+          border-radius: 8px;
+          border: none;
+          font-size: 13px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+        }
+
+        .pd-btn:disabled {
+          opacity: 0.5;
+          cursor: not-allowed;
+        }
+
+        .pd-btn-primary {
+          background: linear-gradient(135deg, #667eea, #764ba2);
+          color: #ffffff;
+        }
+
+        .pd-btn-primary:hover:not(:disabled) {
+          transform: translateY(-2px);
+          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+        }
+
+        .pd-btn-secondary {
+          background: var(--bg-secondary);
+          color: var(--text-primary);
+          border: 1px solid var(--border-color);
+        }
+
+        .pd-btn-secondary:hover:not(:disabled) {
+          background: var(--border-color);
+        }
+
+        /* Placeholder */
+        .pd-placeholder {
+          height: 100%;
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          padding: 40px;
+          text-align: center;
+        }
+
+        .pd-placeholder-icon {
+          font-size: 56px;
+          margin-bottom: 16px;
+          opacity: 0.5;
+        }
+
+        .pd-placeholder h2 {
+          font-size: 22px;
+          font-weight: 700;
+          color: var(--text-primary);
+          margin: 0 0 6px 0;
+        }
+
+        .pd-placeholder p {
+          font-size: 15px;
+          color: var(--text-secondary);
+          margin: 0 0 20px 0;
+        }
+
+        .pd-placeholder-stats {
+          padding: 10px 20px;
+          border-radius: 8px;
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          font-size: 13px;
+          color: var(--text-secondary);
+        }
+
+        .pd-badge {
+          display: inline-block;
+          padding: 3px 10px;
+          border-radius: 16px;
+          background: var(--bg-primary);
+          color: #667eea;
+          font-size: 12px;
+          font-weight: 500;
+          margin: 0 4px;
+        }
+
+        .pd-coming-soon {
+          margin-top: 14px;
+          font-size: 12px;
+          color: var(--text-secondary);
+          opacity: 0.7;
+        }
+
+        /* Dark mode overrides */
+        .dark .pd-badge-married {
+          background: #1a2a3a;
+          color: #60a5fa;
+        }
+
+        /* Responsive */
+        @media (max-width: 992px) {
+          .pd-navbar {
+            padding: 10px 16px;
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+          }
+
+          .pd-navbar-left {
+            justify-content: space-between;
+          }
+
+          .pd-stepper {
+            justify-content: center;
+          }
+
+          .pd-content {
+            padding: 16px;
+          }
+
+          .pd-footer {
+            padding: 10px 16px;
+            flex-wrap: wrap;
+            gap: 8px;
+          }
+        }
+
+        @media (max-width: 768px) {
+          .pd-logo-text {
+            font-size: 16px;
+          }
+          
+          .pd-logo-subtext {
+            display: none;
+          }
+
+          .pd-logo-icon {
+            width: 32px;
+            height: 32px;
+            font-size: 16px;
+          }
+
+          .pd-step-circle {
+            width: 26px;
+            height: 26px;
+            font-size: 11px;
+          }
+          
+          .pd-step-label {
+            display: none;
+          }
+          
+          .pd-step-connector {
+            width: 16px;
+            margin: 0 2px;
+          }
+
+          .pd-stepper {
+            gap: 2px;
+          }
+
+          .pd-content {
+            padding: 12px;
+          }
+          
+          .pd-footer {
+            flex-direction: column;
+            align-items: stretch;
+            gap: 8px;
+          }
+
+          .pd-footer-left {
+            justify-content: center;
+          }
+
+          .pd-footer-right {
+            justify-content: center;
+          }
+
+          .pd-btn {
+            padding: 6px 16px;
+            font-size: 12px;
+          }
+          
+          .pd-progress-bar {
+            width: 80px;
+          }
+          
+          .pd-progress {
+            font-size: 11px;
+          }
+          
+          .pd-placeholder h2 {
+            font-size: 18px;
+          }
+          
+          .pd-placeholder-icon {
+            font-size: 40px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .pd-navbar {
+            padding: 8px 12px;
+          }
+
+          .pd-navbar-left {
+            gap: 8px;
+          }
+          
+          .pd-logo-icon {
+            width: 28px;
+            height: 28px;
+            font-size: 14px;
+          }
+
+          .pd-logo-text {
+            font-size: 14px;
+          }
+          
+          .pd-version {
+            font-size: 10px;
+            padding: 2px 8px;
+          }
+
+          .pd-step-circle {
+            width: 22px;
+            height: 22px;
+            font-size: 10px;
+          }
+
+          .pd-step-connector {
+            width: 12px;
+          }
+
+          .pd-content {
+            padding: 8px;
+          }
+
+          .pd-footer {
+            padding: 8px 12px;
+          }
+        }
+      `}</style>
     </div>
   );
 };

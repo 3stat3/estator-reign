@@ -14,7 +14,7 @@ import {
   MoonIcon,
 } from '@heroicons/react/24/outline';
 
-// Theme Context (same as Login)
+// Theme Context
 const ThemeContext = createContext();
 const useTheme = () => useContext(ThemeContext);
 
@@ -42,8 +42,6 @@ const ThemeProvider = ({ children }) => {
 };
 
 const ResetPassword = () => {
-  const [searchParams] = useSearchParams();
-  const token = searchParams.get('token');
   const navigate = useNavigate();
   const { theme, toggleTheme } = useTheme();
   
@@ -55,7 +53,8 @@ const ResetPassword = () => {
   const [showPassword, setShowPassword] = useState(false);
   const [showConfirmPassword, setShowConfirmPassword] = useState(false);
   const [passwordStrength, setPasswordStrength] = useState(0);
-  const [tokenValid, setTokenValid] = useState(true);
+  const [tokenValid, setTokenValid] = useState(false);
+  const [isVerifying, setIsVerifying] = useState(true);
   const [isMobile, setIsMobile] = useState(false);
 
   // Responsive detection
@@ -68,27 +67,97 @@ const ResetPassword = () => {
     return () => window.removeEventListener('resize', handleResize);
   }, []);
 
-  // Check if we have a valid session from the reset link
+  // Handle the recovery flow
   useEffect(() => {
-    const checkSession = async () => {
+    const handleRecovery = async () => {
       try {
-        const { data: { session } } = await supabase.auth.getSession();
+        setIsVerifying(true);
+        setError('');
+
+        console.log('🔐 Starting password recovery verification...');
+
+        // First, check if we already have a session
+        const { data: { session }, error: sessionError } = await supabase.auth.getSession();
         
+        if (sessionError) {
+          console.error('❌ Session error:', sessionError);
+          throw new Error('Unable to verify your reset link.');
+        }
+
+        // If we have a session, we're good to go
         if (session) {
+          console.log('✅ Session found for user:', session.user.email);
           setTokenValid(true);
-        } else if (token) {
-          setError('Please use the link from your email. The session may have expired.');
+          setIsVerifying(false);
+          return;
+        }
+
+        // If no session, check if we have a recovery hash in the URL
+        const hash = window.location.hash;
+        console.log('📍 URL Hash:', hash);
+        
+        if (!hash || !hash.includes('type=recovery')) {
+          console.log('❌ No recovery hash found in URL');
+          // Check if we're on the reset-password route without the hash
+          throw new Error('No valid reset link found. Please request a new password reset.');
+        }
+
+        // Parse the hash parameters
+        const params = new URLSearchParams(hash.replace('#', '?'));
+        const accessToken = params.get('access_token');
+        const refreshToken = params.get('refresh_token');
+        const type = params.get('type');
+        const expiresAt = params.get('expires_at');
+
+        console.log('📝 Token found:', !!accessToken);
+        console.log('📝 Type:', type);
+        console.log('📝 Expires at:', expiresAt);
+
+        if (!accessToken || type !== 'recovery') {
+          console.log('❌ Invalid token or type');
+          throw new Error('Invalid reset link. Please request a new password reset.');
+        }
+
+        // Check if token is expired
+        if (expiresAt) {
+          const expiryTime = parseInt(expiresAt) * 1000; // Convert to milliseconds
+          const now = Date.now();
+          if (now > expiryTime) {
+            console.log('❌ Token has expired');
+            throw new Error('This reset link has expired. Please request a new one.');
+          }
+        }
+
+        // Manually set the session with the recovery token
+        console.log('🔄 Setting session with recovery token...');
+        const { data, error: setSessionError } = await supabase.auth.setSession({
+          access_token: accessToken,
+          refresh_token: refreshToken || '',
+        });
+
+        if (setSessionError) {
+          console.error('❌ Set session error:', setSessionError);
+          throw new Error('This reset link is invalid or has expired. Please request a new one.');
+        }
+
+        if (data.session) {
+          console.log('✅ Session set successfully for user:', data.session.user.email);
+          setTokenValid(true);
         } else {
-          setTokenValid(false);
-          setError('No reset token provided. Please request a new password reset.');
+          console.log('❌ No session returned');
+          throw new Error('Unable to establish session. Please request a new reset link.');
         }
       } catch (err) {
-        setError('Invalid or expired reset link.');
+        console.error('❌ Recovery error:', err);
+        setError(err.message || 'An error occurred while verifying your reset link.');
+        setTokenValid(false);
+      } finally {
+        setIsVerifying(false);
       }
     };
 
-    checkSession();
-  }, [token]);
+    handleRecovery();
+  }, []);
 
   // Password strength checker
   const checkPasswordStrength = (pwd) => {
@@ -125,29 +194,72 @@ const ResetPassword = () => {
     setMessage('');
 
     try {
+      console.log('🔄 Updating password...');
+      
+      // Update the password
       const { error: updateError } = await supabase.auth.updateUser({
         password: password
       });
 
       if (updateError) {
-        if (updateError.message.includes('token')) {
-          throw new Error('Your reset link has expired. Please request a new one.');
+        console.error('❌ Update error:', updateError);
+        if (updateError.message.includes('session') || updateError.message.includes('token')) {
+          throw new Error('Your reset session has expired. Please request a new password reset.');
         }
         throw updateError;
       }
 
+      console.log('✅ Password updated successfully!');
       setMessage('Password reset successful! Redirecting to login...');
+      
+      // Sign out to clear the temporary session
       await supabase.auth.signOut();
+      
+      // Clean the URL
+      window.history.replaceState({}, document.title, '/reset-password');
       
       setTimeout(() => {
         navigate('/login');
       }, 3000);
     } catch (err) {
+      console.error('❌ Reset error:', err);
       setError(err.message || 'Failed to reset password. Please try again.');
     } finally {
       setLoading(false);
     }
   };
+
+  // Loading state while verifying token
+  if (isVerifying) {
+    return (
+      <div className={`reset-container ${theme}`} data-theme={theme}>
+        <div className="reset-background">
+          <div className={`bg-gradient ${theme}`}></div>
+          <div className="bg-pattern"></div>
+        </div>
+        <div className="reset-wrapper">
+          <motion.div
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="reset-card"
+          >
+            <div className="theme-toggle-wrapper">
+              <button onClick={toggleTheme} className="theme-toggle" aria-label="Toggle theme">
+                {theme === 'light' ? <MoonIcon /> : <SunIcon />}
+              </button>
+            </div>
+            <div className="text-center">
+              <ArrowPathIcon className="w-16 h-16 text-blue-500 mx-auto mb-4 animate-spin" />
+              <h2 className="title">Verifying...</h2>
+              <p className="subtitle">Please wait while we verify your reset link</p>
+            </div>
+          </motion.div>
+        </div>
+        <style>{resetStyles}</style>
+      </div>
+    );
+  }
 
   // If no token, show error
   if (!tokenValid) {
@@ -173,7 +285,7 @@ const ResetPassword = () => {
               <ExclamationTriangleIcon className="w-16 h-16 text-red-500 mx-auto mb-4" />
               <h2 className="title">Invalid Reset Link</h2>
               <p className="subtitle mb-6">
-                This password reset link is invalid or has expired.
+                {error || "This password reset link is invalid or has expired."}
               </p>
               <Link
                 to="/forgot-password"
@@ -402,7 +514,7 @@ const ResetPasswordWithTheme = (props) => (
 
 export default ResetPasswordWithTheme;
 
-// Shared styles matching Login page
+// Styles
 const resetStyles = `
   /* CSS Variables for Themes */
   :root {
