@@ -1,10 +1,8 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
-import InterestCalculator from './InterestCalculator';
 import ZonalValueLocator from './ZonalValueLocator';
 import RequirementReminders from './RequirementReminders';
 import {
-  CalculatorIcon,
   MapPinIcon,
   BellIcon,
   SparklesIcon,
@@ -12,19 +10,10 @@ import {
 } from '@heroicons/react/24/outline';
 
 const TaxHelpers = () => {
-  const [activeHelper, setActiveHelper] = useState('penalty');
+  const [activeHelper, setActiveHelper] = useState('zonal');
   const [isHovered, setIsHovered] = useState(null);
 
   const helpers = [
-    {
-      id: 'penalty',
-      label: 'Interest Calculator',
-      icon: CalculatorIcon,
-      description: 'Calculate tax interest with TRAIN rates',
-      color: '#3b82f6',
-      gradient: 'linear-gradient(135deg, #3b82f6, #2563eb)',
-      lightColor: 'rgba(59, 130, 246, 0.12)'
-    },
     {
       id: 'zonal',
       label: 'Zonal Value Locator',
@@ -47,8 +36,6 @@ const TaxHelpers = () => {
 
   const renderContent = () => {
     switch (activeHelper) {
-      case 'penalty':
-        return <InterestCalculator />;
       case 'zonal':
         return <ZonalValueLocator />;
       case 'requirements':
@@ -77,7 +64,7 @@ const TaxHelpers = () => {
             <h2 className="tax-helpers-title">Tax Helpers</h2>
           </div>
           <p className="tax-helpers-description">
-            Interest calculation · Zonal values · Requirement tracking
+            Zonal values · Requirement tracking
           </p>
         </div>
         <div className="header-right">

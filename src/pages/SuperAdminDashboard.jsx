@@ -6,6 +6,7 @@ import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalc
 import TaxSettings from '../components/Settings/TaxSettings';
 import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
 import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
+import InterestCalculator from '../components/HelpfulTools/InterestCalculator';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -49,15 +50,6 @@ const SuperAdminDashboard = () => {
   const helpfulToolsDropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
 
-  // DEBUG: Log state changes for submenus
-  useEffect(() => {
-    console.log('🔍 [DEBUG] showEstateTaxMenu changed:', showEstateTaxMenu);
-  }, [showEstateTaxMenu]);
-
-  useEffect(() => {
-    console.log('🔍 [DEBUG] showHelpfulToolsMenu changed:', showHelpfulToolsMenu);
-  }, [showHelpfulToolsMenu]);
-
   // Apply dark mode class to document
   useEffect(() => {
     if (darkMode) {
@@ -75,7 +67,6 @@ const SuperAdminDashboard = () => {
       const tablet = window.innerWidth <= 1024 && window.innerWidth > 768;
       setIsMobile(mobile);
       setIsTablet(tablet);
-      console.log('📱 [DEBUG] Screen size - Mobile:', mobile, 'Tablet:', tablet, 'Width:', window.innerWidth);
     };
     handleResize();
     window.addEventListener('resize', handleResize);
@@ -84,22 +75,16 @@ const SuperAdminDashboard = () => {
 
   useEffect(() => {
     const handleClickOutside = (e) => {
-      console.log('👆 [DEBUG] Click detected, target:', e.target.className);
-      
       if (showUserMenu && !e.target.closest('.user-menu-container')) {
-        console.log('🔴 [DEBUG] Closing user menu (click outside)');
         setShowUserMenu(false);
       }
       if (showNotifications && !e.target.closest('.notifications-container')) {
-        console.log('🔴 [DEBUG] Closing notifications (click outside)');
         setShowNotifications(false);
       }
       if (showEstateTaxMenu && !e.target.closest('.estate-tax-menu-container')) {
-        console.log('🔴 [DEBUG] Closing Estate Tax menu (click outside)');
         setShowEstateTaxMenu(false);
       }
       if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
-        console.log('🔴 [DEBUG] Closing Helpful Tools menu (click outside)');
         setShowHelpfulToolsMenu(false);
       }
       if (mobileMenuOpen && !e.target.closest('.mobile-menu-container') && !e.target.closest('.mobile-menu-toggle')) {
@@ -121,7 +106,7 @@ const SuperAdminDashboard = () => {
   // Helpful Tools sub-menu items
   const helpfulToolsItems = [
     { id: 'onnet-tracker', label: 'ONNET & eLA Tracker', icon: ChartPieIcon },
-    { id: 'tool2', label: 'Tool 2', icon: WrenchScrewdriverIcon },
+    { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon },
     { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
   ];
 
@@ -310,6 +295,46 @@ const SuperAdminDashboard = () => {
           </motion.div>
         );
 
+      case 'interest-calculator':
+        return (
+          <motion.div
+            key="interest-calculator"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <InterestCalculator />
+          </motion.div>
+        );
+
+      case 'tool3':
+        return (
+          <motion.div
+            key="tool3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <div className="content-header">
+              <div>
+                <h2 className="content-title">Tool 3</h2>
+                <p className="content-description">
+                  Coming soon...
+                </p>
+              </div>
+            </div>
+            <div className="placeholder-content">
+              <WrenchScrewdriverIcon className="placeholder-icon" />
+              <h3>Tool 3</h3>
+              <p>This tool is currently under development.</p>
+            </div>
+          </motion.div>
+        );
+
       case 'usermanagement':
         return (
           <motion.div
@@ -425,9 +450,6 @@ const SuperAdminDashboard = () => {
     }
   };
 
-  // DEBUG: Check what's rendering
-  console.log('🔄 [DEBUG] Rendering dashboard. isMobile:', isMobile, 'isTablet:', isTablet, 'showEstateTaxMenu:', showEstateTaxMenu, 'showHelpfulToolsMenu:', showHelpfulToolsMenu);
-
   return (
     <div className={`dashboard-container ${darkMode ? 'dark' : 'light'}`} data-theme={darkMode ? 'dark' : 'light'}>
       <nav className="dashboard-nav">
@@ -446,23 +468,10 @@ const SuperAdminDashboard = () => {
             <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
                 className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
-                onClick={() => {
-                  console.log('🖱️ [DEBUG] Estate Tax button clicked. Current state:', showEstateTaxMenu);
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowEstateTaxMenu(!showEstateTaxMenu);
-                  console.log('🖱️ [DEBUG] Estate Tax button clicked. New state will be:', !showEstateTaxMenu);
-                }}
-                onMouseEnter={() => {
-                  console.log('🐭 [DEBUG] Mouse enter Estate Tax');
-                  setShowEstateTaxMenu(true);
-                }}
-                onMouseLeave={() => {
-                  console.log('🐭 [DEBUG] Mouse leave Estate Tax');
-                  setTimeout(() => {
-                    if (!document.querySelector('.estate-tax-menu-container .dropdown-menu:hover')) {
-                      console.log('🐭 [DEBUG] Mouse leave - closing Estate Tax menu');
-                      setShowEstateTaxMenu(false);
-                    }
-                  }, 150);
+                  setShowHelpfulToolsMenu(false);
                 }}
               >
                 <Squares2X2Icon className="tab-icon" />
@@ -481,26 +490,12 @@ const SuperAdminDashboard = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -5, scale: 0.98 }}
                     transition={{ duration: 0.15 }}
-                    onMouseEnter={() => {
-                      console.log('🐭 [DEBUG] Mouse enter Estate Tax dropdown menu');
-                      setShowEstateTaxMenu(true);
-                    }}
-                    onMouseLeave={() => {
-                      console.log('🐭 [DEBUG] Mouse leave Estate Tax dropdown menu');
-                      setTimeout(() => {
-                        if (!document.querySelector('.estate-tax-menu-container .dropdown-menu:hover')) {
-                          console.log('🐭 [DEBUG] Mouse leave - closing Estate Tax menu from dropdown');
-                          setShowEstateTaxMenu(false);
-                        }
-                      }, 150);
-                    }}
                   >
                     {estateTaxItems.map((item) => (
                       <button
                         key={item.id}
                         className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
                         onClick={() => {
-                          console.log('📋 [DEBUG] Estate Tax item clicked:', item.label);
                           setActiveTab(item.id);
                           setShowEstateTaxMenu(false);
                         }}
@@ -521,23 +516,10 @@ const SuperAdminDashboard = () => {
             <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
               <button
                 className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
-                onClick={() => {
-                  console.log('🖱️ [DEBUG] Helpful Tools button clicked. Current state:', showHelpfulToolsMenu);
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowHelpfulToolsMenu(!showHelpfulToolsMenu);
-                  console.log('🖱️ [DEBUG] Helpful Tools button clicked. New state will be:', !showHelpfulToolsMenu);
-                }}
-                onMouseEnter={() => {
-                  console.log('🐭 [DEBUG] Mouse enter Helpful Tools');
-                  setShowHelpfulToolsMenu(true);
-                }}
-                onMouseLeave={() => {
-                  console.log('🐭 [DEBUG] Mouse leave Helpful Tools');
-                  setTimeout(() => {
-                    if (!document.querySelector('.helpful-tools-menu-container .dropdown-menu:hover')) {
-                      console.log('🐭 [DEBUG] Mouse leave - closing Helpful Tools menu');
-                      setShowHelpfulToolsMenu(false);
-                    }
-                  }, 150);
+                  setShowEstateTaxMenu(false);
                 }}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
@@ -556,26 +538,12 @@ const SuperAdminDashboard = () => {
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -5, scale: 0.98 }}
                     transition={{ duration: 0.15 }}
-                    onMouseEnter={() => {
-                      console.log('🐭 [DEBUG] Mouse enter Helpful Tools dropdown menu');
-                      setShowHelpfulToolsMenu(true);
-                    }}
-                    onMouseLeave={() => {
-                      console.log('🐭 [DEBUG] Mouse leave Helpful Tools dropdown menu');
-                      setTimeout(() => {
-                        if (!document.querySelector('.helpful-tools-menu-container .dropdown-menu:hover')) {
-                          console.log('🐭 [DEBUG] Mouse leave - closing Helpful Tools menu from dropdown');
-                          setShowHelpfulToolsMenu(false);
-                        }
-                      }, 150);
-                    }}
                   >
                     {helpfulToolsItems.map((item) => (
                       <button
                         key={item.id}
                         className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
                         onClick={() => {
-                          console.log('📋 [DEBUG] Helpful Tools item clicked:', item.label);
                           setActiveTab(item.id);
                           setShowHelpfulToolsMenu(false);
                         }}
@@ -610,9 +578,10 @@ const SuperAdminDashboard = () => {
             <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
                 className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
-                onClick={() => {
-                  console.log('🖱️ [DEBUG] Tablet Estate Tax button clicked. Current state:', showEstateTaxMenu);
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowEstateTaxMenu(!showEstateTaxMenu);
+                  setShowHelpfulToolsMenu(false);
                 }}
               >
                 <Squares2X2Icon className="tab-icon" />
@@ -636,7 +605,6 @@ const SuperAdminDashboard = () => {
                         key={item.id}
                         className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
                         onClick={() => {
-                          console.log('📋 [DEBUG] Tablet Estate Tax item clicked:', item.label);
                           setActiveTab(item.id);
                           setShowEstateTaxMenu(false);
                           setMobileMenuOpen(false);
@@ -657,9 +625,10 @@ const SuperAdminDashboard = () => {
             <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
               <button
                 className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
-                onClick={() => {
-                  console.log('🖱️ [DEBUG] Tablet Helpful Tools button clicked. Current state:', showHelpfulToolsMenu);
+                onClick={(e) => {
+                  e.stopPropagation();
                   setShowHelpfulToolsMenu(!showHelpfulToolsMenu);
+                  setShowEstateTaxMenu(false);
                 }}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
@@ -683,7 +652,6 @@ const SuperAdminDashboard = () => {
                         key={item.id}
                         className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
                         onClick={() => {
-                          console.log('📋 [DEBUG] Tablet Helpful Tools item clicked:', item.label);
                           setActiveTab(item.id);
                           setShowHelpfulToolsMenu(false);
                           setMobileMenuOpen(false);
@@ -845,33 +813,6 @@ const SuperAdminDashboard = () => {
         </AnimatePresence>
       </main>
 
-      {/* DEBUG: Display current state visually */}
-      <div style={{
-        position: 'fixed',
-        bottom: '10px',
-        right: '10px',
-        background: 'rgba(0,0,0,0.8)',
-        color: 'white',
-        padding: '10px',
-        borderRadius: '8px',
-        fontSize: '12px',
-        fontFamily: 'monospace',
-        zIndex: 99999,
-        maxWidth: '300px',
-        pointerEvents: 'none'
-      }}>
-        <div>🔍 DEBUG INFO</div>
-        <div>isMobile: {String(isMobile)}</div>
-        <div>isTablet: {String(isTablet)}</div>
-        <div>showEstateTaxMenu: {String(showEstateTaxMenu)}</div>
-        <div>showHelpfulToolsMenu: {String(showHelpfulToolsMenu)}</div>
-        <div>activeTab: {activeTab}</div>
-        <div>mobileMenuOpen: {String(mobileMenuOpen)}</div>
-        <div style={{marginTop: '5px', fontSize: '10px', color: '#aaa'}}>
-          Window width: {window.innerWidth}px
-        </div>
-      </div>
-
       <style>{`
         * {
           margin: 0;
@@ -938,6 +879,7 @@ const SuperAdminDashboard = () => {
           position: sticky;
           top: 0;
           z-index: 1000;
+          overflow: visible !important;
         }
 
         .nav-container {
@@ -949,6 +891,8 @@ const SuperAdminDashboard = () => {
           justify-content: space-between;
           height: 70px;
           gap: 1rem;
+          overflow: visible !important;
+          position: relative;
         }
 
         .nav-brand {
@@ -979,12 +923,12 @@ const SuperAdminDashboard = () => {
           display: flex;
           align-items: center;
           gap: 0.25rem;
-          overflow-x: auto;
-          overflow-y: visible;
+          overflow: visible !important;
           scrollbar-width: none;
           position: relative;
           min-width: 0;
           padding: 0 0.25rem;
+          flex-wrap: nowrap;
         }
 
         .nav-tabs::-webkit-scrollbar {
@@ -1049,6 +993,8 @@ const SuperAdminDashboard = () => {
           position: relative;
           display: inline-block;
           flex-shrink: 0;
+          overflow: visible !important;
+          z-index: 10;
         }
 
         .dropdown-trigger {
@@ -1078,8 +1024,14 @@ const SuperAdminDashboard = () => {
           border-radius: 0.75rem;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
           padding: 0.5rem;
-          z-index: 9999;
-          overflow: visible;
+          z-index: 99999 !important;
+          overflow: visible !important;
+          display: block !important;
+        }
+
+        /* Fix dropdown positioning when on tablet */
+        .tablet-nav .dropdown-menu {
+          left: -4rem;
         }
 
         .dropdown-item-nav {
@@ -1183,6 +1135,7 @@ const SuperAdminDashboard = () => {
 
         .user-menu-container {
           position: relative;
+          z-index: 10;
         }
 
         .user-menu-btn {

@@ -241,7 +241,7 @@ const InterestCalculator = () => {
   };
 
   return (
-    <div className="interest-calculator">
+    <div className="interest-calculator-standalone">
       {/* Header */}
       <div className="calculator-header">
         <div className="header-left">
@@ -648,9 +648,12 @@ const InterestCalculator = () => {
       </div>
 
       <style>{`
-        .interest-calculator {
+        .interest-calculator-standalone {
+          width: 100%;
           background: var(--card-bg);
-          border-radius: 0.75rem;
+          border-radius: 1rem;
+          padding: 1.5rem;
+          border: 1px solid var(--border-color);
         }
 
         /* ===== HEADER ===== */
@@ -1541,8 +1544,8 @@ const InterestCalculator = () => {
         }
 
         @media (max-width: 768px) {
-          .interest-calculator {
-            padding: 0.5rem;
+          .interest-calculator-standalone {
+            padding: 1rem;
           }
 
           .calculator-header {
@@ -1605,6 +1608,10 @@ const InterestCalculator = () => {
         }
 
         @media (max-width: 480px) {
+          .interest-calculator-standalone {
+            padding: 0.75rem;
+          }
+
           .header-title-group {
             flex-direction: column;
             align-items: flex-start;

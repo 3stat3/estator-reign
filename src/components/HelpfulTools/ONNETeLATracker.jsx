@@ -260,6 +260,7 @@ const ONNETeLATracker = () => {
     if (scoresChanged) {
       setRows(updatedRows);
     }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rows.map(row => `${row.givenDate}|${row.givenTime}|${row.targetDate}|${row.targetTime}|${row.submittedDate}|${row.submittedTime}`).join('||')]);
 
   // Get all column keys for checking if row is filled
@@ -1136,7 +1137,9 @@ const ONNETeLATracker = () => {
                     <td className="date-time-cell-display">
                       {renderDateTimeDisplay(row)}
                     </td>
-                    <td>{renderScoreCell(row.score)}</td>
+                    <td className="score-cell-wrapper">
+                      {renderScoreCell(row.score)}
+                    </td>
                     <td>{renderDisplayCell(row.caseType)}</td>
                     <td>{renderDisplayCell(row.whatKind)}</td>
                     <td>{renderDisplayCell(row.quantity)}</td>
@@ -1340,7 +1343,7 @@ const ONNETeLATracker = () => {
         }
 
         .stat-item.total .stat-value {
-          color: var(--gradient-start);
+          color: #667eea;
         }
 
         .stat-label {
@@ -1421,7 +1424,7 @@ const ONNETeLATracker = () => {
         }
 
         .filter-select:focus {
-          border-color: var(--gradient-start);
+          border-color: #667eea;
           box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
@@ -1544,32 +1547,32 @@ const ONNETeLATracker = () => {
         }
 
         .tracker-row:hover .record-number {
-          color: var(--gradient-start);
+          color: #667eea;
         }
 
         .row-even {
-          background-color: #ffffff;
+          background-color: var(--bg-secondary);
         }
 
         .row-odd {
-          background-color: #f0f4ff;
+          background-color: rgba(102, 126, 234, 0.04);
         }
 
         .row-odd:hover td {
-          background-color: #e3ebff;
+          background-color: rgba(102, 126, 234, 0.08);
         }
 
         .row-selected td {
-          background-color: #dbeafe !important;
+          background-color: rgba(102, 126, 234, 0.12) !important;
           border-bottom-color: #93c5fd;
         }
 
         .row-selected.row-odd td {
-          background-color: #dbeafe !important;
+          background-color: rgba(102, 126, 234, 0.12) !important;
         }
 
         .row-selected .record-number {
-          color: #2563eb !important;
+          color: #667eea !important;
           font-weight: 800;
         }
 
@@ -1706,13 +1709,19 @@ const ONNETeLATracker = () => {
           opacity: 1;
         }
 
+        .score-cell-wrapper {
+          text-align: center;
+          padding: 0.2rem 0.3rem !important;
+        }
+
         .score-cell {
           display: inline-block;
-          padding: 0.2rem 0.6rem;
+          padding: 0.25rem 0.7rem;
           border-radius: 2rem;
-          font-size: 0.8rem;
+          font-size: 0.85rem;
           font-weight: 700;
-          min-width: 30px;
+          min-width: 36px;
+          text-align: center;
         }
 
         .score-high {
@@ -1730,6 +1739,7 @@ const ONNETeLATracker = () => {
         .score-empty {
           background: rgba(107, 114, 128, 0.1);
           color: var(--text-tertiary);
+          font-size: 0.75rem;
         }
 
         .display-cell {
@@ -1759,15 +1769,15 @@ const ONNETeLATracker = () => {
         }
 
         .row-even .col-actions {
-          background: #ffffff;
+          background: var(--bg-secondary);
         }
 
         .row-odd .col-actions {
-          background: #f0f4ff;
+          background: rgba(102, 126, 234, 0.04);
         }
 
         .row-selected .col-actions {
-          background: #dbeafe !important;
+          background: rgba(102, 126, 234, 0.12) !important;
         }
 
         .action-group {
@@ -1946,7 +1956,7 @@ const ONNETeLATracker = () => {
         .modal-section-icon {
           width: 1rem;
           height: 1rem;
-          color: var(--gradient-start);
+          color: #667eea;
         }
 
         .modal-section-content {
@@ -2019,7 +2029,7 @@ const ONNETeLATracker = () => {
         }
 
         .modal-input:focus {
-          border-color: var(--gradient-start);
+          border-color: #667eea;
           box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
         }
 
@@ -2285,7 +2295,7 @@ const ONNETeLATracker = () => {
         .footer-record-count {
           font-size: 1.5rem;
           font-weight: 700;
-          color: var(--gradient-start);
+          color: #667eea;
         }
 
         .footer-record-label {
@@ -2344,7 +2354,7 @@ const ONNETeLATracker = () => {
           width: 40px;
           height: 40px;
           border: 3px solid var(--border-color);
-          border-top-color: var(--gradient-start);
+          border-top-color: #667eea;
           border-radius: 50%;
           animation: spin 0.8s linear infinite;
         }
