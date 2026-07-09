@@ -83,7 +83,7 @@ const Login = () => {
   const location = useLocation();
   const emailInputRef = useRef(null);
   
-  const from = location.state?.from?.pathname || '/dashboard';
+  const from = location.state?.from?.pathname || '/welcome';
   
   const {
     register,
@@ -281,7 +281,7 @@ const Login = () => {
   const handleUserApproval = async (user) => {
     switch (user.approval_status) {
       case 'approved':
-        navigate(from, { replace: true });
+        navigate('/welcome', { replace: true });
         break;
       case 'pending_initial':
         setError(

@@ -1,4 +1,4 @@
-import React, { useEffect } from 'react';
+import React, { useEffect, useState, useRef } from 'react';
 import { Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
 import DemoDashboard from './DemoDashboard';
@@ -9,16 +9,35 @@ import SuperAdminDashboard from './SuperAdminDashboard';
 const Dashboard = () => {
     const { user, loading } = useAuth();
     const navigate = useNavigate();
+    const [isReady, setIsReady] = useState(false);
+    const hasValidated = useRef(false);
 
-    // Redirect to login if no user after loading
     useEffect(() => {
-        if (!loading && !user) {
-            navigate('/login', { replace: true });
+        // Only run validation once
+        if (hasValidated.current) return;
+        
+        if (!loading) {
+            if (!user) {
+                navigate('/login', { replace: true });
+                return;
+            }
+
+            // Check for welcome flag
+            const cameFromWelcome = sessionStorage.getItem('cameFromWelcome');
+            
+            if (!cameFromWelcome) {
+                navigate('/welcome', { replace: true });
+                return;
+            }
+
+            // Validated successfully
+            hasValidated.current = true;
+            sessionStorage.removeItem('cameFromWelcome');
+            setIsReady(true);
         }
     }, [loading, user, navigate]);
 
-    // Show loading state
-    if (loading) {
+    if (loading || !isReady) {
         return (
             <div style={{ 
                 display: 'flex', 
@@ -37,28 +56,18 @@ const Dashboard = () => {
                     animation: 'spin 1s linear infinite'
                 }} />
                 <p style={{ color: '#64748b', fontSize: '1rem' }}>Loading dashboard...</p>
+                <style>{`
+                    @keyframes spin {
+                        0% { transform: rotate(0deg); }
+                        100% { transform: rotate(360deg); }
+                    }
+                `}</style>
             </div>
         );
     }
 
-    // If no user, redirect to login
     if (!user) {
         return <Navigate to="/login" replace />;
-    }
-
-    // Check if user data is complete - try to recover from localStorage
-    if (!user.id || !user.email) {
-        try {
-            const storedUser = localStorage.getItem('user');
-            if (storedUser) {
-                const parsedUser = JSON.parse(storedUser);
-                if (parsedUser.id && parsedUser.email) {
-                    // User will be refreshed by AuthContext
-                }
-            }
-        } catch (e) {
-            // Error recovering user data
-        }
     }
 
     // Check approval status - if not approved, show Demo Dashboard

@@ -5,6 +5,7 @@ import SplashScreen from './components/SplashScreen/SplashScreen';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
+import WelcomePage from './pages/WelcomePage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import EmailConfirmation from './pages/EmailConfirmation';
@@ -55,6 +56,11 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     return children;
   }
 
+  // Allow access to welcome page without redirect
+  if (location.pathname === '/welcome') {
+    return children;
+  }
+
   if (loading || isChecking) {
     return <AppLoading />;
   }
@@ -85,7 +91,7 @@ const PublicOnlyRoute = ({ children }) => {
   }
   
   if (user) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to="/welcome" replace />;
   }
   
   return children;
@@ -172,6 +178,13 @@ function AppContent() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/email-confirmation" element={<EmailConfirmation />} />
         
+        {/* Welcome Page - Protected but accessible after login */}
+        <Route path="/welcome" element={
+          <ProtectedRoute>
+            <WelcomePage />
+          </ProtectedRoute>
+        } />
+        
         {/* Protected routes - require authentication */}
         <Route path="/dashboard" element={
           <ProtectedRoute>
@@ -186,12 +199,12 @@ function AppContent() {
         
         {/* Root route */}
         <Route path="/" element={
-          <Navigate to={user ? "/dashboard" : "/login"} replace />
+          <Navigate to={user ? "/welcome" : "/login"} replace />
         } />
         
         {/* Catch all */}
         <Route path="*" element={
-          <Navigate to={user ? "/dashboard" : "/login"} replace />
+          <Navigate to={user ? "/welcome" : "/login"} replace />
         } />
       </Routes>
     </div>

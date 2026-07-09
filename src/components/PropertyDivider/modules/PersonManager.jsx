@@ -1,6 +1,9 @@
 // src/components/PropertyDivider/modules/PersonManager.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import * as XLSX from 'xlsx';
+import PersonDetailModal from './PersonDetailModal';
+import { assignGenerations } from '../services/familyTreeService';
 
 const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   const [showAddForm, setShowAddForm] = useState(false);
@@ -9,6 +12,16 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [editingPerson, setEditingPerson] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  
+  // Propositus (Decedent) state - the person whose estate is being divided
+  const [propositusId, setPropositusId] = useState(null);
+
+  // Person Detail Modal state
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [selectedPersonForDetail, setSelectedPersonForDetail] = useState(null);
+
+  // File upload ref
+  const fileInputRef = useRef(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -29,14 +42,63 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   });
 
   // Bulk import state - Excel-like table
-  const [bulkRows, setBulkRows] = useState([
-    { id: 1, name: '', father: '', mother: '', spouse: '', gender: 'Male', isDeceased: 'No', dateOfDeath: '' }
-  ]);
-  const [nextRowId, setNextRowId] = useState(2);
+  const [bulkRows, setBulkRows] = useState([]);
+  const [nextRowId, setNextRowId] = useState(1);
+  const [bulkFileName, setBulkFileName] = useState('');
 
   const filteredPersons = persons.filter(person =>
     person.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
+
+  // Get the propositus person object
+  const propositus = persons.find(p => p.id === propositusId);
+
+  // Determine if a person is an heir (child, spouse, or parent of propositus)
+  const isHeir = (person) => {
+    if (!propositus) return false;
+    if (person.id === propositusId) return false;
+    
+    // Check if person is a child
+    if (person.fatherId === propositusId || person.motherId === propositusId) return true;
+    
+    // Check if person is the spouse
+    if (person.id === propositus.spouseId) return true;
+    
+    // Check if person is a parent (if no children)
+    const children = persons.filter(p => p.fatherId === propositusId || p.motherId === propositusId);
+    if (children.length === 0) {
+      if (person.id === propositus.fatherId || person.id === propositus.motherId) return true;
+    }
+    
+    return false;
+  };
+
+  // Check if person is predeceased (died before the propositus)
+  const isPredeceased = (person) => {
+    if (!propositus || !propositus.dateOfDeath) return false;
+    if (!person.isDeceased || !person.dateOfDeath) return false;
+    return new Date(person.dateOfDeath) < new Date(propositus.dateOfDeath);
+  };
+
+  // Check if person has children who are heirs by representation
+  const hasHeirsByRepresentation = (person) => {
+    if (!propositus) return false;
+    if (!person.isDeceased) return false;
+    
+    // If this person is a child of the propositus and predeceased
+    const isChildOfPropositus = person.fatherId === propositusId || person.motherId === propositusId;
+    if (!isChildOfPropositus) return false;
+    if (!isPredeceased(person)) return false;
+    
+    // Check if they have children
+    const grandchildren = persons.filter(p => p.fatherId === person.id || p.motherId === person.id);
+    return grandchildren.length > 0;
+  };
+
+  // Get children of a person
+  const getChildren = (personId) => {
+    return persons.filter(p => p.fatherId === personId || p.motherId === personId);
+  };
 
   const getGenerationLabel = (person) => {
     if (!person.generation) return 'Unknown';
@@ -52,6 +114,23 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
       return { label: 'Deceased', color: '#dc2626', bg: darkMode ? '#2d1f1f' : '#fef2f2' };
     }
     return { label: 'Living', color: '#16a34a', bg: darkMode ? '#1a2a1a' : '#f0fdf4' };
+  };
+
+  // Get role badge for a person
+  const getRoleBadge = (person) => {
+    if (person.id === propositusId) {
+      return { label: '👑 Propositus', color: '#8b5cf6', bg: darkMode ? '#2d1a3a' : '#f3e8ff' };
+    }
+    if (isPredeceased(person) && hasHeirsByRepresentation(person)) {
+      return { label: '⚰️ Predeceased (Has Reps)', color: '#f59e0b', bg: darkMode ? '#3d2a1a' : '#fef3c7' };
+    }
+    if (isPredeceased(person)) {
+      return { label: '⚰️ Predeceased', color: '#6b7280', bg: darkMode ? '#1f2937' : '#f3f4f6' };
+    }
+    if (isHeir(person) && !person.isDeceased) {
+      return { label: '🏛️ Heir', color: '#10b981', bg: darkMode ? '#1a3a2a' : '#d1fae5' };
+    }
+    return null;
   };
 
   const formatDate = (dateString) => {
@@ -80,11 +159,17 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
       generation: 0
     };
     
+    let updatedPersons;
     if (editingPerson) {
-      onUpdate(persons.map(p => p.id === editingPerson.id ? newPerson : p));
+      updatedPersons = persons.map(p => p.id === editingPerson.id ? newPerson : p);
     } else {
-      onUpdate([...persons, newPerson]);
+      updatedPersons = [...persons, newPerson];
     }
+    
+    // Assign generations
+    const personsWithGenerations = assignGenerations(updatedPersons, propositusId);
+    
+    onUpdate(personsWithGenerations);
     
     setFormData({
       name: '',
@@ -100,6 +185,147 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   };
 
   // Bulk import handlers
+  const downloadExcelTemplate = () => {
+    const headers = ['Name', 'Father', 'Mother', 'Spouse', 'Gender', 'IsDeceased', 'DateOfDeath'];
+    const sampleData = [
+      ['Juan Dela Cruz', '', '', 'Maria Dela Cruz', 'Male', 'Yes', '2024-01-15'],
+      ['Maria Dela Cruz', '', '', 'Juan Dela Cruz', 'Female', 'No', ''],
+      ['Pedro Dela Cruz', 'Juan Dela Cruz', 'Maria Dela Cruz', '', 'Male', 'Yes', '2023-03-10'],
+      ['Ana Dela Cruz', 'Juan Dela Cruz', 'Maria Dela Cruz', '', 'Female', 'No', '']
+    ];
+    
+    const wb = XLSX.utils.book_new();
+    const wsData = [headers, ...sampleData];
+    const ws = XLSX.utils.aoa_to_sheet(wsData);
+    
+    // Set column widths
+    ws['!cols'] = [
+      { wch: 25 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 20 },
+      { wch: 12 },
+      { wch: 12 },
+      { wch: 18 }
+    ];
+    
+    XLSX.utils.book_append_sheet(wb, ws, 'Persons');
+    XLSX.writeFile(wb, 'Person_Import_Template.xlsx');
+  };
+
+  const handleFileUpload = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    
+    setBulkFileName(file.name);
+    
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      try {
+        const data = new Uint8Array(event.target.result);
+        const workbook = XLSX.read(data, { type: 'array' });
+        const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
+        
+        // Get the raw data with cell formatting preserved
+        const jsonData = XLSX.utils.sheet_to_json(firstSheet, { 
+          defval: '',  // Default value for empty cells
+          raw: false,  // Use formatted values instead of raw
+          dateNF: 'yyyy-mm-dd'  // Date format for date cells
+        });
+        
+        if (jsonData.length === 0) {
+          alert('The file is empty or has no valid data.');
+          return;
+        }
+        
+        console.log('📊 Excel data parsed:', jsonData);
+        
+        // Convert to bulk rows with proper date handling
+        const newRows = jsonData.map((row, index) => {
+          // Handle DateOfDeath - could be string, number (Excel serial), or Date object
+          let dateOfDeath = row.DateOfDeath || '';
+          
+          if (dateOfDeath) {
+            // If it's a number (Excel serial date), convert it
+            if (typeof dateOfDeath === 'number') {
+              // Excel serial date: days since 1900-01-01
+              const excelEpoch = new Date(1900, 0, 1);
+              // Excel has a bug: it considers 1900 as a leap year
+              const daysOffset = dateOfDeath > 60 ? dateOfDeath - 1 : dateOfDeath;
+              const date = new Date(excelEpoch);
+              date.setDate(date.getDate() + daysOffset - 1);
+              dateOfDeath = date.toISOString().split('T')[0];
+            } 
+            // If it's a Date object
+            else if (dateOfDeath instanceof Date) {
+              dateOfDeath = dateOfDeath.toISOString().split('T')[0];
+            }
+            // If it's a string, try to parse it
+            else if (typeof dateOfDeath === 'string') {
+              // Try different date formats
+              const date = new Date(dateOfDeath);
+              if (!isNaN(date.getTime())) {
+                dateOfDeath = date.toISOString().split('T')[0];
+              }
+              // If it's already in YYYY-MM-DD format, keep it
+              // Otherwise, try to parse common formats
+              else {
+                // Try MM/DD/YYYY or M/D/YYYY
+                const parts = dateOfDeath.split(/[\/\-\.]/);
+                if (parts.length === 3) {
+                  // Try to determine if it's MM/DD/YYYY or DD/MM/YYYY
+                  // For simplicity, assume MM/DD/YYYY (US format)
+                  const month = parseInt(parts[0]) - 1;
+                  const day = parseInt(parts[1]);
+                  const year = parseInt(parts[2]);
+                  if (!isNaN(month) && !isNaN(day) && !isNaN(year) && year > 1900) {
+                    const d = new Date(year, month, day);
+                    if (!isNaN(d.getTime())) {
+                      dateOfDeath = d.toISOString().split('T')[0];
+                    }
+                  }
+                }
+              }
+            }
+          }
+          
+          // Convert Yes/No to boolean for isDeceased
+          const isDeceased = row.IsDeceased?.toString().toLowerCase() === 'yes' || 
+                            row.IsDeceased === true ||
+                            row.IsDeceased === 1;
+          
+          console.log(`📅 Row ${index + 1}: ${row.Name} - Deceased: ${isDeceased}, DateOfDeath: ${dateOfDeath}`);
+          
+          return {
+            id: Date.now() + index,
+            name: row.Name?.toString().trim() || '',
+            father: row.Father?.toString().trim() || '',
+            mother: row.Mother?.toString().trim() || '',
+            spouse: row.Spouse?.toString().trim() || '',
+            gender: row.Gender || 'Male',
+            isDeceased: isDeceased ? 'Yes' : 'No',
+            dateOfDeath: dateOfDeath || ''
+          };
+        });
+        
+        setBulkRows(newRows);
+        setNextRowId(newRows.length + 1);
+        
+        console.log('✅ Bulk rows created:', newRows);
+        
+      } catch (error) {
+        console.error('Error reading file:', error);
+        alert('Error reading the Excel file. Please make sure it\'s a valid .xlsx or .xls file.');
+      }
+    };
+    reader.readAsArrayBuffer(file);
+    
+    // Reset file input
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const addBulkRow = () => {
     setBulkRows([
       ...bulkRows,
@@ -123,7 +349,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   };
 
   const handleBulkImport = () => {
-    // Validate rows
     const emptyRows = bulkRows.filter(row => !row.name.trim());
     if (emptyRows.length > 0) {
       alert('Please fill in the Name field for all rows or remove empty rows.');
@@ -132,12 +357,79 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
 
     const newPersons = bulkRows.map((row, index) => {
       const isDeceased = row.isDeceased?.toLowerCase() === 'yes';
+      
+      // Look up spouse by name to get their ID
+      let spouseId = '';
+      if (row.spouse?.trim()) {
+        const spouseName = row.spouse.trim();
+        // First, check if spouse already exists in the persons array
+        const existingSpouse = persons.find(p => p.name.toLowerCase() === spouseName.toLowerCase());
+        if (existingSpouse) {
+          spouseId = existingSpouse.id;
+        } else {
+          // Check if spouse is being added in this same bulk import
+          const spouseInBulk = bulkRows.find(r => 
+            r.name?.trim()?.toLowerCase() === spouseName.toLowerCase() && 
+            r.id !== row.id
+          );
+          if (spouseInBulk) {
+            // Calculate the ID that will be assigned to the spouse
+            const spouseIndex = bulkRows.indexOf(spouseInBulk);
+            spouseId = `p_${Date.now()}_${spouseIndex}`;
+          } else {
+            // If spouse not found, store the name as a string (will need manual linking later)
+            spouseId = row.spouse.trim();
+          }
+        }
+      }
+      
+      // Also look up father and mother by name
+      let fatherId = '';
+      if (row.father?.trim()) {
+        const fatherName = row.father.trim();
+        const existingFather = persons.find(p => p.name.toLowerCase() === fatherName.toLowerCase());
+        if (existingFather) {
+          fatherId = existingFather.id;
+        } else {
+          const fatherInBulk = bulkRows.find(r => 
+            r.name?.trim()?.toLowerCase() === fatherName.toLowerCase() && 
+            r.id !== row.id
+          );
+          if (fatherInBulk) {
+            const fatherIndex = bulkRows.indexOf(fatherInBulk);
+            fatherId = `p_${Date.now()}_${fatherIndex}`;
+          } else {
+            fatherId = row.father.trim();
+          }
+        }
+      }
+      
+      let motherId = '';
+      if (row.mother?.trim()) {
+        const motherName = row.mother.trim();
+        const existingMother = persons.find(p => p.name.toLowerCase() === motherName.toLowerCase());
+        if (existingMother) {
+          motherId = existingMother.id;
+        } else {
+          const motherInBulk = bulkRows.find(r => 
+            r.name?.trim()?.toLowerCase() === motherName.toLowerCase() && 
+            r.id !== row.id
+          );
+          if (motherInBulk) {
+            const motherIndex = bulkRows.indexOf(motherInBulk);
+            motherId = `p_${Date.now()}_${motherIndex}`;
+          } else {
+            motherId = row.mother.trim();
+          }
+        }
+      }
+      
       return {
         id: `p_${Date.now()}_${index}`,
         name: row.name.trim(),
-        fatherId: row.father?.trim() || '',
-        motherId: row.mother?.trim() || '',
-        spouseId: row.spouse?.trim() || '',
+        fatherId: fatherId,
+        motherId: motherId,
+        spouseId: spouseId,
         gender: row.gender || 'Male',
         isDeceased: isDeceased,
         dateOfDeath: isDeceased ? row.dateOfDeath || '' : '',
@@ -146,25 +438,99 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
       };
     });
     
-    onUpdate([...persons, ...newPersons]);
+    const updatedPersons = [...persons, ...newPersons];
     
-    // Reset bulk rows
-    setBulkRows([
-      { id: 1, name: '', father: '', mother: '', spouse: '', gender: 'Male', isDeceased: 'No', dateOfDeath: '' }
-    ]);
-    setNextRowId(2);
+    // Assign generations
+    const personsWithGenerations = assignGenerations(updatedPersons, propositusId);
+    
+    onUpdate(personsWithGenerations);
+    
+    setBulkRows([]);
+    setBulkFileName('');
     setShowBulkAdd(false);
   };
 
   const handleDelete = (personId) => {
     if (window.confirm('Are you sure you want to delete this person?')) {
-      onUpdate(persons.filter(p => p.id !== personId));
+      // If deleting the propositus, clear the selection
+      let newPropositusId = propositusId;
+      if (personId === propositusId) {
+        newPropositusId = null;
+        setPropositusId(null);
+      }
+      
+      const updatedPersons = persons.filter(p => p.id !== personId);
+      
+      // Assign generations
+      const personsWithGenerations = assignGenerations(updatedPersons, newPropositusId);
+      
+      onUpdate(personsWithGenerations);
       if (selectedPerson?.id === personId) setSelectedPerson(null);
     }
   };
 
+  // Get stats for the propositus
+  const getPropositusStats = () => {
+    if (!propositus) return null;
+    
+    const heirs = persons.filter(p => isHeir(p) && !p.isDeceased);
+    const predeceased = persons.filter(p => isPredeceased(p));
+    const withReps = persons.filter(p => hasHeirsByRepresentation(p));
+    
+    return {
+      totalHeirs: heirs.length,
+      predeceasedCount: predeceased.length,
+      withRepsCount: withReps.length
+    };
+  };
+
+  const propositusStats = getPropositusStats();
+
   return (
     <div className="pm-wrapper">
+      {/* Propositus Selector */}
+      <div className="pm-propositus-section">
+        <div className="pm-propositus-selector">
+          <div className="pm-propositus-label">
+            <span className="pm-propositus-icon">🎯</span>
+            <span>Decedent (Propositus):</span>
+          </div>
+          <select
+            value={propositusId || ''}
+            onChange={(e) => setPropositusId(e.target.value || null)}
+            className="pm-propositus-select"
+          >
+            <option value="">— Select the decedent —</option>
+            {persons.filter(p => p.isDeceased).map(p => (
+              <option key={p.id} value={p.id}>
+                {p.name} {p.dateOfDeath ? `(† ${formatDate(p.dateOfDeath)})` : ''}
+              </option>
+            ))}
+          </select>
+          {propositus && (
+            <span className="pm-propositus-badge">
+              👑 {propositus.name}
+            </span>
+          )}
+        </div>
+        
+        {propositusStats && (
+          <div className="pm-propositus-stats">
+            <span className="pm-stat-item">
+              🏛️ {propositusStats.totalHeirs} Heirs
+            </span>
+            <span className="pm-stat-item">
+              ⚰️ {propositusStats.predeceasedCount} Predeceased
+            </span>
+            {propositusStats.withRepsCount > 0 && (
+              <span className="pm-stat-item pm-stat-reps">
+                👶 {propositusStats.withRepsCount} with Reps
+              </span>
+            )}
+          </div>
+        )}
+      </div>
+
       {/* Header - All in one row */}
       <div className="pm-header">
         <div className="pm-header-left">
@@ -186,7 +552,7 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         
         <div className="pm-header-actions">
           <button className="pm-btn pm-btn-secondary" onClick={() => setShowBulkAdd(true)}>
-            📋 Bulk Import
+            📋 Bulk Add Person
           </button>
           <button className="pm-btn pm-btn-primary" onClick={() => setShowAddForm(true)}>
             + Add Person
@@ -200,23 +566,33 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           filteredPersons.map((person) => {
             const status = getStatusBadge(person);
             const isSelected = selectedPerson?.id === person.id;
+            const isPropositus = person.id === propositusId;
+            const roleBadge = getRoleBadge(person);
+            const childCount = getChildren(person.id).length;
+            const isPredeceasedPerson = isPredeceased(person);
+            const hasReps = hasHeirsByRepresentation(person);
             
             return (
               <motion.div
                 key={person.id}
                 initial={{ opacity: 0, y: 20 }}
                 animate={{ opacity: 1, y: 0 }}
-                className={`pm-card ${isSelected ? 'selected' : ''}`}
-                onClick={() => setSelectedPerson(person)}
+                className={`pm-card ${isSelected ? 'selected' : ''} ${isPropositus ? 'propositus' : ''}`}
+                onClick={() => {
+                  setSelectedPersonForDetail(person);
+                  setShowDetailModal(true);
+                }}
                 whileHover={{ y: -4, transition: { duration: 0.2 } }}
               >
                 <div className="pm-card-header">
                   <div className="pm-avatar" style={{
-                    background: person.isDeceased 
-                      ? '#dc2626' 
-                      : person.gender === 'Female' 
-                        ? 'linear-gradient(135deg, #ec4899, #db2777)'
-                        : 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                    background: isPropositus 
+                      ? 'linear-gradient(135deg, #8b5cf6, #6d28d9)'
+                      : person.isDeceased 
+                        ? '#dc2626' 
+                        : person.gender === 'Female' 
+                          ? 'linear-gradient(135deg, #ec4899, #db2777)'
+                          : 'linear-gradient(135deg, #3b82f6, #2563eb)'
                   }}>
                     {person.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
                   </div>
@@ -224,8 +600,13 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                     <h3 className="pm-card-name">
                       {person.name}
                       {person.isDeceased && ' ⚰️'}
+                      {isPropositus && ' 👑'}
                     </h3>
-                    <p className="pm-card-relationship">{getGenerationLabel(person)}</p>
+                    <p className="pm-card-relationship">
+                      {getGenerationLabel(person)}
+                      {isPredeceasedPerson && ' · ⚠️ Predeceased'}
+                      {hasReps && ` · 👶 ${getChildren(person.id).length} children (heirs by rep)`}
+                    </p>
                   </div>
                 </div>
                 
@@ -244,6 +625,20 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                   )}
                   {person.isDeceased && person.dateOfDeath && (
                     <span className="pm-badge pm-badge-date">📅 {formatDate(person.dateOfDeath)}</span>
+                  )}
+                  {roleBadge && (
+                    <span className="pm-badge" style={{
+                      background: roleBadge.bg,
+                      color: roleBadge.color,
+                      border: `1px solid ${roleBadge.color}`,
+                    }}>
+                      {roleBadge.label}
+                    </span>
+                  )}
+                  {childCount > 0 && !isPropositus && (
+                    <span className="pm-badge pm-badge-children">
+                      👶 {childCount} child{childCount > 1 ? 'ren' : ''}
+                    </span>
                   )}
                 </div>
 
@@ -441,7 +836,7 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         )}
       </AnimatePresence>
 
-      {/* Bulk Import Modal */}
+      {/* Bulk Import Modal - Excel Upload Flow */}
       <AnimatePresence>
         {showBulkAdd && (
           <motion.div
@@ -449,7 +844,11 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
             animate={{ opacity: 1 }}
             exit={{ opacity: 0 }}
             className="pm-modal-overlay"
-            onClick={() => setShowBulkAdd(false)}
+            onClick={() => {
+              setShowBulkAdd(false);
+              setBulkRows([]);
+              setBulkFileName('');
+            }}
           >
             <motion.div
               initial={{ scale: 0.9, y: 20 }}
@@ -460,19 +859,65 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
             >
               <div className="pm-modal-header">
                 <div>
-                  <h2 className="pm-modal-title">📋 Bulk Import Persons</h2>
+                  <h2 className="pm-modal-title">📋 Bulk Add Persons</h2>
                   <p className="pm-modal-subtitle">
-                    Fill in the table below to add multiple persons at once
+                    Upload an Excel file or manually add rows to import multiple persons at once
                   </p>
                 </div>
                 <button 
                   className="pm-modal-close"
-                  onClick={() => setShowBulkAdd(false)}
+                  onClick={() => {
+                    setShowBulkAdd(false);
+                    setBulkRows([]);
+                    setBulkFileName('');
+                  }}
                 >
                   ✕
                 </button>
               </div>
 
+              {/* Upload Section */}
+              <div className="pm-bulk-upload-section">
+                <div className="pm-bulk-upload-actions">
+                  <button 
+                    className="pm-btn pm-btn-secondary pm-btn-download"
+                    onClick={downloadExcelTemplate}
+                  >
+                    📥 Download Excel Template
+                  </button>
+                  <div className="pm-bulk-upload-wrapper">
+                    <button 
+                      className="pm-btn pm-btn-primary"
+                      onClick={() => fileInputRef.current?.click()}
+                    >
+                      📤 Upload Excel File
+                    </button>
+                    <input
+                      ref={fileInputRef}
+                      type="file"
+                      accept=".xlsx,.xls"
+                      onChange={handleFileUpload}
+                      style={{ display: 'none' }}
+                    />
+                  </div>
+                </div>
+                {bulkFileName && (
+                  <div className="pm-bulk-file-info">
+                    <span className="pm-bulk-file-icon">📄</span>
+                    <span className="pm-bulk-file-name">{bulkFileName}</span>
+                    <span className="pm-bulk-file-size">
+                      {bulkRows.length} rows loaded
+                    </span>
+                  </div>
+                )}
+              </div>
+
+              {/* Divider */}
+              <div className="pm-bulk-divider">
+                <span>or manually add rows below</span>
+              </div>
+
+              {/* Table */}
               <div className="pm-bulk-table-wrapper">
                 <div className="pm-bulk-table-scroll">
                   <table className="pm-bulk-table">
@@ -490,89 +935,100 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                       </tr>
                     </thead>
                     <tbody>
-                      {bulkRows.map((row, index) => (
-                        <tr key={row.id}>
-                          <td className="pm-bulk-row-number">{index + 1}</td>
-                          <td>
-                            <input
-                              type="text"
-                              value={row.name}
-                              onChange={(e) => updateBulkRow(row.id, 'name', e.target.value)}
-                              placeholder="Full name"
-                              className="pm-bulk-input"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              value={row.father}
-                              onChange={(e) => updateBulkRow(row.id, 'father', e.target.value)}
-                              placeholder="Father"
-                              className="pm-bulk-input"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              value={row.mother}
-                              onChange={(e) => updateBulkRow(row.id, 'mother', e.target.value)}
-                              placeholder="Mother"
-                              className="pm-bulk-input"
-                            />
-                          </td>
-                          <td>
-                            <input
-                              type="text"
-                              value={row.spouse}
-                              onChange={(e) => updateBulkRow(row.id, 'spouse', e.target.value)}
-                              placeholder="Spouse"
-                              className="pm-bulk-input"
-                            />
-                          </td>
-                          <td>
-                            <select
-                              value={row.gender}
-                              onChange={(e) => updateBulkRow(row.id, 'gender', e.target.value)}
-                              className="pm-bulk-select"
-                            >
-                              <option value="Male">Male</option>
-                              <option value="Female">Female</option>
-                            </select>
-                          </td>
-                          <td>
-                            <select
-                              value={row.isDeceased}
-                              onChange={(e) => updateBulkRow(row.id, 'isDeceased', e.target.value)}
-                              className="pm-bulk-select"
-                            >
-                              <option value="No">No</option>
-                              <option value="Yes">Yes</option>
-                            </select>
-                          </td>
-                          <td>
-                            <input
-                              type="date"
-                              value={row.dateOfDeath}
-                              onChange={(e) => updateBulkRow(row.id, 'dateOfDeath', e.target.value)}
-                              className="pm-bulk-input pm-bulk-date"
-                              disabled={row.isDeceased !== 'Yes'}
-                              style={{
-                                opacity: row.isDeceased !== 'Yes' ? 0.5 : 1,
-                                cursor: row.isDeceased !== 'Yes' ? 'not-allowed' : 'pointer'
-                              }}
-                            />
-                          </td>
-                          <td>
-                            <button
-                              className="pm-bulk-remove"
-                              onClick={() => removeBulkRow(row.id)}
-                              title="Remove row"
-                            >
-                              ✕
-                            </button>
+                      {bulkRows.length === 0 ? (
+                        <tr>
+                          <td colSpan="9" className="pm-bulk-empty">
+                            <div className="pm-bulk-empty-state">
+                              <span>📂</span>
+                              <p>No data loaded. Upload an Excel file or add rows manually.</p>
+                            </div>
                           </td>
                         </tr>
-                      ))}
+                      ) : (
+                        bulkRows.map((row, index) => (
+                          <tr key={row.id}>
+                            <td className="pm-bulk-row-number">{index + 1}</td>
+                            <td>
+                              <input
+                                type="text"
+                                value={row.name}
+                                onChange={(e) => updateBulkRow(row.id, 'name', e.target.value)}
+                                placeholder="Full name"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={row.father}
+                                onChange={(e) => updateBulkRow(row.id, 'father', e.target.value)}
+                                placeholder="Father"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={row.mother}
+                                onChange={(e) => updateBulkRow(row.id, 'mother', e.target.value)}
+                                placeholder="Mother"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={row.spouse}
+                                onChange={(e) => updateBulkRow(row.id, 'spouse', e.target.value)}
+                                placeholder="Spouse"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={row.gender}
+                                onChange={(e) => updateBulkRow(row.id, 'gender', e.target.value)}
+                                className="pm-bulk-select"
+                              >
+                                <option value="Male">Male</option>
+                                <option value="Female">Female</option>
+                              </select>
+                            </td>
+                            <td>
+                              <select
+                                value={row.isDeceased}
+                                onChange={(e) => updateBulkRow(row.id, 'isDeceased', e.target.value)}
+                                className="pm-bulk-select"
+                              >
+                                <option value="No">No</option>
+                                <option value="Yes">Yes</option>
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="date"
+                                value={row.dateOfDeath}
+                                onChange={(e) => updateBulkRow(row.id, 'dateOfDeath', e.target.value)}
+                                className="pm-bulk-input pm-bulk-date"
+                                disabled={row.isDeceased !== 'Yes'}
+                                style={{
+                                  opacity: row.isDeceased !== 'Yes' ? 0.5 : 1,
+                                  cursor: row.isDeceased !== 'Yes' ? 'not-allowed' : 'pointer'
+                                }}
+                              />
+                            </td>
+                            <td>
+                              <button
+                                className="pm-bulk-remove"
+                                onClick={() => removeBulkRow(row.id)}
+                                title="Remove row"
+                              >
+                                ✕
+                              </button>
+                            </td>
+                          </tr>
+                        ))
+                      )}
                     </tbody>
                   </table>
                 </div>
@@ -593,10 +1049,8 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                   className="pm-btn pm-btn-secondary"
                   onClick={() => {
                     setShowBulkAdd(false);
-                    setBulkRows([
-                      { id: 1, name: '', father: '', mother: '', spouse: '', gender: 'Male', isDeceased: 'No', dateOfDeath: '' }
-                    ]);
-                    setNextRowId(2);
+                    setBulkRows([]);
+                    setBulkFileName('');
                   }}
                 >
                   Cancel
@@ -605,7 +1059,7 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                   type="button"
                   className="pm-btn pm-btn-primary"
                   onClick={handleBulkImport}
-                  disabled={bulkRows.some(row => !row.name.trim())}
+                  disabled={bulkRows.length === 0 || bulkRows.some(row => !row.name.trim())}
                 >
                   Import {bulkRows.filter(row => row.name.trim()).length} Persons
                 </button>
@@ -615,16 +1069,120 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         )}
       </AnimatePresence>
 
+      {/* Person Detail Modal */}
+      <AnimatePresence>
+        {showDetailModal && selectedPersonForDetail && (
+          <PersonDetailModal
+            darkMode={darkMode}
+            person={selectedPersonForDetail}
+            persons={persons}
+            properties={[]}
+            onClose={() => {
+              setShowDetailModal(false);
+              setSelectedPersonForDetail(null);
+            }}
+            onAddProperty={() => {
+              setShowDetailModal(false);
+              alert('Add property functionality coming soon!');
+            }}
+            onUpdatePerson={(updatedPerson) => {
+              onUpdate(persons.map(p => p.id === updatedPerson.id ? updatedPerson : p));
+            }}
+          />
+        )}
+      </AnimatePresence>
+
       <style>{`
         /* PersonManager - Uses Global CSS Variables */
         .pm-wrapper {
           height: 100%;
           display: flex;
           flex-direction: column;
-          gap: 24px;
+          gap: 20px;
           background: var(--bg-primary);
           color: var(--text-primary);
           transition: background-color 0.3s ease, color 0.3s ease;
+        }
+
+        /* Propositus Section */
+        .pm-propositus-section {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 12px;
+          padding: 12px 20px;
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          flex-wrap: wrap;
+          gap: 12px;
+        }
+
+        .pm-propositus-selector {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .pm-propositus-label {
+          display: flex;
+          align-items: center;
+          gap: 6px;
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-secondary);
+        }
+
+        .pm-propositus-icon {
+          font-size: 18px;
+        }
+
+        .pm-propositus-select {
+          padding: 6px 12px;
+          border-radius: 8px;
+          border: 1px solid var(--border-color);
+          background: var(--bg-primary);
+          color: var(--text-primary);
+          font-size: 14px;
+          outline: none;
+          cursor: pointer;
+          min-width: 200px;
+        }
+
+        .pm-propositus-select:focus {
+          border-color: #8b5cf6;
+        }
+
+        .pm-propositus-badge {
+          padding: 4px 14px;
+          border-radius: 20px;
+          background: rgba(139, 92, 246, 0.15);
+          color: #8b5cf6;
+          font-size: 13px;
+          font-weight: 600;
+          border: 1px solid rgba(139, 92, 246, 0.3);
+        }
+
+        .pm-propositus-stats {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          flex-wrap: wrap;
+        }
+
+        .pm-stat-item {
+          font-size: 13px;
+          color: var(--text-secondary);
+          padding: 4px 10px;
+          border-radius: 16px;
+          background: var(--bg-primary);
+          border: 1px solid var(--border-color);
+        }
+
+        .pm-stat-reps {
+          background: rgba(245, 158, 11, 0.1);
+          border-color: rgba(245, 158, 11, 0.3);
+          color: #f59e0b;
         }
 
         /* Header - All in one row */
@@ -690,7 +1248,7 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           flex-shrink: 0;
         }
 
-        /* Buttons - Normal size */
+        /* Buttons */
         .pm-btn {
           padding: 8px 18px;
           border-radius: 8px;
@@ -727,6 +1285,80 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           cursor: not-allowed;
         }
 
+        .pm-btn-download {
+          border: 1px dashed var(--border-color);
+          background: transparent;
+        }
+
+        .pm-btn-download:hover {
+          background: var(--bg-secondary);
+          border-color: #667eea;
+        }
+
+        /* Bulk Upload Section */
+        .pm-bulk-upload-section {
+          background: var(--bg-secondary);
+          border: 1px solid var(--border-color);
+          border-radius: 10px;
+          padding: 16px 20px;
+          margin-bottom: 12px;
+        }
+
+        .pm-bulk-upload-actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          flex-wrap: wrap;
+        }
+
+        .pm-bulk-upload-wrapper {
+          position: relative;
+        }
+
+        .pm-bulk-file-info {
+          display: flex;
+          align-items: center;
+          gap: 8px;
+          padding: 8px 14px;
+          margin-top: 10px;
+          background: var(--bg-primary);
+          border-radius: 8px;
+          border: 1px solid var(--border-color);
+        }
+
+        .pm-bulk-file-icon {
+          font-size: 20px;
+        }
+
+        .pm-bulk-file-name {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text-primary);
+        }
+
+        .pm-bulk-file-size {
+          font-size: 12px;
+          color: var(--text-secondary);
+          margin-left: auto;
+        }
+
+        .pm-bulk-divider {
+          display: flex;
+          align-items: center;
+          gap: 16px;
+          margin: 8px 0 12px 0;
+          color: var(--text-secondary);
+          font-size: 12px;
+        }
+
+        .pm-bulk-divider::before,
+        .pm-bulk-divider::after {
+          content: '';
+          flex: 1;
+          height: 1px;
+          background: var(--border-color);
+        }
+
         /* Grid */
         .pm-grid {
           display: grid;
@@ -751,6 +1383,12 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         .pm-card.selected {
           border-color: #667eea;
           box-shadow: 0 4px 20px rgba(102, 126, 234, 0.2);
+        }
+
+        .pm-card.propositus {
+          border-color: #8b5cf6;
+          background: var(--bg-secondary);
+          box-shadow: 0 0 0 1px rgba(139, 92, 246, 0.2), 0 4px 20px rgba(139, 92, 246, 0.1);
         }
 
         .pm-card:hover {
@@ -820,6 +1458,23 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           background: var(--bg-secondary);
           color: var(--text-secondary);
           border: 1px solid var(--border-color);
+        }
+
+        .pm-badge-children {
+          background: rgba(16, 185, 129, 0.1);
+          color: #10b981;
+          border: 1px solid rgba(16, 185, 129, 0.2);
+        }
+
+        .dark .pm-badge-married {
+          background: #1a2a3a;
+          color: #60a5fa;
+        }
+
+        .dark .pm-badge-children {
+          background: rgba(16, 185, 129, 0.15);
+          color: #34d399;
+          border-color: rgba(16, 185, 129, 0.2);
         }
 
         .pm-card-actions {
@@ -1012,11 +1667,11 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
 
         /* Bulk Import Table */
         .pm-bulk-table-wrapper {
-          max-height: 50vh;
+          max-height: 40vh;
           overflow: auto;
           border: 1px solid var(--border-color);
           border-radius: 10px;
-          margin-bottom: 16px;
+          margin-bottom: 12px;
         }
 
         .pm-bulk-table-scroll {
@@ -1060,6 +1715,29 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           color: var(--text-secondary);
           font-weight: 500;
           font-size: 12px;
+        }
+
+        .pm-bulk-empty {
+          padding: 30px 20px !important;
+          text-align: center;
+        }
+
+        .pm-bulk-empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          gap: 8px;
+          color: var(--text-secondary);
+        }
+
+        .pm-bulk-empty-state span {
+          font-size: 40px;
+          opacity: 0.5;
+        }
+
+        .pm-bulk-empty-state p {
+          font-size: 14px;
+          margin: 0;
         }
 
         .pm-bulk-input {
@@ -1175,34 +1853,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           color: var(--text-secondary);
         }
 
-        /* Dark mode overrides */
-        .dark .pm-badge-married {
-          background: #1a2a3a;
-          color: #60a5fa;
-        }
-
-        .dark .pm-bulk-table th {
-          background: var(--bg-secondary);
-        }
-
-        .dark .pm-bulk-input:hover {
-          border-color: var(--border-color);
-        }
-
-        .dark .pm-bulk-input:focus {
-          background: var(--bg-secondary);
-          border-color: #667eea;
-        }
-
-        .dark .pm-bulk-select:hover {
-          border-color: var(--border-color);
-        }
-
-        .dark .pm-bulk-select:focus {
-          background: var(--bg-secondary);
-          border-color: #667eea;
-        }
-
         /* Mobile Responsive */
         @media (max-width: 992px) {
           .pm-header {
@@ -1212,6 +1862,29 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           .pm-header-center {
             max-width: 200px;
             min-width: 100px;
+          }
+
+          .pm-propositus-section {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .pm-propositus-selector {
+            flex-wrap: wrap;
+          }
+
+          .pm-propositus-select {
+            flex: 1;
+            min-width: 150px;
+          }
+
+          .pm-propositus-stats {
+            justify-content: flex-start;
+          }
+
+          .pm-bulk-upload-actions {
+            flex-direction: column;
+            align-items: stretch;
           }
         }
 
@@ -1241,6 +1914,23 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           .pm-header-actions .pm-btn {
             flex: 1;
             text-align: center;
+          }
+
+          .pm-propositus-section {
+            padding: 12px 16px;
+          }
+
+          .pm-propositus-selector {
+            flex-direction: column;
+            align-items: stretch;
+          }
+
+          .pm-propositus-select {
+            width: 100%;
+          }
+
+          .pm-propositus-stats {
+            justify-content: center;
           }
 
           .pm-grid {
@@ -1317,6 +2007,10 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           .pm-bulk-add-row {
             justify-content: center;
           }
+
+          .pm-bulk-upload-actions {
+            flex-direction: column;
+          }
         }
 
         @media (max-width: 480px) {
@@ -1350,6 +2044,28 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
             font-size: 12px;
             padding: 5px 10px;
             height: 30px;
+          }
+
+          .pm-propositus-label {
+            font-size: 13px;
+          }
+
+          .pm-propositus-select {
+            font-size: 13px;
+            padding: 4px 10px;
+          }
+
+          .pm-stat-item {
+            font-size: 11px;
+            padding: 2px 8px;
+          }
+
+          .pm-bulk-upload-section {
+            padding: 12px 16px;
+          }
+
+          .pm-bulk-file-info {
+            flex-wrap: wrap;
           }
         }
       `}</style>
