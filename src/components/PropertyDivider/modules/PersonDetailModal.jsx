@@ -53,14 +53,14 @@ const PersonDetailModal = ({
   const getExclusiveProperties = () => {
     return properties.filter(p => 
       p.classification === 'Exclusive' && 
-      p.owners && p.owners.includes(person.id)
+      p.ownerId === person.id
     );
   };
 
   const getConjugalProperties = () => {
     return properties.filter(p => 
       p.classification === 'Conjugal' && 
-      p.owners && p.owners.includes(person.id)
+      p.ownerId === person.id
     );
   };
 
@@ -243,7 +243,7 @@ const PersonDetailModal = ({
                       </span>
                     </div>
                     <div className="pdm-property-details">
-                      <span>📏 {prop.totalSqm || prop.lotArea || prop.floorArea || 0} sqm</span>
+                      <span>📏 {prop.totalSqm || 0} sqm</span>
                       <span>📂 Exclusive</span>
                       {prop.location && <span>📍 {prop.location}</span>}
                     </div>
@@ -287,7 +287,7 @@ const PersonDetailModal = ({
                         </span>
                       </div>
                       <div className="pdm-property-details">
-                        <span>📏 {prop.totalSqm || prop.lotArea || prop.floorArea || 0} sqm</span>
+                        <span>📏 {prop.totalSqm || 0} sqm</span>
                         <span>📂 Conjugal</span>
                         {spouse && <span>💍 with {spouse.name}</span>}
                         {prop.location && <span>📍 {prop.location}</span>}
@@ -309,13 +309,13 @@ const PersonDetailModal = ({
                 Ownership history of all properties associated with {person.name}
               </p>
               
-              {properties.filter(p => p.owners && p.owners.includes(person.id)).length === 0 ? (
+              {properties.filter(p => p.ownerId === person.id).length === 0 ? (
                 <div className="pdm-empty-state">
                   <div className="pdm-empty-icon">📜</div>
                   <p>No properties found for this person.</p>
                 </div>
               ) : (
-                properties.filter(p => p.owners && p.owners.includes(person.id)).map(prop => {
+                properties.filter(p => p.ownerId === person.id).map(prop => {
                   const auditTrail = getPropertyAuditTrail(prop);
                   return (
                     <div key={prop.id} className="pdm-property-card pdm-audit-card">

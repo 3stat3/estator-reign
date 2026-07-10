@@ -5,7 +5,16 @@ import * as XLSX from 'xlsx';
 import PersonDetailModal from './PersonDetailModal';
 import { assignGenerations } from '../services/familyTreeService';
 
-const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
+const PersonManager = ({ 
+  darkMode = false, 
+  persons = [], 
+  properties = [],
+  decedentId = null,
+  onUpdate,
+  onUpdateProperties,
+  onUpdateDecedent,
+  onNavigateToPropertyManager 
+}) => {
   const [showAddForm, setShowAddForm] = useState(false);
   const [showBulkAdd, setShowBulkAdd] = useState(false);
   const [selectedPerson, setSelectedPerson] = useState(null);
@@ -13,14 +22,11 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   const [editingPerson, setEditingPerson] = useState(null);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   
-  // Propositus (Decedent) state - the person whose estate is being divided
-  const [propositusId, setPropositusId] = useState(null);
+  const [propositusId, setPropositusId] = useState(decedentId || null);
 
-  // Person Detail Modal state
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPersonForDetail, setSelectedPersonForDetail] = useState(null);
 
-  // File upload ref
   const fileInputRef = useRef(null);
 
   useEffect(() => {
@@ -30,6 +36,12 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
   }, []);
+
+  useEffect(() => {
+    if (decedentId !== undefined && decedentId !== propositusId) {
+      setPropositusId(decedentId);
+    }
+  }, [decedentId]);
 
   const [formData, setFormData] = useState({
     name: '',
@@ -41,7 +53,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     gender: 'Male'
   });
 
-  // Bulk import state - Excel-like table
   const [bulkRows, setBulkRows] = useState([]);
   const [nextRowId, setNextRowId] = useState(1);
   const [bulkFileName, setBulkFileName] = useState('');
@@ -50,21 +61,16 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     person.name?.toLowerCase().includes(searchQuery.toLowerCase())
   );
 
-  // Get the propositus person object
   const propositus = persons.find(p => p.id === propositusId);
 
-  // Determine if a person is an heir (child, spouse, or parent of propositus)
   const isHeir = (person) => {
     if (!propositus) return false;
     if (person.id === propositusId) return false;
     
-    // Check if person is a child
     if (person.fatherId === propositusId || person.motherId === propositusId) return true;
     
-    // Check if person is the spouse
     if (person.id === propositus.spouseId) return true;
     
-    // Check if person is a parent (if no children)
     const children = persons.filter(p => p.fatherId === propositusId || p.motherId === propositusId);
     if (children.length === 0) {
       if (person.id === propositus.fatherId || person.id === propositus.motherId) return true;
@@ -73,29 +79,24 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     return false;
   };
 
-  // Check if person is predeceased (died before the propositus)
   const isPredeceased = (person) => {
     if (!propositus || !propositus.dateOfDeath) return false;
     if (!person.isDeceased || !person.dateOfDeath) return false;
     return new Date(person.dateOfDeath) < new Date(propositus.dateOfDeath);
   };
 
-  // Check if person has children who are heirs by representation
   const hasHeirsByRepresentation = (person) => {
     if (!propositus) return false;
     if (!person.isDeceased) return false;
     
-    // If this person is a child of the propositus and predeceased
     const isChildOfPropositus = person.fatherId === propositusId || person.motherId === propositusId;
     if (!isChildOfPropositus) return false;
     if (!isPredeceased(person)) return false;
     
-    // Check if they have children
     const grandchildren = persons.filter(p => p.fatherId === person.id || p.motherId === person.id);
     return grandchildren.length > 0;
   };
 
-  // Get children of a person
   const getChildren = (personId) => {
     return persons.filter(p => p.fatherId === personId || p.motherId === personId);
   };
@@ -116,7 +117,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     return { label: 'Living', color: '#16a34a', bg: darkMode ? '#1a2a1a' : '#f0fdf4' };
   };
 
-  // Get role badge for a person
   const getRoleBadge = (person) => {
     if (person.id === propositusId) {
       return { label: '👑 Propositus', color: '#8b5cf6', bg: darkMode ? '#2d1a3a' : '#f3e8ff' };
@@ -151,22 +151,30 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
       return;
     }
 
-    const newPerson = {
-      id: `p_${Date.now()}`,
-      ...formData,
-      dateOfDeath: formData.isDeceased ? formData.dateOfDeath : '',
-      children: [],
-      generation: 0
-    };
-    
     let updatedPersons;
+    
     if (editingPerson) {
-      updatedPersons = persons.map(p => p.id === editingPerson.id ? newPerson : p);
+      updatedPersons = persons.map(p => {
+        if (p.id === editingPerson.id) {
+          return {
+            ...p,
+            ...formData,
+            dateOfDeath: formData.isDeceased ? formData.dateOfDeath : '',
+          };
+        }
+        return p;
+      });
     } else {
+      const newPerson = {
+        id: `p_${Date.now()}`,
+        ...formData,
+        dateOfDeath: formData.isDeceased ? formData.dateOfDeath : '',
+        children: [],
+        generation: 0
+      };
       updatedPersons = [...persons, newPerson];
     }
     
-    // Assign generations
     const personsWithGenerations = assignGenerations(updatedPersons, propositusId);
     
     onUpdate(personsWithGenerations);
@@ -184,21 +192,19 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     setEditingPerson(null);
   };
 
-  // Bulk import handlers
   const downloadExcelTemplate = () => {
-    const headers = ['Name', 'Father', 'Mother', 'Spouse', 'Gender', 'IsDeceased', 'DateOfDeath'];
+    const headers = ['Name', 'Father', 'Mother', 'Spouse', 'Gender', 'IsDeceased', 'DateOfDeath', 'PropertyName', 'PropertyType', 'PropertyClassification', 'PropertySize', 'PropertyLocation'];
     const sampleData = [
-      ['Juan Dela Cruz', '', '', 'Maria Dela Cruz', 'Male', 'Yes', '2024-01-15'],
-      ['Maria Dela Cruz', '', '', 'Juan Dela Cruz', 'Female', 'No', ''],
-      ['Pedro Dela Cruz', 'Juan Dela Cruz', 'Maria Dela Cruz', '', 'Male', 'Yes', '2023-03-10'],
-      ['Ana Dela Cruz', 'Juan Dela Cruz', 'Maria Dela Cruz', '', 'Female', 'No', '']
+      ['Juan Dela Cruz', '', '', 'Maria Dela Cruz', 'Male', 'Yes', '2024-01-15', 'Family House', 'Land', 'Conjugal', '250', 'Manila'],
+      ['Maria Dela Cruz', '', '', 'Juan Dela Cruz', 'Female', 'No', '', 'Family House', 'Land', 'Conjugal', '250', 'Manila'],
+      ['Pedro Dela Cruz', 'Juan Dela Cruz', 'Maria Dela Cruz', '', 'Male', 'Yes', '2023-03-10', 'Farm', 'Land', 'Exclusive', '500', 'Bulacan'],
+      ['Ana Dela Cruz', 'Juan Dela Cruz', 'Maria Dela Cruz', '', 'Female', 'No', '', '', '', '', '', '']
     ];
     
     const wb = XLSX.utils.book_new();
     const wsData = [headers, ...sampleData];
     const ws = XLSX.utils.aoa_to_sheet(wsData);
     
-    // Set column widths
     ws['!cols'] = [
       { wch: 25 },
       { wch: 20 },
@@ -206,7 +212,12 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
       { wch: 20 },
       { wch: 12 },
       { wch: 12 },
-      { wch: 18 }
+      { wch: 18 },
+      { wch: 25 },
+      { wch: 15 },
+      { wch: 20 },
+      { wch: 15 },
+      { wch: 25 },
     ];
     
     XLSX.utils.book_append_sheet(wb, ws, 'Persons');
@@ -226,11 +237,10 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         const workbook = XLSX.read(data, { type: 'array' });
         const firstSheet = workbook.Sheets[workbook.SheetNames[0]];
         
-        // Get the raw data with cell formatting preserved
         const jsonData = XLSX.utils.sheet_to_json(firstSheet, { 
-          defval: '',  // Default value for empty cells
-          raw: false,  // Use formatted values instead of raw
-          dateNF: 'yyyy-mm-dd'  // Date format for date cells
+          defval: '',
+          raw: false,
+          dateNF: 'yyyy-mm-dd'
         });
         
         if (jsonData.length === 0) {
@@ -238,43 +248,28 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           return;
         }
         
-        console.log('📊 Excel data parsed:', jsonData);
-        
-        // Convert to bulk rows with proper date handling
         const newRows = jsonData.map((row, index) => {
-          // Handle DateOfDeath - could be string, number (Excel serial), or Date object
           let dateOfDeath = row.DateOfDeath || '';
           
           if (dateOfDeath) {
-            // If it's a number (Excel serial date), convert it
             if (typeof dateOfDeath === 'number') {
-              // Excel serial date: days since 1900-01-01
               const excelEpoch = new Date(1900, 0, 1);
-              // Excel has a bug: it considers 1900 as a leap year
               const daysOffset = dateOfDeath > 60 ? dateOfDeath - 1 : dateOfDeath;
               const date = new Date(excelEpoch);
               date.setDate(date.getDate() + daysOffset - 1);
               dateOfDeath = date.toISOString().split('T')[0];
             } 
-            // If it's a Date object
             else if (dateOfDeath instanceof Date) {
               dateOfDeath = dateOfDeath.toISOString().split('T')[0];
             }
-            // If it's a string, try to parse it
             else if (typeof dateOfDeath === 'string') {
-              // Try different date formats
               const date = new Date(dateOfDeath);
               if (!isNaN(date.getTime())) {
                 dateOfDeath = date.toISOString().split('T')[0];
               }
-              // If it's already in YYYY-MM-DD format, keep it
-              // Otherwise, try to parse common formats
               else {
-                // Try MM/DD/YYYY or M/D/YYYY
                 const parts = dateOfDeath.split(/[\/\-\.]/);
                 if (parts.length === 3) {
-                  // Try to determine if it's MM/DD/YYYY or DD/MM/YYYY
-                  // For simplicity, assume MM/DD/YYYY (US format)
                   const month = parseInt(parts[0]) - 1;
                   const day = parseInt(parts[1]);
                   const year = parseInt(parts[2]);
@@ -289,13 +284,12 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
             }
           }
           
-          // Convert Yes/No to boolean for isDeceased
           const isDeceased = row.IsDeceased?.toString().toLowerCase() === 'yes' || 
                             row.IsDeceased === true ||
                             row.IsDeceased === 1;
-          
-          console.log(`📅 Row ${index + 1}: ${row.Name} - Deceased: ${isDeceased}, DateOfDeath: ${dateOfDeath}`);
-          
+
+          const hasProperty = row.PropertyName?.toString().trim();
+
           return {
             id: Date.now() + index,
             name: row.Name?.toString().trim() || '',
@@ -304,14 +298,17 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
             spouse: row.Spouse?.toString().trim() || '',
             gender: row.Gender || 'Male',
             isDeceased: isDeceased ? 'Yes' : 'No',
-            dateOfDeath: dateOfDeath || ''
+            dateOfDeath: dateOfDeath || '',
+            propertyName: hasProperty || '',
+            propertyType: hasProperty ? (row.PropertyType || 'Land') : '',
+            propertyClassification: hasProperty ? (row.PropertyClassification || 'Conjugal') : '',
+            propertySize: hasProperty ? (row.PropertySize?.toString() || '') : '',
+            propertyLocation: hasProperty ? (row.PropertyLocation?.toString().trim() || '') : ''
           };
         });
         
         setBulkRows(newRows);
         setNextRowId(newRows.length + 1);
-        
-        console.log('✅ Bulk rows created:', newRows);
         
       } catch (error) {
         console.error('Error reading file:', error);
@@ -320,7 +317,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     };
     reader.readAsArrayBuffer(file);
     
-    // Reset file input
     if (fileInputRef.current) {
       fileInputRef.current.value = '';
     }
@@ -329,7 +325,21 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
   const addBulkRow = () => {
     setBulkRows([
       ...bulkRows,
-      { id: nextRowId, name: '', father: '', mother: '', spouse: '', gender: 'Male', isDeceased: 'No', dateOfDeath: '' }
+      { 
+        id: nextRowId, 
+        name: '', 
+        father: '', 
+        mother: '', 
+        spouse: '', 
+        gender: 'Male', 
+        isDeceased: 'No', 
+        dateOfDeath: '',
+        propertyName: '',
+        propertyType: 'Land',
+        propertyClassification: 'Conjugal',
+        propertySize: '',
+        propertyLocation: ''
+      }
     ]);
     setNextRowId(nextRowId + 1);
   };
@@ -358,32 +368,26 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     const newPersons = bulkRows.map((row, index) => {
       const isDeceased = row.isDeceased?.toLowerCase() === 'yes';
       
-      // Look up spouse by name to get their ID
       let spouseId = '';
       if (row.spouse?.trim()) {
         const spouseName = row.spouse.trim();
-        // First, check if spouse already exists in the persons array
         const existingSpouse = persons.find(p => p.name.toLowerCase() === spouseName.toLowerCase());
         if (existingSpouse) {
           spouseId = existingSpouse.id;
         } else {
-          // Check if spouse is being added in this same bulk import
           const spouseInBulk = bulkRows.find(r => 
             r.name?.trim()?.toLowerCase() === spouseName.toLowerCase() && 
             r.id !== row.id
           );
           if (spouseInBulk) {
-            // Calculate the ID that will be assigned to the spouse
             const spouseIndex = bulkRows.indexOf(spouseInBulk);
             spouseId = `p_${Date.now()}_${spouseIndex}`;
           } else {
-            // If spouse not found, store the name as a string (will need manual linking later)
             spouseId = row.spouse.trim();
           }
         }
       }
       
-      // Also look up father and mother by name
       let fatherId = '';
       if (row.father?.trim()) {
         const fatherName = row.father.trim();
@@ -440,10 +444,35 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     
     const updatedPersons = [...persons, ...newPersons];
     
-    // Assign generations
     const personsWithGenerations = assignGenerations(updatedPersons, propositusId);
     
+    const newProperties = [];
+    bulkRows.forEach((row, index) => {
+      if (row.propertyName?.trim()) {
+        const personId = newPersons[index]?.id;
+        if (personId) {
+          const property = {
+            id: `pr_${Date.now()}_${index}`,
+            name: row.propertyName.trim(),
+            type: row.propertyType || 'Land',
+            classification: row.propertyClassification || 'Conjugal',
+            totalSqm: parseFloat(row.propertySize) || 0,
+            ownerId: personId,
+            location: row.propertyLocation || '',
+            description: '',
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString()
+          };
+          newProperties.push(property);
+        }
+      }
+    });
+
     onUpdate(personsWithGenerations);
+
+    if (onUpdateProperties && newProperties.length > 0) {
+      onUpdateProperties([...properties, ...newProperties]);
+    }
     
     setBulkRows([]);
     setBulkFileName('');
@@ -452,16 +481,16 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
 
   const handleDelete = (personId) => {
     if (window.confirm('Are you sure you want to delete this person?')) {
-      // If deleting the propositus, clear the selection
       let newPropositusId = propositusId;
       if (personId === propositusId) {
         newPropositusId = null;
         setPropositusId(null);
+        if (onUpdateDecedent) {
+          onUpdateDecedent(null);
+        }
       }
       
       const updatedPersons = persons.filter(p => p.id !== personId);
-      
-      // Assign generations
       const personsWithGenerations = assignGenerations(updatedPersons, newPropositusId);
       
       onUpdate(personsWithGenerations);
@@ -469,7 +498,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
     }
   };
 
-  // Get stats for the propositus
   const getPropositusStats = () => {
     if (!propositus) return null;
     
@@ -488,7 +516,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
 
   return (
     <div className="pm-wrapper">
-      {/* Propositus Selector */}
       <div className="pm-propositus-section">
         <div className="pm-propositus-selector">
           <div className="pm-propositus-label">
@@ -497,7 +524,13 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           </div>
           <select
             value={propositusId || ''}
-            onChange={(e) => setPropositusId(e.target.value || null)}
+            onChange={(e) => {
+              const newId = e.target.value || null;
+              setPropositusId(newId);
+              if (onUpdateDecedent) {
+                onUpdateDecedent(newId);
+              }
+            }}
             className="pm-propositus-select"
           >
             <option value="">— Select the decedent —</option>
@@ -531,7 +564,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         )}
       </div>
 
-      {/* Header - All in one row */}
       <div className="pm-header">
         <div className="pm-header-left">
           <h1 className="pm-title">👤 Persons</h1>
@@ -560,7 +592,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         </div>
       </div>
 
-      {/* Grid */}
       <div className="pm-grid">
         {filteredPersons.length > 0 ? (
           filteredPersons.map((person) => {
@@ -684,7 +715,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         )}
       </div>
 
-      {/* Add/Edit Person Modal */}
       <AnimatePresence>
         {showAddForm && (
           <motion.div
@@ -836,7 +866,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         )}
       </AnimatePresence>
 
-      {/* Bulk Import Modal - Excel Upload Flow */}
       <AnimatePresence>
         {showBulkAdd && (
           <motion.div
@@ -876,7 +905,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                 </button>
               </div>
 
-              {/* Upload Section */}
               <div className="pm-bulk-upload-section">
                 <div className="pm-bulk-upload-actions">
                   <button 
@@ -912,32 +940,35 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                 )}
               </div>
 
-              {/* Divider */}
               <div className="pm-bulk-divider">
                 <span>or manually add rows below</span>
               </div>
 
-              {/* Table */}
               <div className="pm-bulk-table-wrapper">
                 <div className="pm-bulk-table-scroll">
                   <table className="pm-bulk-table">
                     <thead>
                       <tr>
-                        <th style={{ width: '30px' }}>#</th>
-                        <th style={{ minWidth: '140px' }}>Name *</th>
-                        <th style={{ minWidth: '100px' }}>Father</th>
-                        <th style={{ minWidth: '100px' }}>Mother</th>
-                        <th style={{ minWidth: '100px' }}>Spouse</th>
-                        <th style={{ minWidth: '90px' }}>Gender</th>
-                        <th style={{ minWidth: '80px' }}>Deceased</th>
-                        <th style={{ minWidth: '130px' }}>Date of Death</th>
-                        <th style={{ width: '40px' }}>Action</th>
+                        <th style={{ width: '25px' }}>#</th>
+                        <th style={{ minWidth: '120px' }}>Name *</th>
+                        <th style={{ minWidth: '80px' }}>Father</th>
+                        <th style={{ minWidth: '80px' }}>Mother</th>
+                        <th style={{ minWidth: '80px' }}>Spouse</th>
+                        <th style={{ minWidth: '70px' }}>Gender</th>
+                        <th style={{ minWidth: '65px' }}>Deceased</th>
+                        <th style={{ minWidth: '100px' }}>Date of Death</th>
+                        <th style={{ minWidth: '100px' }}>Property</th>
+                        <th style={{ minWidth: '80px' }}>Prop Type</th>
+                        <th style={{ minWidth: '90px' }}>Prop Class</th>
+                        <th style={{ minWidth: '70px' }}>Size (sqm)</th>
+                        <th style={{ minWidth: '100px' }}>Location</th>
+                        <th style={{ width: '30px' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
                       {bulkRows.length === 0 ? (
                         <tr>
-                          <td colSpan="9" className="pm-bulk-empty">
+                          <td colSpan="14" className="pm-bulk-empty">
                             <div className="pm-bulk-empty-state">
                               <span>📂</span>
                               <p>No data loaded. Upload an Excel file or add rows manually.</p>
@@ -1018,6 +1049,54 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                               />
                             </td>
                             <td>
+                              <input
+                                type="text"
+                                value={row.propertyName || ''}
+                                onChange={(e) => updateBulkRow(row.id, 'propertyName', e.target.value)}
+                                placeholder="Property name"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
+                              <select
+                                value={row.propertyType || 'Land'}
+                                onChange={(e) => updateBulkRow(row.id, 'propertyType', e.target.value)}
+                                className="pm-bulk-select"
+                              >
+                                <option value="Land">Land</option>
+                                <option value="Building">Building</option>
+                              </select>
+                            </td>
+                            <td>
+                              <select
+                                value={row.propertyClassification || 'Conjugal'}
+                                onChange={(e) => updateBulkRow(row.id, 'propertyClassification', e.target.value)}
+                                className="pm-bulk-select"
+                              >
+                                <option value="Conjugal">Conjugal</option>
+                                <option value="Exclusive">Exclusive</option>
+                              </select>
+                            </td>
+                            <td>
+                              <input
+                                type="number"
+                                step="0.01"
+                                value={row.propertySize || ''}
+                                onChange={(e) => updateBulkRow(row.id, 'propertySize', e.target.value)}
+                                placeholder="sqm"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
+                              <input
+                                type="text"
+                                value={row.propertyLocation || ''}
+                                onChange={(e) => updateBulkRow(row.id, 'propertyLocation', e.target.value)}
+                                placeholder="Location"
+                                className="pm-bulk-input"
+                              />
+                            </td>
+                            <td>
                               <button
                                 className="pm-bulk-remove"
                                 onClick={() => removeBulkRow(row.id)}
@@ -1039,7 +1118,7 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
                   + Add Row
                 </button>
                 <div className="pm-bulk-tip">
-                  💡 Tip: Name is required. Leave other fields empty for unknown values.
+                  💡 Tip: Name is required. Fill in property fields (PropertyName, PropertySize) to create properties automatically.
                 </div>
               </div>
 
@@ -1069,21 +1148,24 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
         )}
       </AnimatePresence>
 
-      {/* Person Detail Modal */}
       <AnimatePresence>
         {showDetailModal && selectedPersonForDetail && (
           <PersonDetailModal
             darkMode={darkMode}
             person={selectedPersonForDetail}
             persons={persons}
-            properties={[]}
+            properties={properties}
             onClose={() => {
               setShowDetailModal(false);
               setSelectedPersonForDetail(null);
             }}
             onAddProperty={() => {
+              const personId = selectedPersonForDetail.id;
               setShowDetailModal(false);
-              alert('Add property functionality coming soon!');
+              setSelectedPersonForDetail(null);
+              if (onNavigateToPropertyManager) {
+                onNavigateToPropertyManager(personId);
+              }
             }}
             onUpdatePerson={(updatedPerson) => {
               onUpdate(persons.map(p => p.id === updatedPerson.id ? updatedPerson : p));
@@ -1093,7 +1175,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
       </AnimatePresence>
 
       <style>{`
-        /* PersonManager - Uses Global CSS Variables */
         .pm-wrapper {
           height: 100%;
           display: flex;
@@ -1104,7 +1185,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           transition: background-color 0.3s ease, color 0.3s ease;
         }
 
-        /* Propositus Section */
         .pm-propositus-section {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
@@ -1185,7 +1265,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           color: #f59e0b;
         }
 
-        /* Header - All in one row */
         .pm-header {
           display: flex;
           align-items: center;
@@ -1248,7 +1327,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           flex-shrink: 0;
         }
 
-        /* Buttons */
         .pm-btn {
           padding: 8px 18px;
           border-radius: 8px;
@@ -1295,7 +1373,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           border-color: #667eea;
         }
 
-        /* Bulk Upload Section */
         .pm-bulk-upload-section {
           background: var(--bg-secondary);
           border: 1px solid var(--border-color);
@@ -1359,7 +1436,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           background: var(--border-color);
         }
 
-        /* Grid */
         .pm-grid {
           display: grid;
           grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
@@ -1368,7 +1444,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           align-content: start;
         }
 
-        /* Card */
         .pm-card {
           background: var(--card-bg);
           border-radius: 12px;
@@ -1504,7 +1579,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           color: #dc2626;
         }
 
-        /* Empty State */
         .pm-empty-state {
           grid-column: 1 / -1;
           display: flex;
@@ -1535,7 +1609,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           color: var(--text-secondary);
         }
 
-        /* Modal */
         .pm-modal-overlay {
           position: fixed;
           top: 0;
@@ -1665,7 +1738,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           flex-wrap: wrap;
         }
 
-        /* Bulk Import Table */
         .pm-bulk-table-wrapper {
           max-height: 40vh;
           overflow: auto;
@@ -1853,7 +1925,6 @@ const PersonManager = ({ darkMode = false, persons = [], onUpdate }) => {
           color: var(--text-secondary);
         }
 
-        /* Mobile Responsive */
         @media (max-width: 992px) {
           .pm-header {
             gap: 10px;

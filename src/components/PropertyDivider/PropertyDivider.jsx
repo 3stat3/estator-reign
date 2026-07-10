@@ -2,10 +2,13 @@
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PersonManager from './modules/PersonManager';
+import PropertyManager from './modules/PropertyManager';
+import DivisionEngine from './modules/DivisionEngine';
 
 const PropertyDivider = ({ darkMode = false }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [showClearModal, setShowClearModal] = useState(false);
 
   const [appState, setAppState] = useState({
     persons: [],
@@ -15,6 +18,8 @@ const PropertyDivider = ({ darkMode = false }) => {
     will: null,
     divisionResults: null
   });
+
+  const [selectedPersonForProperty, setSelectedPersonForProperty] = useState(null);
 
   useEffect(() => {
     const handleResize = () => {
@@ -57,39 +62,70 @@ const PropertyDivider = ({ darkMode = false }) => {
     }
   };
 
+  const handleClearAll = () => {
+    setAppState({
+      persons: [],
+      properties: [],
+      decedentId: null,
+      estateType: 'intestate',
+      will: null,
+      divisionResults: null
+    });
+    setSelectedPersonForProperty(null);
+    setCurrentStep(1);
+    setShowClearModal(false);
+  };
+
   const renderModule = () => {
     switch(currentStep) {
       case 1:
+        console.log('📦 PropertyDivider - rendering PersonManager with decedentId:', appState.decedentId);
         return (
           <PersonManager 
             darkMode={darkMode}
             persons={appState.persons}
-            onUpdate={(data) => setAppState({...appState, persons: data})}
+            properties={appState.properties}
+            decedentId={appState.decedentId}
+            onUpdate={(data) => {
+              console.log('📥 PropertyDivider - received persons update:', data.length, 'persons');
+              setAppState(prev => ({...prev, persons: data}));
+            }}
+            onUpdateProperties={(data) => {
+              console.log('📥 PropertyDivider - received properties update:', data.length, 'properties');
+              setAppState(prev => ({...prev, properties: data}));
+            }}
+            onUpdateDecedent={(id) => {
+              console.log('📤 PropertyDivider - updating decedentId to:', id);
+              setAppState(prev => ({...prev, decedentId: id}));
+            }}
+            onNavigateToPropertyManager={(personId) => {
+              console.log('🚀 PropertyDivider - navigating to PropertyManager with personId:', personId);
+              setCurrentStep(2);
+              setSelectedPersonForProperty(personId);
+            }}
           />
         );
       case 2:
         return (
-          <div className="pd-placeholder">
-            <div className="pd-placeholder-icon">🏠</div>
-            <h2>Property Manager</h2>
-            <p>Add and classify properties for estate division</p>
-            <div className="pd-placeholder-stats">
-              📦 <span className="pd-badge">{appState.properties.length}</span> properties
-            </div>
-            <p className="pd-coming-soon">⏳ Property management will be implemented after PersonManager</p>
-          </div>
+          <PropertyManager 
+            darkMode={darkMode}
+            properties={appState.properties}
+            persons={appState.persons}
+            selectedPersonId={selectedPersonForProperty}
+            onUpdate={(data) => {
+              console.log('📥 PropertyDivider - received property update:', data.length, 'properties');
+              setAppState(prev => ({...prev, properties: data}));
+            }}
+          />
         );
       case 3:
         return (
-          <div className="pd-placeholder">
-            <div className="pd-placeholder-icon">⚖️</div>
-            <h2>Division Engine</h2>
-            <p>Estate division will be calculated here</p>
-            <div className="pd-placeholder-stats">
-              👥 <span className="pd-badge">{appState.persons.length}</span> persons &nbsp;·&nbsp; 🏠 <span className="pd-badge">{appState.properties.length}</span> properties
-            </div>
-            <p className="pd-coming-soon">⏳ Coming soon: Philippine succession law implementation</p>
-          </div>
+          <DivisionEngine 
+            darkMode={darkMode}
+            persons={appState.persons}
+            properties={appState.properties}
+            propositusId={appState.decedentId}
+          />
         );
       default:
         return null;
@@ -163,6 +199,14 @@ const PropertyDivider = ({ darkMode = false }) => {
             </div>
             <span>{Math.round(progress)}%</span>
           </div>
+          {/* Clear All button in footer */}
+          <button 
+            className="pd-btn pd-btn-danger" 
+            onClick={() => setShowClearModal(true)}
+            title="Clear all data and reset the application"
+          >
+            🗑️ Clear All
+          </button>
         </div>
         
         <div className="pd-footer-right">
@@ -192,6 +236,89 @@ const PropertyDivider = ({ darkMode = false }) => {
           )}
         </div>
       </div>
+
+      {/* Clear All Confirmation Modal */}
+      <AnimatePresence>
+        {showClearModal && (
+          <motion.div
+            className="pd-clear-modal-overlay"
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            onClick={() => setShowClearModal(false)}
+          >
+            <motion.div
+              className="pd-clear-modal"
+              initial={{ scale: 0.9, y: 30, opacity: 0 }}
+              animate={{ scale: 1, y: 0, opacity: 1 }}
+              exit={{ scale: 0.9, y: 30, opacity: 0 }}
+              transition={{ type: 'spring', damping: 25, stiffness: 300 }}
+              onClick={(e) => e.stopPropagation()}
+            >
+              <div className="pd-clear-modal-header">
+                <div className="pd-clear-modal-icon">⚠️</div>
+                <h2 className="pd-clear-modal-title">Clear All Data</h2>
+                <button 
+                  className="pd-clear-modal-close" 
+                  onClick={() => setShowClearModal(false)}
+                >
+                  ✕
+                </button>
+              </div>
+
+              <div className="pd-clear-modal-body">
+                <p className="pd-clear-modal-message">
+                  This action will permanently delete all your data. Are you sure you want to continue?
+                </p>
+                
+                <div className="pd-clear-modal-stats">
+                  <div className="pd-clear-stat-item">
+                    <span className="pd-clear-stat-icon">👤</span>
+                    <div>
+                      <span className="pd-clear-stat-label">Persons</span>
+                      <span className="pd-clear-stat-value">{appState.persons.length}</span>
+                    </div>
+                  </div>
+                  <div className="pd-clear-stat-item">
+                    <span className="pd-clear-stat-icon">🏠</span>
+                    <div>
+                      <span className="pd-clear-stat-label">Properties</span>
+                      <span className="pd-clear-stat-value">{appState.properties.length}</span>
+                    </div>
+                  </div>
+                  <div className="pd-clear-stat-item">
+                    <span className="pd-clear-stat-icon">📊</span>
+                    <div>
+                      <span className="pd-clear-stat-label">Results</span>
+                      <span className="pd-clear-stat-value">{appState.divisionResults ? '1' : '0'}</span>
+                    </div>
+                  </div>
+                </div>
+
+                <div className="pd-clear-modal-warning">
+                  <span className="pd-clear-warning-icon">🚨</span>
+                  <span>This action cannot be undone. All data will be permanently lost.</span>
+                </div>
+              </div>
+
+              <div className="pd-clear-modal-footer">
+                <button 
+                  className="pd-btn pd-btn-secondary" 
+                  onClick={() => setShowClearModal(false)}
+                >
+                  Cancel
+                </button>
+                <button 
+                  className="pd-btn pd-btn-danger" 
+                  onClick={handleClearAll}
+                >
+                  Yes, Clear Everything
+                </button>
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
 
       <style>{`
         /* Property Divider - Uses Global CSS Variables */
@@ -433,67 +560,174 @@ const PropertyDivider = ({ darkMode = false }) => {
           background: var(--border-color);
         }
 
-        /* Placeholder */
-        .pd-placeholder {
-          height: 100%;
+        /* Danger/Clear button */
+        .pd-btn-danger {
+          background: #dc2626;
+          color: #ffffff;
+          border: none;
+        }
+
+        .pd-btn-danger:hover {
+          background: #b91c1c;
+          transform: translateY(-1px);
+          box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
+        }
+
+        .pd-btn-danger:active {
+          transform: scale(0.97);
+        }
+
+        /* Clear Modal */
+        .pd-clear-modal-overlay {
+          position: fixed;
+          top: 0;
+          left: 0;
+          right: 0;
+          bottom: 0;
+          background: rgba(0, 0, 0, 0.6);
+          backdrop-filter: blur(8px);
           display: flex;
-          flex-direction: column;
           align-items: center;
           justify-content: center;
-          padding: 40px;
-          text-align: center;
+          z-index: 9999;
+          padding: 20px;
         }
 
-        .pd-placeholder-icon {
-          font-size: 56px;
-          margin-bottom: 16px;
-          opacity: 0.5;
+        .pd-clear-modal {
+          background: var(--card-bg, #ffffff);
+          border-radius: 20px;
+          max-width: 480px;
+          width: 100%;
+          box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
+          border: 1px solid var(--border-color, #e2e8f0);
+          overflow: hidden;
         }
 
-        .pd-placeholder h2 {
-          font-size: 22px;
+        .pd-clear-modal-header {
+          padding: 24px 28px 16px 28px;
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
+          position: relative;
+        }
+
+        .pd-clear-modal-icon {
+          font-size: 32px;
+          flex-shrink: 0;
+        }
+
+        .pd-clear-modal-title {
+          font-size: 20px;
           font-weight: 700;
-          color: var(--text-primary);
-          margin: 0 0 6px 0;
+          color: var(--text-primary, #0f172a);
+          margin: 0;
+          flex: 1;
         }
 
-        .pd-placeholder p {
+        .pd-clear-modal-close {
+          background: none;
+          border: none;
+          font-size: 20px;
+          color: var(--text-secondary, #64748b);
+          cursor: pointer;
+          padding: 4px 8px;
+          border-radius: 6px;
+          transition: all 0.2s;
+          line-height: 1;
+        }
+
+        .pd-clear-modal-close:hover {
+          background: var(--border-color, #e2e8f0);
+        }
+
+        .pd-clear-modal-body {
+          padding: 24px 28px;
+        }
+
+        .pd-clear-modal-message {
           font-size: 15px;
-          color: var(--text-secondary);
+          color: var(--text-secondary, #64748b);
           margin: 0 0 20px 0;
+          line-height: 1.6;
         }
 
-        .pd-placeholder-stats {
-          padding: 10px 20px;
-          border-radius: 8px;
-          background: var(--bg-secondary);
-          border: 1px solid var(--border-color);
+        .pd-clear-modal-stats {
+          display: grid;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 8px;
+          margin-bottom: 20px;
+        }
+
+        .pd-clear-stat-item {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 14px;
+          background: var(--bg-secondary, #f8fafc);
+          border-radius: 10px;
+          border: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .pd-clear-stat-icon {
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+
+        .pd-clear-stat-label {
+          display: block;
+          font-size: 10px;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          color: var(--text-secondary, #64748b);
+        }
+
+        .pd-clear-stat-value {
+          display: block;
+          font-size: 18px;
+          font-weight: 700;
+          color: var(--text-primary, #0f172a);
+        }
+
+        .pd-clear-modal-warning {
+          display: flex;
+          align-items: center;
+          gap: 10px;
+          padding: 12px 16px;
+          background: rgba(220, 38, 38, 0.06);
+          border: 1px solid rgba(220, 38, 38, 0.15);
+          border-radius: 10px;
+          color: #dc2626;
           font-size: 13px;
-          color: var(--text-secondary);
-        }
-
-        .pd-badge {
-          display: inline-block;
-          padding: 3px 10px;
-          border-radius: 16px;
-          background: var(--bg-primary);
-          color: #667eea;
-          font-size: 12px;
           font-weight: 500;
-          margin: 0 4px;
         }
 
-        .pd-coming-soon {
-          margin-top: 14px;
-          font-size: 12px;
-          color: var(--text-secondary);
-          opacity: 0.7;
+        .pd-clear-warning-icon {
+          font-size: 18px;
+          flex-shrink: 0;
+        }
+
+        .pd-clear-modal-footer {
+          padding: 16px 28px 24px 28px;
+          display: flex;
+          gap: 12px;
+          justify-content: flex-end;
+          border-top: 1px solid var(--border-color, #e2e8f0);
+          background: var(--bg-secondary, #f8fafc);
+        }
+
+        .pd-clear-modal-footer .pd-btn {
+          min-width: 100px;
         }
 
         /* Dark mode overrides */
-        .dark .pd-badge-married {
-          background: #1a2a3a;
-          color: #60a5fa;
+        .dark .pd-clear-modal-warning {
+          background: rgba(220, 38, 38, 0.12);
+          border-color: rgba(220, 38, 38, 0.25);
+        }
+
+        .dark .pd-clear-stat-item {
+          background: var(--bg-secondary, #1e293b);
         }
 
         /* Responsive */
@@ -570,6 +804,7 @@ const PropertyDivider = ({ darkMode = false }) => {
 
           .pd-footer-left {
             justify-content: center;
+            flex-wrap: wrap;
           }
 
           .pd-footer-right {
@@ -588,13 +823,35 @@ const PropertyDivider = ({ darkMode = false }) => {
           .pd-progress {
             font-size: 11px;
           }
-          
-          .pd-placeholder h2 {
-            font-size: 18px;
+
+          .pd-clear-modal {
+            max-width: 100%;
+            margin: 0 10px;
           }
-          
-          .pd-placeholder-icon {
-            font-size: 40px;
+
+          .pd-clear-modal-header {
+            padding: 20px 20px 14px 20px;
+          }
+
+          .pd-clear-modal-body {
+            padding: 20px;
+          }
+
+          .pd-clear-modal-footer {
+            padding: 14px 20px 20px 20px;
+          }
+
+          .pd-clear-modal-stats {
+            grid-template-columns: 1fr;
+          }
+
+          .pd-clear-modal-footer {
+            flex-direction: column;
+          }
+
+          .pd-clear-modal-footer .pd-btn {
+            width: 100%;
+            justify-content: center;
           }
         }
 
@@ -638,6 +895,27 @@ const PropertyDivider = ({ darkMode = false }) => {
 
           .pd-footer {
             padding: 8px 12px;
+          }
+          
+          .pd-btn-danger {
+            font-size: 11px;
+            padding: 5px 12px;
+          }
+
+          .pd-clear-modal-header {
+            padding: 16px 16px 12px 16px;
+          }
+
+          .pd-clear-modal-body {
+            padding: 16px;
+          }
+
+          .pd-clear-modal-footer {
+            padding: 12px 16px 16px 16px;
+          }
+
+          .pd-clear-modal-title {
+            font-size: 17px;
           }
         }
       `}</style>

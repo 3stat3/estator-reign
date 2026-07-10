@@ -10,20 +10,6 @@
 export function assignGenerations(persons, rootId = null) {
   if (!persons || persons.length === 0) return persons;
   
-  console.log('========================================');
-  console.log('🔍 GENERATION ASSIGNMENT START');
-  console.log('========================================');
-  console.log('📊 Total persons:', persons.length);
-  console.log('🎯 Root ID:', rootId);
-  console.log('📋 Persons:', persons.map(p => ({ 
-    id: p.id, 
-    name: p.name, 
-    fatherId: p.fatherId, 
-    motherId: p.motherId, 
-    spouseId: p.spouseId 
-  })));
-  console.log('========================================\n');
-  
   // Create a copy of persons to work with
   const people = persons.map(p => ({ ...p, generation: 0 }));
   
@@ -42,19 +28,6 @@ export function assignGenerations(persons, rootId = null) {
     }
   });
   
-  console.log('📊 Children Map (blood relations only):');
-  Object.keys(childrenMap).forEach(parentId => {
-    if (childrenMap[parentId].length > 0) {
-      const parent = people.find(p => p.id === parentId);
-      const childrenNames = childrenMap[parentId].map(id => {
-        const child = people.find(p => p.id === id);
-        return child ? child.name : 'unknown';
-      });
-      console.log(`   ${parent ? parent.name : parentId} → [${childrenNames.join(', ')}]`);
-    }
-  });
-  console.log('');
-  
   // ============================================================
   // STEP 1: Build spouse relationships map
   // ============================================================
@@ -62,19 +35,9 @@ export function assignGenerations(persons, rootId = null) {
   people.forEach(p => {
     if (p.spouseId) {
       spouseMap[p.id] = p.spouseId;
-      spouseMap[p.spouseId] = p.id; // Bi-directional
+      spouseMap[p.spouseId] = p.id;
     }
   });
-  
-  console.log('💑 Spouse relationships:');
-  Object.keys(spouseMap).forEach(id => {
-    const person = people.find(p => p.id === id);
-    const spouse = people.find(p => p.id === spouseMap[id]);
-    if (person && spouse) {
-      console.log(`   ${person.name} ↔ ${spouse.name}`);
-    }
-  });
-  console.log('');
   
   // ============================================================
   // STEP 2: Find blood roots - persons with no parents
@@ -83,8 +46,6 @@ export function assignGenerations(persons, rootId = null) {
   
   // First, find all persons with no parents
   const potentialRoots = people.filter(p => !p.fatherId && !p.motherId);
-  console.log('🌳 Potential roots (no parents):', potentialRoots.map(r => r.name));
-  console.log('');
   
   // For each potential root, check if they should be a root
   const rootCandidates = [];
@@ -106,14 +67,12 @@ export function assignGenerations(persons, rootId = null) {
         // If the spouse has parents, then this person is marrying into the family
         // They should NOT be a root - they should follow their spouse's generation
         if (spouseHasParents) {
-          console.log(`   ⏭️ ${person.name} is spouse of ${spouse.name} (who has parents) → NOT a root`);
           processedSpouses.add(person.id);
           return;
         }
         
         // If both spouses have no parents, check if they have children
         if (hasChildren) {
-          console.log(`   💑 Root couple: ${person.name} + ${spouse.name} (both have no parents, have children)`);
           rootCandidates.push(person);
           rootCandidates.push(spouse);
           processedSpouses.add(person.id);
@@ -125,13 +84,11 @@ export function assignGenerations(persons, rootId = null) {
     
     // If this person has no spouse with parents, check if they have children
     if (hasChildren) {
-      console.log(`   🌱 Single root: ${person.name} (has children, spouse not a root)`);
       rootCandidates.push(person);
       processedSpouses.add(person.id);
     } else {
       // This person has no parents, no spouse with parents, and no children
       // They are likely a disconnected node - assign them generation 1 later
-      console.log(`   ⏭️ ${person.name} skipped (no parents, no children)`);
       processedSpouses.add(person.id);
     }
   });
@@ -145,7 +102,6 @@ export function assignGenerations(persons, rootId = null) {
       childrenMap[p.id] && childrenMap[p.id].length > 0
     );
     roots = parents.length > 0 ? parents : people;
-    console.log('⚠️ No roots found, using parents as roots:', roots.map(r => r.name));
   }
   
   // If a specific rootId is provided, use it as the primary root
@@ -154,12 +110,8 @@ export function assignGenerations(persons, rootId = null) {
     if (rootPerson) {
       roots = roots.filter(r => r.id !== rootId);
       roots = [rootPerson, ...roots];
-      console.log(`🎯 Using specified root: ${rootPerson.name} (id: ${rootPerson.id})`);
     }
   }
-  
-  console.log('🌳 Final roots:', roots.map(r => `${r.name} (id: ${r.id})`));
-  console.log('');
   
   // ============================================================
   // STEP 3: Assign generations to BLOOD RELATIVES via BFS
@@ -168,16 +120,12 @@ export function assignGenerations(persons, rootId = null) {
   let queue = [];
   let currentGeneration = 1;
   
-  console.log('🔄 BFS GENERATION ASSIGNMENT (Blood Relations)');
-  console.log('----------------------------------------');
-  
   // Start BFS from roots
   roots.forEach(root => {
     if (!visited.has(root.id)) {
       root.generation = currentGeneration;
       visited.add(root.id);
       queue.push(root.id);
-      console.log(`📍 Root: ${root.name} → Generation ${currentGeneration}`);
     }
   });
   
@@ -196,7 +144,6 @@ export function assignGenerations(persons, rootId = null) {
         if (child) {
           if (!child.generation || child.generation > childGeneration) {
             child.generation = childGeneration;
-            console.log(`   👶 ${child.name} → Generation ${childGeneration} (child of ${currentPerson.name})`);
           }
           visited.add(childId);
           queue.push(childId);
@@ -204,8 +151,6 @@ export function assignGenerations(persons, rootId = null) {
       }
     });
   }
-  
-  console.log('');
   
   // Handle any unvisited persons (these are spouses without children)
   people.forEach(person => {
@@ -215,29 +160,17 @@ export function assignGenerations(persons, rootId = null) {
         const spouse = people.find(p => p.id === person.spouseId);
         if (spouse && spouse.generation && spouse.generation > 0) {
           person.generation = spouse.generation;
-          console.log(`💑 ${person.name} → Generation ${spouse.generation} (follows spouse ${spouse.name})`);
           return;
         }
       }
       // If still no generation, assign as 1st generation
       person.generation = 1;
-      console.log(`⚠️ ${person.name} had no generation, assigned 1 (orphan/fallback)`);
     }
   });
-  
-  console.log('');
-  console.log('📊 Generations after BFS:');
-  people.forEach(p => {
-    console.log(`   ${p.name}: Generation ${p.generation}`);
-  });
-  console.log('');
   
   // ============================================================
   // STEP 4: Final spouse sync - ensure all spouses match
   // ============================================================
-  console.log('💑 FINAL SPOUSE SYNCHRONIZATION');
-  console.log('----------------------------------------');
-  
   let spouseSynced = true;
   let syncIterations = 0;
   const maxSyncIterations = people.length * 3;
@@ -252,7 +185,6 @@ export function assignGenerations(persons, rootId = null) {
         if (spouse && person.generation && spouse.generation) {
           if (person.generation !== spouse.generation) {
             const higherGen = Math.max(person.generation, spouse.generation);
-            console.log(`   🔄 ${person.name} (${person.generation}) + ${spouse.name} (${spouse.generation}) → Both → ${higherGen}`);
             person.generation = higherGen;
             spouse.generation = higherGen;
             spouseSynced = true;
@@ -261,20 +193,6 @@ export function assignGenerations(persons, rootId = null) {
       }
     });
   }
-  
-  console.log(`   ✅ Spouse sync completed after ${syncIterations} iterations`);
-  console.log('');
-  
-  console.log('========================================');
-  console.log('✅ FINAL GENERATIONS ASSIGNED');
-  console.log('========================================');
-  people.forEach(p => {
-    const isSpousePerson = p.spouseId && people.some(person => person.id === p.spouseId);
-    const hasParents = p.fatherId || p.motherId;
-    const hasChildren = childrenMap[p.id] && childrenMap[p.id].length > 0;
-    console.log(`   ${p.name}: Generation ${p.generation} ${isSpousePerson ? '(spouse)' : ''} ${hasParents ? '(has parents)' : '(root)'} ${hasChildren ? '(has children)' : ''}`);
-  });
-  console.log('========================================\n');
   
   return people;
 }
