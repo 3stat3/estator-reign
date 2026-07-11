@@ -443,7 +443,6 @@ const PersonManager = ({
     });
     
     const updatedPersons = [...persons, ...newPersons];
-    
     const personsWithGenerations = assignGenerations(updatedPersons, propositusId);
     
     const newProperties = [];

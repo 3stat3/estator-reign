@@ -1,16 +1,19 @@
 // src/components/PropertyDivider/modules/DivisionEngine.jsx
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
+import PropertiesOCS from './PropertiesOCS';
 
 const DivisionEngine = ({ 
+  darkMode = false,
   persons = [], 
   properties = [],
   propositusId = null
 }) => {
-  const [divisionResults, setDivisionResults] = useState(null);
-  const [isCalculating, setIsCalculating] = useState(false);
-  const [selectedEvent, setSelectedEvent] = useState(null);
-  const [showEventModal, setShowEventModal] = useState(false);
+    const [divisionResults, setDivisionResults] = useState(null);
+    const [isCalculating, setIsCalculating] = useState(false);
+    const [selectedEvent, setSelectedEvent] = useState(null);
+    const [showEventModal, setShowEventModal] = useState(false);
+    const [showOCSModal, setShowOCSModal] = useState(false);
 
   // ============================================================
   // HELPER FUNCTIONS (UNCHANGED - KEPT EXACTLY AS IS)
@@ -493,10 +496,18 @@ const DivisionEngine = ({
 
     return (
       <div className="de-timeline-section">
-        <h3 className="de-section-title">
-          <span className="de-section-icon">📅</span>
-          Death Timeline
-        </h3>
+        <div className="de-timeline-header-row">
+          <h3 className="de-section-title">
+            <span className="de-section-icon">📅</span>
+            Death Timeline
+          </h3>
+          <button 
+            className="de-btn de-btn-ocs"
+            onClick={() => setShowOCSModal(true)}
+          >
+            📄 Properties to Appear in OCS
+          </button>
+        </div>
         <div className="de-timeline-list">
           {deathEvents.map((event, index) => (
             <motion.div
@@ -645,65 +656,106 @@ const DivisionEngine = ({
               onClick={(e) => e.stopPropagation()}
             >
               <div className="de-modal-header">
-                <div>
-                  <h2 className="de-modal-title">{selectedEvent.person.name}</h2>
-                  <p className="de-modal-subtitle">
-                    Died: {formatDate(selectedEvent.person.dateOfDeath)}
-                  </p>
+                <div className="de-modal-header-left">
+                  <div className="de-modal-avatar" style={{
+                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    width: '48px',
+                    height: '48px',
+                    borderRadius: '50%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: '18px',
+                    fontWeight: '700',
+                    color: 'white',
+                    flexShrink: '0'
+                  }}>
+                    {getInitials(selectedEvent.person.name)}
+                  </div>
+                  <div>
+                    <h2 className="de-modal-title">{selectedEvent.person.name}</h2>
+                    <p className="de-modal-subtitle">
+                      ⚰️ Died: {formatDate(selectedEvent.person.dateOfDeath)}
+                    </p>
+                  </div>
                 </div>
                 <button className="de-modal-close" onClick={() => setShowEventModal(false)}>✕</button>
               </div>
 
               <div className="de-modal-body">
                 <div className="de-modal-estate">
-                  <div className="de-modal-estate-item">
+                  <div className="de-modal-estate-item de-modal-estate-total">
+                    <div className="de-modal-estate-icon">🏛️</div>
                     <span className="de-modal-estate-label">Total Estate</span>
-                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.totalEstate)} sqm</span>
+                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.totalEstate)} <span className="de-modal-estate-unit">sqm</span></span>
                   </div>
                   <div className="de-modal-estate-item">
+                    <div className="de-modal-estate-icon">💑</div>
                     <span className="de-modal-estate-label">Conjugal Share</span>
-                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.conjugalShare)} sqm</span>
+                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.conjugalShare)} <span className="de-modal-estate-unit">sqm</span></span>
                   </div>
                   <div className="de-modal-estate-item">
+                    <div className="de-modal-estate-icon">🏛️</div>
                     <span className="de-modal-estate-label">Exclusive Property</span>
-                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.exclusiveProperty)} sqm</span>
+                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.exclusiveProperty)} <span className="de-modal-estate-unit">sqm</span></span>
                   </div>
                 </div>
 
                 <div className="de-modal-distribution">
-                  <h4 className="de-modal-section-title">Distribution</h4>
-                  {selectedEvent.distribution.map((dist, idx) => {
-                    const color = getTypeColor(dist.type);
-                    return (
-                      <div key={idx} className="de-modal-dist-item">
-                        <div className="de-modal-dist-left">
-                          <span className="de-modal-dist-name">{dist.heir.name}</span>
-                          <span className="de-modal-dist-type" style={{
-                            background: color.bg,
-                            color: color.color,
-                          }}>
-                            {dist.type}
-                          </span>
-                        </div>
-                        <div className="de-modal-dist-right">
-                          <span className="de-modal-dist-share">{formatNumber(dist.share)} sqm</span>
-                          {dist.passedTo && (
-                            <div className="de-modal-dist-passed">
-                              → {dist.passedTo.map(p => 
-                                `${p.person.name}: ${formatNumber(p.share)} sqm`
-                              ).join(', ')}
+                  <h4 className="de-modal-section-title">
+                    <span className="de-modal-section-icon">📤</span>
+                    Distribution
+                  </h4>
+                  <div className="de-modal-dist-list">
+                    {selectedEvent.distribution.map((dist, idx) => {
+                      const color = getTypeColor(dist.type);
+                      return (
+                        <div key={idx} className="de-modal-dist-item">
+                          <div className="de-modal-dist-left">
+                            <div className="de-modal-dist-avatar" style={{
+                              background: color.bg,
+                              color: color.color,
+                              width: '32px',
+                              height: '32px',
+                              borderRadius: '50%',
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'center',
+                              fontSize: '12px',
+                              fontWeight: '600'
+                            }}>
+                              {getInitials(dist.heir.name)}
                             </div>
-                          )}
+                            <div>
+                              <span className="de-modal-dist-name">{dist.heir.name}</span>
+                              <span className="de-modal-dist-type" style={{
+                                background: color.bg,
+                                color: color.color,
+                              }}>
+                                {dist.type}
+                              </span>
+                            </div>
+                          </div>
+                          <div className="de-modal-dist-right">
+                            <span className="de-modal-dist-share">{formatNumber(dist.share)} <span className="de-modal-dist-unit">sqm</span></span>
+                            {dist.passedTo && (
+                              <div className="de-modal-dist-passed">
+                                ⤷ {dist.passedTo.map(p => 
+                                  `${p.person.name}: ${formatNumber(p.share)} sqm`
+                                ).join(', ')}
+                              </div>
+                            )}
+                          </div>
                         </div>
-                      </div>
-                    );
-                  })}
+                      );
+                    })}
+                  </div>
                 </div>
               </div>
 
               <div className="de-modal-footer">
-                <button className="de-modal-btn" onClick={() => setShowEventModal(false)}>
-                  Close
+                <button className="de-modal-btn de-modal-btn-close" onClick={() => setShowEventModal(false)}>
+                  ✕ Close
                 </button>
               </div>
             </motion.div>
@@ -752,25 +804,36 @@ const DivisionEngine = ({
           
           {renderModal()}
         </div>
-      ) : (
-        <div className="de-empty-state">
-          <div className="de-empty-icon">⚖️</div>
-          <h3>Ready to Calculate</h3>
-          <p>
-            {!propositusId 
-              ? 'Please select a decedent (propositus) first.'
-              : 'Click the "Calculate Division" button to distribute the estate.'
-            }
-          </p>
-          <div className="de-empty-details">
-            <span>👥 {persons.length} persons</span>
-            <span>🏠 {properties.length} properties</span>
-            <span>🎯 {propositusId ? persons.find(p => p.id === propositusId)?.name : 'None'}</span>
-          </div>
-        </div>
-      )}
+            ) : (
+            <div className="de-empty-state">
+              <div className="de-empty-icon">⚖️</div>
+              <h3>Ready to Calculate</h3>
+              <p>
+                {!propositusId 
+                  ? 'Please select a decedent (propositus) first.'
+                  : 'Click the "Calculate Division" button to distribute the estate.'
+                }
+              </p>
+              <div className="de-empty-details">
+                <span>👥 {persons.length} persons</span>
+                <span>🏠 {properties.length} properties</span>
+                <span>🎯 {propositusId ? persons.find(p => p.id === propositusId)?.name : 'None'}</span>
+              </div>
+            </div>
+          )}
 
-      <style>{`
+          {/* Properties OCS Modal */}
+          <PropertiesOCS
+          darkMode={darkMode}
+          persons={persons}
+          properties={properties}
+          deathEvents={divisionResults?.deathEvents || []}
+          propositusId={propositusId}
+          isOpen={showOCSModal}
+          onClose={() => setShowOCSModal(false)}
+        />
+
+          <style>{`
         /* ============================================================
            WRAPPER & LAYOUT
            ============================================================ */
@@ -1030,6 +1093,58 @@ const DivisionEngine = ({
           border-radius: 12px;
           padding: 16px 18px;
           border: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .de-timeline-header-row {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 12px;
+          flex-wrap: wrap;
+          gap: 8px;
+        }
+
+        .de-timeline-header-row .de-section-title {
+          margin-bottom: 0;
+        }
+
+        .de-btn-ocs {
+          padding: 6px 16px;
+          border-radius: 8px;
+          border: 1px solid rgba(99, 102, 241, 0.3);
+          background: rgba(99, 102, 241, 0.06);
+          color: #6366f1;
+          font-size: 12px;
+          font-weight: 600;
+          cursor: pointer;
+          transition: all 0.2s ease;
+          white-space: nowrap;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .de-btn-ocs:hover {
+          background: rgba(99, 102, 241, 0.12);
+          border-color: rgba(99, 102, 241, 0.5);
+          transform: translateY(-1px);
+          box-shadow: 0 2px 8px rgba(99, 102, 241, 0.15);
+        }
+
+        .de-btn-ocs:active {
+          transform: scale(0.97);
+        }
+
+        /* Dark mode support for OCS button */
+        [data-theme="dark"] .de-btn-ocs {
+          background: rgba(99, 102, 241, 0.12);
+          border-color: rgba(99, 102, 241, 0.2);
+          color: #818cf8;
+        }
+
+        [data-theme="dark"] .de-btn-ocs:hover {
+          background: rgba(99, 102, 241, 0.2);
+          border-color: rgba(99, 102, 241, 0.4);
         }
 
         .de-timeline-list {
@@ -1601,18 +1716,235 @@ const DivisionEngine = ({
           }
         }
 
-          /* ============================================================
-            DARK MODE SUPPORT
+                    /* ============================================================
+            MODAL - ENHANCED
             ============================================================ */
-          [data-theme="dark"] .de-wrapper {
-            --bg-primary: #0f172a;
-            --bg-secondary: #1e293b;
-            --card-bg: #1e293b;
-            --text-primary: #f1f5f9;
-            --text-secondary: #94a3b8;
-            --border-color: #334155;
-            --hover-bg: #334155;
-          }
+            .de-modal-header-left {
+              display: flex;
+              align-items: center;
+              gap: 14px;
+            }
+
+            .de-modal-avatar {
+              width: 48px;
+              height: 48px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 18px;
+              font-weight: 700;
+              color: white;
+              flex-shrink: 0;
+              box-shadow: 0 2px 8px rgba(99, 102, 241, 0.3);
+            }
+
+            .de-modal-estate {
+              display: grid;
+              grid-template-columns: 1fr 1fr 1fr;
+              gap: 10px;
+              margin-bottom: 20px;
+            }
+
+            .de-modal-estate-item {
+              background: var(--bg-secondary, #f8fafc);
+              border-radius: 10px;
+              padding: 12px 14px;
+              text-align: center;
+              border: 1px solid var(--border-color, #e2e8f0);
+              transition: all 0.2s ease;
+            }
+
+            .de-modal-estate-item:hover {
+              transform: translateY(-2px);
+              box-shadow: 0 4px 12px rgba(0, 0, 0, 0.05);
+            }
+
+            .de-modal-estate-total {
+              background: linear-gradient(135deg, rgba(99, 102, 241, 0.06), rgba(139, 92, 246, 0.06));
+              border-color: rgba(99, 102, 241, 0.2);
+            }
+
+            .de-modal-estate-total .de-modal-estate-value {
+              color: #6366f1;
+            }
+
+            .de-modal-estate-icon {
+              font-size: 16px;
+              margin-bottom: 2px;
+            }
+
+            .de-modal-estate-label {
+              display: block;
+              font-size: 10px;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              color: var(--text-secondary, #64748b);
+              font-weight: 600;
+            }
+
+            .de-modal-estate-value {
+              display: block;
+              font-size: 18px;
+              font-weight: 700;
+              color: var(--text-primary, #0f172a);
+              margin-top: 2px;
+            }
+
+            .de-modal-estate-unit {
+              font-size: 11px;
+              font-weight: 400;
+              color: var(--text-secondary, #64748b);
+              margin-left: 2px;
+            }
+
+            .de-modal-section-title {
+              font-size: 13px;
+              font-weight: 600;
+              color: var(--text-secondary, #64748b);
+              margin: 0 0 12px 0;
+              display: flex;
+              align-items: center;
+              gap: 8px;
+              text-transform: uppercase;
+              letter-spacing: 0.5px;
+            }
+
+            .de-modal-section-icon {
+              font-size: 14px;
+            }
+
+            .de-modal-dist-list {
+              display: flex;
+              flex-direction: column;
+              gap: 6px;
+            }
+
+            .de-modal-dist-item {
+              display: flex;
+              justify-content: space-between;
+              align-items: center;
+              padding: 10px 14px;
+              border-radius: 10px;
+              background: var(--bg-secondary, #f8fafc);
+              border: 1px solid var(--border-color, #e2e8f0);
+              transition: all 0.2s ease;
+            }
+
+            .de-modal-dist-item:hover {
+              border-color: rgba(99, 102, 241, 0.2);
+              background: var(--hover-bg, #f1f5f9);
+            }
+
+            .de-modal-dist-left {
+              display: flex;
+              align-items: center;
+              gap: 10px;
+            }
+
+            .de-modal-dist-avatar {
+              width: 32px;
+              height: 32px;
+              border-radius: 50%;
+              display: flex;
+              align-items: center;
+              justify-content: center;
+              font-size: 12px;
+              font-weight: 600;
+              flex-shrink: 0;
+            }
+
+            .de-modal-dist-name {
+              font-weight: 600;
+              color: var(--text-primary, #0f172a);
+              font-size: 13px;
+            }
+
+            .de-modal-dist-type {
+              font-size: 8px;
+              font-weight: 700;
+              text-transform: uppercase;
+              letter-spacing: 0.4px;
+              padding: 2px 10px;
+              border-radius: 12px;
+              margin-left: 6px;
+            }
+
+            .de-modal-dist-right {
+              text-align: right;
+              flex-shrink: 0;
+            }
+
+            .de-modal-dist-share {
+              font-weight: 700;
+              font-size: 14px;
+              color: var(--text-primary, #0f172a);
+            }
+
+            .de-modal-dist-unit {
+              font-size: 10px;
+              font-weight: 400;
+              color: var(--text-secondary, #64748b);
+            }
+
+            .de-modal-dist-passed {
+              font-size: 11px;
+              color: var(--text-secondary, #64748b);
+              margin-top: 2px;
+            }
+
+            .de-modal-btn-close {
+              background: var(--border-color, #e2e8f0);
+              color: var(--text-primary, #0f172a);
+              padding: 8px 24px;
+              border-radius: 8px;
+              border: none;
+              font-size: 13px;
+              font-weight: 500;
+              cursor: pointer;
+              transition: all 0.2s;
+              display: flex;
+              align-items: center;
+              gap: 6px;
+            }
+
+            .de-modal-btn-close:hover {
+              background: var(--hover-bg, #d1d5db);
+            }
+
+            @media (max-width: 768px) {
+              .de-modal-estate {
+                grid-template-columns: 1fr;
+              }
+
+              .de-modal-dist-item {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 6px;
+              }
+
+              .de-modal-dist-right {
+                text-align: left;
+                width: 100%;
+              }
+
+              .de-modal-header-left {
+                flex-wrap: wrap;
+              }
+            }
+
+            /* ============================================================
+              DARK MODE SUPPORT
+              ============================================================ */
+            [data-theme="dark"] .de-wrapper {
+              --bg-primary: #0f172a;
+              --bg-secondary: #1e293b;
+              --card-bg: #1e293b;
+              --text-primary: #f1f5f9;
+              --text-secondary: #94a3b8;
+              --border-color: #334155;
+              --hover-bg: #334155;
+            }
         `}</style>
     </div>
   );
