@@ -24,7 +24,8 @@ import {
   CheckBadgeIcon,
   XMarkIcon,
   WrenchScrewdriverIcon,
-  ChartPieIcon
+  ChartPieIcon,
+  Bars3Icon
 } from '@heroicons/react/24/outline';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
 
@@ -32,10 +33,12 @@ const UserDashboard = () => {
   const { user, logout } = useAuth();
   const [activeTab, setActiveTab] = useState('propertydivider');
   const [isMobile, setIsMobile] = useState(false);
+  const [isTablet, setIsTablet] = useState(false);
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
   const [showHelpfulToolsMenu, setShowHelpfulToolsMenu] = useState(false);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) return savedTheme;
@@ -46,6 +49,8 @@ const UserDashboard = () => {
 
   const estateTaxDropdownRef = useRef(null);
   const helpfulToolsDropdownRef = useRef(null);
+  const mobileMenuRef = useRef(null);
+  const menuButtonRef = useRef(null);
 
   const { isEnabled: calculatorEnabled, loading: calcLoading } = useFeatureAccess('tax_calculator');
   const { isEnabled: dividerEnabled, loading: dividerLoading } = useFeatureAccess('property_divider');
@@ -68,12 +73,19 @@ const UserDashboard = () => {
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth <= 768);
+      const width = window.innerWidth;
+      const mobile = width <= 768;
+      const tablet = width <= 1024 && width > 768;
+      setIsMobile(mobile);
+      setIsTablet(tablet);
+      if (!mobile && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
     };
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -89,10 +101,15 @@ const UserDashboard = () => {
       if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
         setShowHelpfulToolsMenu(false);
       }
+      if (mobileMenuOpen && 
+          !e.target.closest('.mobile-menu-container') && 
+          !e.target.closest('.mobile-menu-toggle')) {
+        setMobileMenuOpen(false);
+      }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu]);
+  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu, mobileMenuOpen]);
 
   // Check if current active tab is disabled, show warning
   useEffect(() => {
@@ -142,6 +159,12 @@ const UserDashboard = () => {
     { id: 'onnet-tracker', label: 'ONNET and eLA Tracker', icon: ChartPieIcon },
     { id: 'tool2', label: 'Tool 2', icon: WrenchScrewdriverIcon },
     { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
+  ];
+
+  // All navigation items for mobile menu
+  const allNavItems = [
+    ...estateTaxItems.map(item => ({ ...item, isEstateTax: true })),
+    ...helpfulToolsItems.map(item => ({ ...item, isHelpfulTool: true }))
   ];
 
   const MaintenanceMessage = ({ featureName }) => (
@@ -308,7 +331,8 @@ const UserDashboard = () => {
             </div>
           </div>
 
-          <div className="nav-tabs">
+          {/* Desktop Navigation - Hidden on mobile/tablet */}
+          <div className={`nav-tabs desktop-nav ${isMobile || isTablet ? 'hidden' : ''}`}>
             {/* Estate Tax Dropdown Menu */}
             <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
@@ -416,6 +440,109 @@ const UserDashboard = () => {
             </div>
           </div>
 
+          {/* Tablet Navigation - Icon only with dropdowns */}
+          <div className={`nav-tabs tablet-nav ${isMobile ? 'hidden' : isTablet ? '' : 'hidden'}`}>
+            <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
+              <button
+                className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowEstateTaxMenu(!showEstateTaxMenu)}
+              >
+                <Squares2X2Icon className="tab-icon" />
+                <ChevronDownIcon className={`dropdown-chevron ${showEstateTaxMenu ? 'rotated' : ''}`} />
+                {estateTaxItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showEstateTaxMenu && (
+                  <motion.div
+                    className="dropdown-menu tablet-dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {estateTaxItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''} ${!item.enabled ? 'disabled-item' : ''}`}
+                        onClick={() => {
+                          handleFeatureClick(item);
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        {!item.enabled && <LockClosedIcon className="lock-icon-dropdown" />}
+                        {activeTab === item.id && item.enabled && (
+                          <CheckBadgeIcon className="dropdown-item-check" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
+              <button
+                className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowHelpfulToolsMenu(!showHelpfulToolsMenu)}
+              >
+                <WrenchScrewdriverIcon className="tab-icon" />
+                <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
+                {helpfulToolsItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showHelpfulToolsMenu && (
+                  <motion.div
+                    className="dropdown-menu tablet-dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {helpfulToolsItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowHelpfulToolsMenu(false);
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        {activeTab === item.id && (
+                          <CheckBadgeIcon className="dropdown-item-check" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+          </div>
+
+          {/* Mobile Menu Toggle */}
+          <button 
+            ref={menuButtonRef}
+            className={`mobile-menu-toggle ${isMobile ? '' : 'hidden'}`}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMobileMenuOpen(!mobileMenuOpen);
+            }}
+            aria-label="Toggle mobile menu"
+            aria-expanded={mobileMenuOpen}
+          >
+            {mobileMenuOpen ? <XMarkIcon /> : <Bars3Icon />}
+          </button>
+
           <div className="nav-actions">
             <button className="icon-btn" onClick={toggleTheme}>
               {theme === 'light' ? <MoonIcon /> : <SunIcon />}
@@ -479,8 +606,6 @@ const UserDashboard = () => {
                       </div>
                     </div>
                     <div className="dropdown-divider"></div>
-                    {/* REMOVED: Estate Tax Items - they're already in the main nav */}
-                    {/* REMOVED: Helpful Tools Items - they're already in the main nav */}
                     <button className="dropdown-item logout" onClick={logout}>
                       <ArrowRightOnRectangleIcon />
                       Logout
@@ -491,6 +616,49 @@ const UserDashboard = () => {
             </div>
           </div>
         </div>
+
+        {/* Mobile Menu */}
+        <AnimatePresence>
+          {mobileMenuOpen && isMobile && (
+            <motion.div 
+              className="mobile-menu-container"
+              initial={{ opacity: 0, height: 0 }}
+              animate={{ opacity: 1, height: 'auto' }}
+              exit={{ opacity: 0, height: 0 }}
+              transition={{ duration: 0.3 }}
+            >
+              <div className="mobile-menu-inner">
+                {allNavItems.map((item) => {
+                  const isEstateTax = estateTaxItems.some(e => e.id === item.id);
+                  const isHelpfulTool = helpfulToolsItems.some(h => h.id === item.id);
+                  const enabled = isEstateTax ? estateTaxItems.find(e => e.id === item.id)?.enabled : true;
+                  
+                  return (
+                    <button
+                      key={item.id}
+                      className={`mobile-nav-item ${activeTab === item.id ? 'active' : ''} ${!enabled ? 'disabled-item' : ''}`}
+                      onClick={() => {
+                        if (isEstateTax) {
+                          handleFeatureClick({ ...item, enabled });
+                        } else {
+                          setActiveTab(item.id);
+                        }
+                        setMobileMenuOpen(false);
+                      }}
+                    >
+                      <item.icon className="mobile-nav-icon" />
+                      <span>{item.label}</span>
+                      {!enabled && <LockClosedIcon className="lock-icon-mobile" />}
+                      {activeTab === item.id && (
+                        <CheckBadgeIcon className="mobile-nav-check" />
+                      )}
+                    </button>
+                  );
+                })}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
       </nav>
 
       <main className="dashboard-main">
@@ -543,6 +711,7 @@ const UserDashboard = () => {
           background: var(--bg-primary);
           transition: all 0.3s ease;
           position: relative;
+          overflow-x: hidden;
         }
 
         .disabled-feature-toast {
@@ -623,17 +792,21 @@ const UserDashboard = () => {
           position: sticky;
           top: 0;
           z-index: 1000;
+          overflow: visible !important;
         }
 
         .nav-container {
-          max-width: 100%;
+          max-width: 1600px;
           margin: 0 auto;
-          padding: 0 1.5rem;
+          padding: 0 1rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
           height: 70px;
-          gap: 2rem;
+          gap: 0.5rem;
+          overflow: visible !important;
+          position: relative;
+          min-height: 70px;
         }
 
         .nav-brand {
@@ -663,21 +836,36 @@ const UserDashboard = () => {
           flex: 1;
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          overflow-x: visible;
+          gap: 0.25rem;
+          overflow: visible !important;
           scrollbar-width: none;
           position: relative;
+          min-width: 0;
+          padding: 0 0.25rem;
+          flex-wrap: nowrap;
         }
 
         .nav-tabs::-webkit-scrollbar {
           display: none;
         }
 
+        .nav-tabs.hidden {
+          display: none !important;
+        }
+
+        .desktop-nav {
+          display: flex !important;
+        }
+
+        .tablet-nav {
+          display: none !important;
+        }
+
         .nav-tab {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          padding: 0.5rem 1rem;
+          padding: 0.5rem 0.75rem;
           background: none;
           border: none;
           border-radius: 0.5rem;
@@ -689,6 +877,7 @@ const UserDashboard = () => {
           position: relative;
           white-space: nowrap;
           z-index: 1;
+          flex-shrink: 0;
         }
 
         .nav-tab:hover {
@@ -704,6 +893,7 @@ const UserDashboard = () => {
         .tab-icon {
           width: 1.25rem;
           height: 1.25rem;
+          flex-shrink: 0;
         }
 
         .tab-indicator {
@@ -720,6 +910,9 @@ const UserDashboard = () => {
         .helpful-tools-menu-container {
           position: relative;
           display: inline-block;
+          flex-shrink: 0;
+          overflow: visible !important;
+          z-index: 10;
         }
 
         .dropdown-trigger {
@@ -732,6 +925,7 @@ const UserDashboard = () => {
           width: 1rem;
           height: 1rem;
           transition: transform 0.2s ease;
+          flex-shrink: 0;
         }
 
         .dropdown-chevron.rotated {
@@ -748,8 +942,14 @@ const UserDashboard = () => {
           border-radius: 0.75rem;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
           padding: 0.5rem;
-          z-index: 9999;
-          overflow: visible;
+          z-index: 99999 !important;
+          overflow: visible !important;
+          display: block !important;
+        }
+
+        .tablet-dropdown-menu {
+          left: 50% !important;
+          transform: translateX(-50%) !important;
         }
 
         .dropdown-item-nav {
@@ -791,6 +991,7 @@ const UserDashboard = () => {
         .dropdown-item-icon {
           width: 1.25rem;
           height: 1.25rem;
+          flex-shrink: 0;
         }
 
         .dropdown-item-check {
@@ -798,6 +999,7 @@ const UserDashboard = () => {
           height: 1rem;
           margin-left: auto;
           color: var(--gradient-start);
+          flex-shrink: 0;
         }
 
         .lock-icon-dropdown {
@@ -805,12 +1007,14 @@ const UserDashboard = () => {
           height: 0.875rem;
           margin-left: auto;
           color: #f59e0b;
+          flex-shrink: 0;
         }
 
         .nav-actions {
           display: flex;
           align-items: center;
-          gap: 0.75rem;
+          gap: 0.5rem;
+          flex-shrink: 0;
         }
 
         .icon-btn {
@@ -850,6 +1054,9 @@ const UserDashboard = () => {
           font-size: 0.625rem;
           padding: 0.125rem 0.375rem;
           border-radius: 9999px;
+          min-width: 18px;
+          text-align: center;
+          line-height: 1.2;
         }
 
         .notifications-dropdown {
@@ -857,11 +1064,14 @@ const UserDashboard = () => {
           top: calc(100% + 0.5rem);
           right: 0;
           width: 340px;
+          max-width: 90vw;
           background: var(--card-bg);
           border: 1px solid var(--border-color);
           border-radius: 0.75rem;
           box-shadow: var(--shadow-lg);
           z-index: 100;
+          max-height: 80vh;
+          overflow-y: auto;
         }
 
         .notification-item {
@@ -898,6 +1108,7 @@ const UserDashboard = () => {
 
         .user-menu-container {
           position: relative;
+          z-index: 10;
         }
 
         .user-menu-btn {
@@ -927,6 +1138,7 @@ const UserDashboard = () => {
           color: white;
           font-weight: 600;
           font-size: 0.875rem;
+          flex-shrink: 0;
         }
 
         .user-name-nav {
@@ -946,6 +1158,7 @@ const UserDashboard = () => {
           top: calc(100% + 0.5rem);
           right: 0;
           width: 280px;
+          max-width: 90vw;
           background: var(--card-bg);
           border: 1px solid var(--border-color);
           border-radius: 0.75rem;
@@ -981,6 +1194,7 @@ const UserDashboard = () => {
           color: white;
           font-weight: 600;
           font-size: 1rem;
+          flex-shrink: 0;
         }
 
         .user-name-dropdown {
@@ -992,6 +1206,7 @@ const UserDashboard = () => {
         .user-email-dropdown {
           font-size: 0.75rem;
           color: var(--text-secondary);
+          word-break: break-all;
         }
 
         .dropdown-divider {
@@ -1222,26 +1437,123 @@ const UserDashboard = () => {
           to { transform: rotate(360deg); }
         }
 
+        /* Mobile Menu Toggle */
+        .mobile-menu-toggle {
+          display: none;
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--text-primary);
+          padding: 0.5rem;
+          border-radius: 0.5rem;
+          transition: background 0.2s;
+          flex-shrink: 0;
+        }
+
+        .mobile-menu-toggle:hover {
+          background: var(--hover-bg);
+        }
+
+        .mobile-menu-toggle svg {
+          width: 1.5rem;
+          height: 1.5rem;
+        }
+
+        .mobile-menu-toggle.hidden {
+          display: none !important;
+        }
+
+        /* Mobile Menu Container */
+        .mobile-menu-container {
+          background: var(--nav-bg);
+          border-top: 1px solid var(--border-color);
+          overflow: hidden;
+          max-height: calc(100vh - 70px);
+          overflow-y: auto;
+        }
+
+        .mobile-menu-inner {
+          padding: 0.5rem 1rem 1rem;
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 0.25rem;
+        }
+
+        .mobile-nav-item {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: 0.75rem 1rem;
+          background: none;
+          border: none;
+          border-radius: 0.5rem;
+          cursor: pointer;
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          text-align: left;
+          width: 100%;
+        }
+
+        .mobile-nav-item:hover {
+          background: var(--hover-bg);
+          color: var(--text-primary);
+        }
+
+        .mobile-nav-item.active {
+          background: rgba(102, 126, 234, 0.1);
+          color: var(--gradient-start);
+        }
+
+        .mobile-nav-item.disabled-item {
+          opacity: 0.6;
+        }
+
+        .mobile-nav-icon {
+          width: 1.25rem;
+          height: 1.25rem;
+          flex-shrink: 0;
+        }
+
+        .mobile-nav-check {
+          width: 1rem;
+          height: 1rem;
+          margin-left: auto;
+          color: var(--gradient-start);
+          flex-shrink: 0;
+        }
+
+        .lock-icon-mobile {
+          width: 0.875rem;
+          height: 0.875rem;
+          margin-left: auto;
+          color: #f59e0b;
+          flex-shrink: 0;
+        }
+
+        /* ===== RESPONSIVE STYLES ===== */
+
+        /* Tablet */
         @media (max-width: 1024px) {
-          .nav-tabs {
-            gap: 0.25rem;
+          .desktop-nav {
+            display: none !important;
           }
-          
-          .nav-tab span,
-          .dropdown-trigger span {
+
+          .tablet-nav {
+            display: flex !important;
+          }
+
+          .tablet-nav .nav-tab {
+            padding: 0.5rem 0.5rem;
+          }
+
+          .tablet-nav .nav-tab span {
             display: none;
           }
-          
-          .nav-tab {
-            padding: 0.5rem;
-          }
 
-          .dropdown-trigger {
-            padding: 0.5rem;
-          }
-
-          .dropdown-menu {
-            min-width: 180px;
+          .user-name-nav {
+            display: none;
           }
 
           .disabled-feature-toast {
@@ -1250,14 +1562,13 @@ const UserDashboard = () => {
           }
         }
 
+        /* Mobile */
         @media (max-width: 768px) {
           .nav-container {
-            padding: 0 1rem;
-            gap: 1rem;
-          }
-          
-          .user-name-nav {
-            display: none;
+            padding: 0 0.75rem;
+            gap: 0.25rem;
+            height: 60px;
+            min-height: 60px;
           }
           
           .dashboard-main {
@@ -1276,7 +1587,7 @@ const UserDashboard = () => {
           }
 
           .property-divider-container {
-            height: calc(100vh - 70px);
+            height: calc(100vh - 60px);
           }
 
           .calculator-container-wrapper {
@@ -1287,9 +1598,18 @@ const UserDashboard = () => {
             margin: 1rem;
           }
 
-          .dropdown-menu {
-            left: -4rem;
-            min-width: 200px;
+          .tablet-nav {
+            display: none !important;
+          }
+
+          .mobile-menu-toggle {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
+          }
+
+          .mobile-menu-inner {
+            grid-template-columns: 1fr;
           }
 
           .disabled-feature-toast {
@@ -1301,20 +1621,138 @@ const UserDashboard = () => {
           .toast-content div {
             font-size: 0.813rem;
           }
+
+          .notifications-dropdown {
+            width: 280px;
+            max-width: 85vw;
+            right: -2rem;
+          }
+
+          .user-dropdown {
+            width: 240px;
+            max-width: 85vw;
+            right: -1rem;
+          }
         }
 
-        @media (max-width: 640px) {
-          .nav-brand .logo-text {
-            display: none;
-          }
-
+        /* Small phones */
+        @media (max-width: 480px) {
           .nav-container {
-            padding: 0 0.75rem;
+            padding: 0 0.5rem;
+            gap: 0.25rem;
+            height: 56px;
+            min-height: 56px;
           }
 
-          .dropdown-menu {
-            left: -6rem;
-            min-width: 180px;
+          .logo-text {
+            font-size: 1rem;
+          }
+
+          .logo-icon {
+            width: 1.5rem;
+            height: 1.5rem;
+          }
+
+          .icon-btn {
+            padding: 0.375rem;
+          }
+
+          .icon-btn svg {
+            width: 1rem;
+            height: 1rem;
+          }
+
+          .user-avatar-small {
+            width: 1.75rem;
+            height: 1.75rem;
+            font-size: 0.75rem;
+          }
+
+          .dashboard-main {
+            padding: 0;
+          }
+
+          .content-title {
+            font-size: 1.25rem;
+          }
+
+          .property-divider-container {
+            height: calc(100vh - 56px);
+          }
+
+          .notifications-dropdown {
+            width: 260px;
+            max-width: 85vw;
+            right: -3rem;
+          }
+
+          .user-dropdown {
+            width: 220px;
+            max-width: 85vw;
+            right: -2rem;
+          }
+
+          .mobile-menu-inner {
+            padding: 0.5rem;
+            gap: 0.15rem;
+          }
+
+          .mobile-nav-item {
+            padding: 0.625rem 0.75rem;
+            font-size: 0.8125rem;
+          }
+        }
+
+        /* Very small phones */
+        @media (max-width: 380px) {
+          .nav-container {
+            padding: 0 0.25rem;
+            height: 52px;
+            min-height: 52px;
+          }
+
+          .nav-actions {
+            gap: 0.25rem;
+          }
+
+          .notifications-dropdown {
+            width: 240px;
+            right: -4rem;
+          }
+
+          .user-dropdown {
+            width: 200px;
+            right: -3rem;
+          }
+
+          .logo-text {
+            font-size: 0.875rem;
+          }
+
+          .logo-icon {
+            width: 1.25rem;
+            height: 1.25rem;
+          }
+        }
+
+        /* Landscape phones */
+        @media (max-height: 500px) and (orientation: landscape) {
+          .nav-container {
+            height: 48px;
+            min-height: 48px;
+          }
+
+          .property-divider-container {
+            height: calc(100vh - 48px);
+          }
+
+          .logo-text {
+            font-size: 0.875rem;
+          }
+
+          .logo-icon {
+            width: 1.25rem;
+            height: 1.25rem;
           }
         }
       `}</style>
