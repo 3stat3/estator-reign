@@ -49,6 +49,7 @@ const SuperAdminDashboard = () => {
   const estateTaxDropdownRef = useRef(null);
   const helpfulToolsDropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
+  const menuButtonRef = useRef(null);
 
   // Apply dark mode class to document
   useEffect(() => {
@@ -63,8 +64,9 @@ const SuperAdminDashboard = () => {
 
   useEffect(() => {
     const handleResize = () => {
-      const mobile = window.innerWidth <= 768;
-      const tablet = window.innerWidth <= 1024 && window.innerWidth > 768;
+      const width = window.innerWidth;
+      const mobile = width <= 768;
+      const tablet = width <= 1024 && width > 768;
       setIsMobile(mobile);
       setIsTablet(tablet);
       // Close mobile menu on resize to desktop
@@ -91,7 +93,9 @@ const SuperAdminDashboard = () => {
       if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
         setShowHelpfulToolsMenu(false);
       }
-      if (mobileMenuOpen && !e.target.closest('.mobile-menu-container') && !e.target.closest('.mobile-menu-toggle')) {
+      if (mobileMenuOpen && 
+          !e.target.closest('.mobile-menu-container') && 
+          !e.target.closest('.mobile-menu-toggle')) {
         setMobileMenuOpen(false);
       }
     };
@@ -468,7 +472,7 @@ const SuperAdminDashboard = () => {
           </div>
 
           {/* Desktop Navigation - Hidden on mobile/tablet */}
-          <div className={`nav-tabs ${isMobile || isTablet ? 'hidden' : ''}`}>
+          <div className={`nav-tabs desktop-nav ${isMobile || isTablet ? 'hidden' : ''}`}>
             <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
                 className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
@@ -577,8 +581,8 @@ const SuperAdminDashboard = () => {
             ))}
           </div>
 
-          {/* Tablet Navigation - Icon only with dropdowns */}
-          <div className={`nav-tabs tablet-nav ${!(isMobile || isTablet) ? 'hidden' : ''}`}>
+          {/* Tablet Navigation - Icon only with dropdowns (hidden on mobile) */}
+          <div className={`nav-tabs tablet-nav ${isMobile ? 'hidden' : isTablet ? '' : 'hidden'}`}>
             <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
                 className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
@@ -686,11 +690,16 @@ const SuperAdminDashboard = () => {
             ))}
           </div>
 
-          {/* Mobile Menu Toggle - Only on mobile */}
+          {/* Mobile Menu Toggle - Always visible on mobile */}
           <button 
+            ref={menuButtonRef}
             className={`mobile-menu-toggle ${isMobile ? '' : 'hidden'}`}
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            onClick={(e) => {
+              e.stopPropagation();
+              setMobileMenuOpen(!mobileMenuOpen);
+            }}
             aria-label="Toggle mobile menu"
+            aria-expanded={mobileMenuOpen}
           >
             {mobileMenuOpen ? <XMarkIcon /> : <Bars3Icon />}
           </button>
@@ -899,6 +908,7 @@ const SuperAdminDashboard = () => {
           gap: 0.5rem;
           overflow: visible !important;
           position: relative;
+          min-height: 70px;
         }
 
         .nav-brand {
@@ -945,8 +955,12 @@ const SuperAdminDashboard = () => {
           display: none !important;
         }
 
-        .tablet-nav {
+        .desktop-nav {
           display: flex !important;
+        }
+
+        .tablet-nav {
+          display: none !important;
         }
 
         .nav-tab {
@@ -1340,6 +1354,7 @@ const SuperAdminDashboard = () => {
           padding: 0.5rem;
           border-radius: 0.5rem;
           transition: background 0.2s;
+          flex-shrink: 0;
         }
 
         .mobile-menu-toggle:hover {
@@ -1600,21 +1615,16 @@ const SuperAdminDashboard = () => {
           max-width: 100%;
         }
 
-        /* Responsive Styles */
-        @media (max-width: 1024px) {
-          .mobile-menu-toggle:not(.hidden) {
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
+        /* ===== RESPONSIVE STYLES ===== */
 
-          .nav-tabs:not(.tablet-nav) {
+        /* Tablet */
+        @media (max-width: 1024px) {
+          .desktop-nav {
             display: none !important;
           }
 
           .tablet-nav {
             display: flex !important;
-            gap: 0.15rem;
           }
 
           .tablet-nav .nav-tab {
@@ -1630,10 +1640,13 @@ const SuperAdminDashboard = () => {
           }
         }
 
+        /* Mobile */
         @media (max-width: 768px) {
           .nav-container {
             padding: 0 0.75rem;
             gap: 0.25rem;
+            height: 60px;
+            min-height: 60px;
           }
           
           .dashboard-main {
@@ -1656,7 +1669,7 @@ const SuperAdminDashboard = () => {
           }
 
           .property-divider-container-full {
-            height: calc(100vh - 70px);
+            height: calc(100vh - 60px);
           }
 
           .mobile-menu-inner {
@@ -1675,20 +1688,26 @@ const SuperAdminDashboard = () => {
             right: -1rem;
           }
 
+          /* Hide tablet nav on mobile */
           .tablet-nav {
             display: none !important;
           }
 
-          .mobile-menu-toggle:not(.hidden) {
-            display: flex;
+          /* Show mobile toggle on mobile */
+          .mobile-menu-toggle {
+            display: flex !important;
+            align-items: center;
+            justify-content: center;
           }
         }
 
+        /* Small phones */
         @media (max-width: 480px) {
           .nav-container {
             padding: 0 0.5rem;
             gap: 0.25rem;
-            height: 60px;
+            height: 56px;
+            min-height: 56px;
           }
 
           .logo-text {
@@ -1774,11 +1793,18 @@ const SuperAdminDashboard = () => {
           }
 
           .property-divider-container-full {
-            height: calc(100vh - 60px);
+            height: calc(100vh - 56px);
           }
         }
 
+        /* Very small phones */
         @media (max-width: 380px) {
+          .nav-container {
+            padding: 0 0.25rem;
+            height: 52px;
+            min-height: 52px;
+          }
+
           .nav-actions {
             gap: 0.25rem;
           }
@@ -1791,6 +1817,36 @@ const SuperAdminDashboard = () => {
           .user-dropdown {
             width: 200px;
             right: -3rem;
+          }
+
+          .logo-text {
+            font-size: 0.875rem;
+          }
+
+          .logo-icon {
+            width: 1.25rem;
+            height: 1.25rem;
+          }
+        }
+
+        /* Landscape phones */
+        @media (max-height: 500px) and (orientation: landscape) {
+          .nav-container {
+            height: 48px;
+            min-height: 48px;
+          }
+
+          .property-divider-container-full {
+            height: calc(100vh - 48px);
+          }
+
+          .logo-text {
+            font-size: 0.875rem;
+          }
+
+          .logo-icon {
+            width: 1.25rem;
+            height: 1.25rem;
           }
         }
       `}</style>
