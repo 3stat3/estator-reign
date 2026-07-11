@@ -58,10 +58,21 @@ const PersonDetailModal = ({
   };
 
   const getConjugalProperties = () => {
-    return properties.filter(p => 
-      p.classification === 'Conjugal' && 
-      p.ownerId === person.id
-    );
+    // For conjugal properties, show them if:
+    // 1. The person is the owner, OR
+    // 2. The person is the spouse of the owner
+    return properties.filter(p => {
+      if (p.classification !== 'Conjugal') return false;
+      
+      // If this person owns it directly
+      if (p.ownerId === person.id) return true;
+      
+      // If this person is the spouse of the owner
+      const owner = persons.find(per => per.id === p.ownerId);
+      if (owner && owner.spouseId === person.id) return true;
+      
+      return false;
+    });
   };
 
   const getPropertyAuditTrail = (property) => {
@@ -277,7 +288,11 @@ const PersonDetailModal = ({
                 </div>
               ) : (
                 conjugalProps.map(prop => {
-                  const spouse = persons.find(p => p.id === person.spouseId);
+                  const owner = persons.find(p => p.id === prop.ownerId);
+                  const spouse = owner ? persons.find(p => p.id === owner.spouseId) : null;
+                  const isOwner = prop.ownerId === person.id;
+                  const isSpouse = owner && owner.spouseId === person.id;
+                  
                   return (
                     <div key={prop.id} className="pdm-property-card">
                       <div className="pdm-property-header">
@@ -289,10 +304,14 @@ const PersonDetailModal = ({
                       <div className="pdm-property-details">
                         <span>📏 {prop.totalSqm || 0} sqm</span>
                         <span>📂 Conjugal</span>
-                        {spouse && <span>💍 with {spouse.name}</span>}
+                        {owner && <span>👤 Owner: {owner.name}</span>}
+                        {spouse && <span>💍 Spouse: {spouse.name}</span>}
                         {prop.location && <span>📍 {prop.location}</span>}
                         <span className="pdm-conjugal-warning">
-                          ⚠️ 50% share belongs to {person.name}, 50% to {spouse?.name || 'spouse'}
+                          {isOwner 
+                            ? `⚠️ You own 50%, ${spouse?.name || 'spouse'} owns 50%`
+                            : `⚠️ ${owner?.name || 'Owner'} owns 50%, you own 50%`
+                          }
                         </span>
                       </div>
                     </div>

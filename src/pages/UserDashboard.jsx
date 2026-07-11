@@ -1,10 +1,12 @@
 import React, { useState, useEffect, useRef } from 'react';
 import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
-import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
 import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
 import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
+import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
+import TaxSettings from '../components/Settings/TaxSettings';
+import InterestCalculator from '../components/HelpfulTools/InterestCalculator';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -154,9 +156,10 @@ const UserDashboard = () => {
     { id: 'taxhelpers', label: 'Tax Helpers', icon: ClipboardDocumentCheckIcon, enabled: helpersEnabled },
   ];
 
-  // Helpful Tools sub-menu items
+  // Revenuer Tools sub-menu items
   const helpfulToolsItems = [
     { id: 'onnet-tracker', label: 'ONNET and eLA Tracker', icon: ChartPieIcon },
+    { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon },
     { id: 'tool2', label: 'Tool 2', icon: WrenchScrewdriverIcon },
     { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
   ];
@@ -250,19 +253,9 @@ const UserDashboard = () => {
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
-            className="property-divider-container"
+            className="property-divider-container-full"
           >
-            <div className="content-header">
-              <div>
-                <h2 className="content-title">Property Divider</h2>
-                <p className="content-description">
-                  Divide properties among heirs based on Philippine estate laws. Add decedents, classify properties (Exclusive/Conjugal), define heirs, and see automatic sqm division.
-                </p>
-              </div>
-            </div>
-            <div className="property-divider-wrapper">
-              <PropertyDivider />
-            </div>
+            <PropertyDivider />
           </motion.div>
         );
 
@@ -292,6 +285,20 @@ const UserDashboard = () => {
             className="content-card"
           >
             <ONNETeLATracker />
+          </motion.div>
+        );
+
+      case 'interest-calculator':
+        return (
+          <motion.div
+            key="interest-calculator"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <InterestCalculator />
           </motion.div>
         );
 
@@ -400,7 +407,7 @@ const UserDashboard = () => {
                 }}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
-                <span>Helpful Tools</span>
+                <span>Revenuer Tools</span>
                 <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
                 {helpfulToolsItems.some(item => item.id === activeTab) && (
                   <motion.div className="tab-indicator" layoutId="activeTab" />
@@ -491,6 +498,7 @@ const UserDashboard = () => {
                 onClick={() => setShowHelpfulToolsMenu(!showHelpfulToolsMenu)}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
+                <span>Revenuer Tools</span>
                 <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
                 {helpfulToolsItems.some(item => item.id === activeTab) && (
                   <motion.div className="tab-indicator" layoutId="activeTab" />
@@ -1290,26 +1298,21 @@ const UserDashboard = () => {
           font-size: 0.875rem;
         }
 
-        .property-divider-container {
+        .property-divider-container-full {
           background: var(--card-bg);
-          border: none;
           border-radius: 0;
+          border: none;
+          overflow: hidden;
+          height: calc(100vh - 70px);
           display: flex;
           flex-direction: column;
-          height: calc(100vh - 70px);
-          width: 100%;
+          margin: 0;
+          padding: 0;
         }
 
-        .property-divider-wrapper {
-          flex: 1;
-          overflow: hidden;
-          width: 100%;
-          height: 100%;
-        }
-
-        .property-divider-wrapper > div {
-          width: 100%;
-          height: 100%;
+        .dashboard-main:has(.property-divider-container-full) {
+          padding: 0;
+          max-width: 100%;
         }
 
         .maintenance-card {
@@ -1586,7 +1589,7 @@ const UserDashboard = () => {
             margin: 1rem;
           }
 
-          .property-divider-container {
+          .property-divider-container-full {
             height: calc(100vh - 60px);
           }
 

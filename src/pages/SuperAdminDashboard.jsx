@@ -93,10 +93,13 @@ const SuperAdminDashboard = () => {
       if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
         setShowHelpfulToolsMenu(false);
       }
-      if (mobileMenuOpen && 
-          !e.target.closest('.mobile-menu-container') && 
-          !e.target.closest('.mobile-menu-toggle')) {
-        setMobileMenuOpen(false);
+      if (mobileMenuOpen) {
+        // Only close if clicking outside AND not on the toggle button
+        const isInsideMobileMenu = e.target.closest('.mobile-menu-container');
+        const isToggleButton = e.target.closest('.mobile-menu-toggle');
+        if (!isInsideMobileMenu && !isToggleButton) {
+          setMobileMenuOpen(false);
+        }
       }
     };
     document.addEventListener('click', handleClickOutside);
@@ -111,7 +114,7 @@ const SuperAdminDashboard = () => {
     { id: 'taxsettings', label: 'Estate Tax Settings', icon: Cog6ToothIcon },
   ];
 
-  // Helpful Tools sub-menu items
+  // Revenuer Tools sub-menu items
   const helpfulToolsItems = [
     { id: 'onnet-tracker', label: 'ONNET & eLA Tracker', icon: ChartPieIcon },
     { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon },
@@ -531,7 +534,7 @@ const SuperAdminDashboard = () => {
                 }}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
-                <span>Helpful Tools</span>
+                <span>Revenuer Tools</span>
                 <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
                 {helpfulToolsItems.some(item => item.id === activeTab) && (
                   <motion.div className="tab-indicator" layoutId="activeTab" />
@@ -640,6 +643,7 @@ const SuperAdminDashboard = () => {
                 }}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
+                <span>Revenuer Tools</span>
                 <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
                 {helpfulToolsItems.some(item => item.id === activeTab) && (
                   <motion.div className="tab-indicator" layoutId="activeTab" />
