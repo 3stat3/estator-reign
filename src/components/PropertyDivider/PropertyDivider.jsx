@@ -8,6 +8,7 @@ import DivisionEngine from './modules/DivisionEngine';
 const PropertyDivider = ({ darkMode = false }) => {
   const [currentStep, setCurrentStep] = useState(1);
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
+  const [isTablet, setIsTablet] = useState(window.innerWidth >= 768 && window.innerWidth < 1024);
   const [showClearModal, setShowClearModal] = useState(false);
 
   const [appState, setAppState] = useState({
@@ -23,7 +24,9 @@ const PropertyDivider = ({ darkMode = false }) => {
 
   useEffect(() => {
     const handleResize = () => {
-      setIsMobile(window.innerWidth < 768);
+      const width = window.innerWidth;
+      setIsMobile(width < 768);
+      setIsTablet(width >= 768 && width < 1024);
     };
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
@@ -160,6 +163,9 @@ const PropertyDivider = ({ darkMode = false }) => {
                 <div 
                   className={`pd-step-circle ${status}`}
                   onClick={() => status === 'completed' && setCurrentStep(step.id)}
+                  role="button"
+                  tabIndex={status === 'completed' ? 0 : -1}
+                  aria-label={`Step ${step.id}: ${step.label} ${status === 'completed' ? '(completed, click to navigate)' : ''}`}
                 >
                   {status === 'completed' ? '✓' : step.id}
                 </div>
@@ -261,6 +267,7 @@ const PropertyDivider = ({ darkMode = false }) => {
                 <button 
                   className="pd-clear-modal-close" 
                   onClick={() => setShowClearModal(false)}
+                  aria-label="Close modal"
                 >
                   ✕
                 </button>
@@ -330,6 +337,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           color: var(--text-primary);
           transition: background-color 0.3s ease, color 0.3s ease;
           font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+          overflow: hidden;
         }
 
         /* Navbar with integrated steps */
@@ -343,6 +351,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           flex-shrink: 0;
           gap: 16px;
           flex-wrap: wrap;
+          min-height: 76px;
         }
 
         .pd-navbar-left {
@@ -369,6 +378,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           font-size: 18px;
           font-weight: 700;
           color: #ffffff;
+          flex-shrink: 0;
         }
 
         .pd-logo-text {
@@ -377,6 +387,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           color: var(--text-primary);
           margin: 0;
           letter-spacing: -0.5px;
+          line-height: 1.2;
         }
 
         .pd-logo-subtext {
@@ -384,6 +395,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           color: var(--text-secondary);
           margin: 0;
           font-weight: 400;
+          line-height: 1.2;
         }
 
         .pd-version {
@@ -393,6 +405,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           border: 1px solid var(--border-color);
           font-size: 11px;
           color: var(--text-secondary);
+          white-space: nowrap;
         }
 
         /* Stepper - now inline with navbar */
@@ -401,8 +414,16 @@ const PropertyDivider = ({ darkMode = false }) => {
           align-items: center;
           gap: 4px;
           flex-shrink: 0;
-          overflow: auto;
+          overflow-x: auto;
+          overflow-y: visible;
           padding: 4px 0;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: none;
+          max-width: 100%;
+        }
+
+        .pd-stepper::-webkit-scrollbar {
+          display: none;
         }
 
         .pd-step-item {
@@ -425,12 +446,19 @@ const PropertyDivider = ({ darkMode = false }) => {
           cursor: default;
           background: var(--border-color);
           color: var(--text-secondary);
+          user-select: none;
+          flex-shrink: 0;
         }
 
         .pd-step-circle.completed {
           background: #667eea;
           color: #ffffff;
           cursor: pointer;
+        }
+
+        .pd-step-circle.completed:hover {
+          transform: scale(1.1);
+          box-shadow: 0 2px 8px rgba(102, 126, 234, 0.4);
         }
 
         .pd-step-circle.active {
@@ -473,10 +501,12 @@ const PropertyDivider = ({ darkMode = false }) => {
           padding: 20px 24px;
           overflow: auto;
           background: var(--bg-primary);
+          min-height: 0;
         }
 
         .pd-module-wrapper {
           height: 100%;
+          min-height: 200px;
         }
 
         /* Footer */
@@ -488,18 +518,23 @@ const PropertyDivider = ({ darkMode = false }) => {
           background: var(--bg-secondary);
           border-top: 1px solid var(--border-color);
           flex-shrink: 0;
+          gap: 12px;
+          flex-wrap: wrap;
         }
 
         .pd-footer-left {
           display: flex;
           align-items: center;
           gap: 12px;
+          flex-wrap: wrap;
+          min-width: 0;
         }
 
         .pd-footer-right {
           display: flex;
           align-items: center;
           gap: 12px;
+          flex-wrap: wrap;
         }
 
         .pd-progress {
@@ -508,6 +543,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           gap: 8px;
           font-size: 12px;
           color: var(--text-secondary);
+          flex-shrink: 0;
         }
 
         .pd-progress-bar {
@@ -533,11 +569,17 @@ const PropertyDivider = ({ darkMode = false }) => {
           font-weight: 600;
           cursor: pointer;
           transition: all 0.2s ease;
+          white-space: nowrap;
+          min-height: 40px;
+          display: inline-flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .pd-btn:disabled {
           opacity: 0.5;
           cursor: not-allowed;
+          transform: none !important;
         }
 
         .pd-btn-primary {
@@ -550,6 +592,10 @@ const PropertyDivider = ({ darkMode = false }) => {
           box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
         }
 
+        .pd-btn-primary:active:not(:disabled) {
+          transform: scale(0.97);
+        }
+
         .pd-btn-secondary {
           background: var(--bg-secondary);
           color: var(--text-primary);
@@ -558,6 +604,10 @@ const PropertyDivider = ({ darkMode = false }) => {
 
         .pd-btn-secondary:hover:not(:disabled) {
           background: var(--border-color);
+        }
+
+        .pd-btn-secondary:active:not(:disabled) {
+          transform: scale(0.97);
         }
 
         /* Danger/Clear button */
@@ -586,6 +636,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           bottom: 0;
           background: rgba(0, 0, 0, 0.6);
           backdrop-filter: blur(8px);
+          -webkit-backdrop-filter: blur(8px);
           display: flex;
           align-items: center;
           justify-content: center;
@@ -601,6 +652,9 @@ const PropertyDivider = ({ darkMode = false }) => {
           box-shadow: 0 25px 60px rgba(0, 0, 0, 0.3);
           border: 1px solid var(--border-color, #e2e8f0);
           overflow: hidden;
+          max-height: 90vh;
+          display: flex;
+          flex-direction: column;
         }
 
         .pd-clear-modal-header {
@@ -610,6 +664,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           gap: 12px;
           border-bottom: 1px solid var(--border-color, #e2e8f0);
           position: relative;
+          flex-shrink: 0;
         }
 
         .pd-clear-modal-icon {
@@ -623,6 +678,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           color: var(--text-primary, #0f172a);
           margin: 0;
           flex: 1;
+          line-height: 1.2;
         }
 
         .pd-clear-modal-close {
@@ -635,6 +691,11 @@ const PropertyDivider = ({ darkMode = false }) => {
           border-radius: 6px;
           transition: all 0.2s;
           line-height: 1;
+          min-width: 36px;
+          min-height: 36px;
+          display: flex;
+          align-items: center;
+          justify-content: center;
         }
 
         .pd-clear-modal-close:hover {
@@ -643,6 +704,8 @@ const PropertyDivider = ({ darkMode = false }) => {
 
         .pd-clear-modal-body {
           padding: 24px 28px;
+          overflow-y: auto;
+          flex: 1;
         }
 
         .pd-clear-modal-message {
@@ -667,6 +730,7 @@ const PropertyDivider = ({ darkMode = false }) => {
           background: var(--bg-secondary, #f8fafc);
           border-radius: 10px;
           border: 1px solid var(--border-color, #e2e8f0);
+          min-width: 0;
         }
 
         .pd-clear-stat-icon {
@@ -714,6 +778,8 @@ const PropertyDivider = ({ darkMode = false }) => {
           justify-content: flex-end;
           border-top: 1px solid var(--border-color, #e2e8f0);
           background: var(--bg-secondary, #f8fafc);
+          flex-shrink: 0;
+          flex-wrap: wrap;
         }
 
         .pd-clear-modal-footer .pd-btn {
@@ -730,21 +796,26 @@ const PropertyDivider = ({ darkMode = false }) => {
           background: var(--bg-secondary, #1e293b);
         }
 
-        /* Responsive */
-        @media (max-width: 992px) {
+        /* ===== RESPONSIVE STYLES ===== */
+
+        /* Tablet and below */
+        @media (max-width: 1024px) {
           .pd-navbar {
             padding: 10px 16px;
             flex-direction: column;
             align-items: stretch;
             gap: 8px;
+            min-height: auto;
           }
 
           .pd-navbar-left {
             justify-content: space-between;
+            width: 100%;
           }
 
           .pd-stepper {
             justify-content: center;
+            padding: 4px 0;
           }
 
           .pd-content {
@@ -753,12 +824,24 @@ const PropertyDivider = ({ darkMode = false }) => {
 
           .pd-footer {
             padding: 10px 16px;
-            flex-wrap: wrap;
-            gap: 8px;
           }
         }
 
+        /* Mobile phones */
         @media (max-width: 768px) {
+          .pd-navbar {
+            padding: 8px 12px;
+            gap: 6px;
+          }
+
+          .pd-navbar-left {
+            gap: 10px;
+          }
+
+          .pd-logo {
+            gap: 8px;
+          }
+
           .pd-logo-text {
             font-size: 16px;
           }
@@ -771,6 +854,11 @@ const PropertyDivider = ({ darkMode = false }) => {
             width: 32px;
             height: 32px;
             font-size: 16px;
+          }
+
+          .pd-version {
+            font-size: 10px;
+            padding: 2px 8px;
           }
 
           .pd-step-circle {
@@ -790,6 +878,7 @@ const PropertyDivider = ({ darkMode = false }) => {
 
           .pd-stepper {
             gap: 2px;
+            justify-content: center;
           }
 
           .pd-content {
@@ -800,20 +889,26 @@ const PropertyDivider = ({ darkMode = false }) => {
             flex-direction: column;
             align-items: stretch;
             gap: 8px;
+            padding: 10px 12px;
           }
 
           .pd-footer-left {
             justify-content: center;
             flex-wrap: wrap;
+            width: 100%;
           }
 
           .pd-footer-right {
             justify-content: center;
+            width: 100%;
           }
 
           .pd-btn {
             padding: 6px 16px;
             font-size: 12px;
+            min-height: 36px;
+            flex: 1;
+            max-width: 200px;
           }
           
           .pd-progress-bar {
@@ -824,44 +919,48 @@ const PropertyDivider = ({ darkMode = false }) => {
             font-size: 11px;
           }
 
+          /* Modal responsive */
           .pd-clear-modal {
             max-width: 100%;
             margin: 0 10px;
+            max-height: 95vh;
           }
 
           .pd-clear-modal-header {
-            padding: 20px 20px 14px 20px;
+            padding: 16px 20px 12px 20px;
           }
 
           .pd-clear-modal-body {
-            padding: 20px;
+            padding: 16px 20px;
           }
 
           .pd-clear-modal-footer {
-            padding: 14px 20px 20px 20px;
+            padding: 12px 20px 16px 20px;
+            flex-direction: column;
+          }
+
+          .pd-clear-modal-footer .pd-btn {
+            width: 100%;
+            max-width: none;
           }
 
           .pd-clear-modal-stats {
             grid-template-columns: 1fr;
           }
 
-          .pd-clear-modal-footer {
-            flex-direction: column;
-          }
-
-          .pd-clear-modal-footer .pd-btn {
-            width: 100%;
-            justify-content: center;
+          .pd-clear-modal-title {
+            font-size: 18px;
           }
         }
 
+        /* Small phones */
         @media (max-width: 480px) {
           .pd-navbar {
-            padding: 8px 12px;
+            padding: 6px 10px;
           }
 
           .pd-navbar-left {
-            gap: 8px;
+            gap: 6px;
           }
           
           .pd-logo-icon {
@@ -875,8 +974,136 @@ const PropertyDivider = ({ darkMode = false }) => {
           }
           
           .pd-version {
+            font-size: 9px;
+            padding: 2px 6px;
+          }
+
+          .pd-step-circle {
+            width: 24px;
+            height: 24px;
             font-size: 10px;
-            padding: 2px 8px;
+          }
+
+          .pd-step-connector {
+            width: 10px;
+          }
+
+          .pd-content {
+            padding: 8px;
+          }
+
+          .pd-footer {
+            padding: 8px 10px;
+          }
+
+          .pd-btn {
+            font-size: 11px;
+            padding: 5px 12px;
+            min-height: 32px;
+          }
+
+          .pd-progress {
+            font-size: 10px;
+          }
+
+          .pd-progress-bar {
+            width: 60px;
+          }
+
+          /* Modal small screen */
+          .pd-clear-modal-header {
+            padding: 12px 16px 10px 16px;
+          }
+
+          .pd-clear-modal-body {
+            padding: 12px 16px;
+          }
+
+          .pd-clear-modal-footer {
+            padding: 10px 16px 14px 16px;
+          }
+
+          .pd-clear-modal-title {
+            font-size: 16px;
+          }
+
+          .pd-clear-modal-icon {
+            font-size: 24px;
+          }
+
+          .pd-clear-modal-message {
+            font-size: 14px;
+          }
+
+          .pd-clear-stat-item {
+            padding: 8px 12px;
+          }
+
+          .pd-clear-stat-value {
+            font-size: 16px;
+          }
+        }
+
+        /* Very small screens */
+        @media (max-width: 360px) {
+          .pd-navbar {
+            padding: 4px 6px;
+          }
+
+          .pd-logo-text {
+            font-size: 12px;
+          }
+
+          .pd-logo-icon {
+            width: 24px;
+            height: 24px;
+            font-size: 12px;
+          }
+
+          .pd-step-circle {
+            width: 20px;
+            height: 20px;
+            font-size: 9px;
+          }
+
+          .pd-step-connector {
+            width: 8px;
+          }
+
+          .pd-content {
+            padding: 6px;
+          }
+
+          .pd-footer {
+            padding: 6px 8px;
+          }
+
+          .pd-btn {
+            font-size: 10px;
+            padding: 4px 10px;
+            min-height: 28px;
+          }
+        }
+
+        /* Landscape phones */
+        @media (max-height: 500px) and (orientation: landscape) {
+          .pd-navbar {
+            padding: 4px 12px;
+            min-height: 44px;
+          }
+
+          .pd-logo-text {
+            font-size: 14px;
+          }
+
+          .pd-logo-subtext {
+            display: none;
+          }
+
+          .pd-logo-icon {
+            width: 28px;
+            height: 28px;
+            font-size: 14px;
           }
 
           .pd-step-circle {
@@ -885,37 +1112,26 @@ const PropertyDivider = ({ darkMode = false }) => {
             font-size: 10px;
           }
 
+          .pd-step-label {
+            display: none;
+          }
+
           .pd-step-connector {
-            width: 12px;
+            width: 10px;
           }
 
           .pd-content {
-            padding: 8px;
+            padding: 8px 12px;
           }
 
           .pd-footer {
-            padding: 8px 12px;
+            padding: 4px 12px;
           }
-          
-          .pd-btn-danger {
+
+          .pd-btn {
+            padding: 4px 12px;
             font-size: 11px;
-            padding: 5px 12px;
-          }
-
-          .pd-clear-modal-header {
-            padding: 16px 16px 12px 16px;
-          }
-
-          .pd-clear-modal-body {
-            padding: 16px;
-          }
-
-          .pd-clear-modal-footer {
-            padding: 12px 16px 16px 16px;
-          }
-
-          .pd-clear-modal-title {
-            font-size: 17px;
+            min-height: 28px;
           }
         }
       `}</style>

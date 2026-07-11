@@ -67,11 +67,15 @@ const SuperAdminDashboard = () => {
       const tablet = window.innerWidth <= 1024 && window.innerWidth > 768;
       setIsMobile(mobile);
       setIsTablet(tablet);
+      // Close mobile menu on resize to desktop
+      if (!mobile && mobileMenuOpen) {
+        setMobileMenuOpen(false);
+      }
     };
     handleResize();
     window.addEventListener('resize', handleResize);
     return () => window.removeEventListener('resize', handleResize);
-  }, []);
+  }, [mobileMenuOpen]);
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -573,7 +577,7 @@ const SuperAdminDashboard = () => {
             ))}
           </div>
 
-          {/* Tablet/Mobile Navigation - Icon only with dropdowns */}
+          {/* Tablet Navigation - Icon only with dropdowns */}
           <div className={`nav-tabs tablet-nav ${!(isMobile || isTablet) ? 'hidden' : ''}`}>
             <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
               <button
@@ -594,7 +598,7 @@ const SuperAdminDashboard = () => {
               <AnimatePresence>
                 {showEstateTaxMenu && (
                   <motion.div
-                    className="dropdown-menu"
+                    className="dropdown-menu tablet-dropdown-menu"
                     initial={{ opacity: 0, y: -5, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -5, scale: 0.98 }}
@@ -641,7 +645,7 @@ const SuperAdminDashboard = () => {
               <AnimatePresence>
                 {showHelpfulToolsMenu && (
                   <motion.div
-                    className="dropdown-menu"
+                    className="dropdown-menu tablet-dropdown-menu"
                     initial={{ opacity: 0, y: -5, scale: 0.98 }}
                     animate={{ opacity: 1, y: 0, scale: 1 }}
                     exit={{ opacity: 0, y: -5, scale: 0.98 }}
@@ -686,17 +690,18 @@ const SuperAdminDashboard = () => {
           <button 
             className={`mobile-menu-toggle ${isMobile ? '' : 'hidden'}`}
             onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+            aria-label="Toggle mobile menu"
           >
             {mobileMenuOpen ? <XMarkIcon /> : <Bars3Icon />}
           </button>
 
           <div className="nav-actions">
-            <button className="icon-btn" onClick={toggleDarkMode}>
+            <button className="icon-btn" onClick={toggleDarkMode} aria-label="Toggle dark mode">
               {darkMode ? <SunIcon /> : <MoonIcon />}
             </button>
             
             <div className="notifications-container">
-              <button className="icon-btn" onClick={() => setShowNotifications(!showNotifications)}>
+              <button className="icon-btn" onClick={() => setShowNotifications(!showNotifications)} aria-label="Notifications">
                 <BellIcon />
                 {notifications.filter(n => !n.read).length > 0 && (
                   <span className="notification-badge">{notifications.filter(n => !n.read).length}</span>
@@ -729,7 +734,7 @@ const SuperAdminDashboard = () => {
             </div>
 
             <div className="user-menu-container">
-              <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)}>
+              <button className="user-menu-btn" onClick={() => setShowUserMenu(!showUserMenu)} aria-label="User menu">
                 <div className="user-avatar-small">
                   {user?.email?.[0]?.toUpperCase() || 'A'}
                 </div>
@@ -871,6 +876,7 @@ const SuperAdminDashboard = () => {
           min-height: 100vh;
           background: var(--bg-primary);
           transition: all 0.3s ease;
+          overflow-x: hidden;
         }
 
         .dashboard-nav {
@@ -885,12 +891,12 @@ const SuperAdminDashboard = () => {
         .nav-container {
           max-width: 1600px;
           margin: 0 auto;
-          padding: 0 1.5rem;
+          padding: 0 1rem;
           display: flex;
           align-items: center;
           justify-content: space-between;
           height: 70px;
-          gap: 1rem;
+          gap: 0.5rem;
           overflow: visible !important;
           position: relative;
         }
@@ -1029,9 +1035,9 @@ const SuperAdminDashboard = () => {
           display: block !important;
         }
 
-        /* Fix dropdown positioning when on tablet */
-        .tablet-nav .dropdown-menu {
-          left: -4rem;
+        .tablet-dropdown-menu {
+          left: 50% !important;
+          transform: translateX(-50%) !important;
         }
 
         .dropdown-item-nav {
@@ -1119,6 +1125,9 @@ const SuperAdminDashboard = () => {
           font-size: 0.625rem;
           padding: 0.125rem 0.375rem;
           border-radius: 9999px;
+          min-width: 18px;
+          text-align: center;
+          line-height: 1.2;
         }
 
         .notifications-dropdown {
@@ -1126,11 +1135,14 @@ const SuperAdminDashboard = () => {
           top: calc(100% + 0.5rem);
           right: 0;
           width: 340px;
+          max-width: 90vw;
           background: var(--card-bg);
           border: 1px solid var(--border-color);
           border-radius: 0.75rem;
           box-shadow: var(--shadow-lg);
           z-index: 100;
+          max-height: 80vh;
+          overflow-y: auto;
         }
 
         .user-menu-container {
@@ -1185,6 +1197,7 @@ const SuperAdminDashboard = () => {
           top: calc(100% + 0.5rem);
           right: 0;
           width: 280px;
+          max-width: 90vw;
           background: var(--card-bg);
           border: 1px solid var(--border-color);
           border-radius: 0.75rem;
@@ -1226,6 +1239,7 @@ const SuperAdminDashboard = () => {
         .user-email-dropdown {
           font-size: 0.75rem;
           color: var(--text-secondary);
+          word-break: break-all;
         }
 
         .dropdown-divider {
@@ -1264,6 +1278,56 @@ const SuperAdminDashboard = () => {
 
         .dropdown-item.logout svg {
           color: #ef4444;
+        }
+
+        .notification-item {
+          padding: 0.75rem 1rem;
+          border-bottom: 1px solid var(--border-color);
+          cursor: pointer;
+          transition: background 0.2s;
+        }
+
+        .notification-item:hover {
+          background: var(--hover-bg);
+        }
+
+        .notification-item.unread {
+          background: rgba(102, 126, 234, 0.05);
+        }
+
+        .notification-content {
+          display: flex;
+          flex-direction: column;
+          gap: 0.25rem;
+        }
+
+        .notification-title {
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--text-primary);
+        }
+
+        .notification-message {
+          font-size: 0.8125rem;
+          color: var(--text-secondary);
+        }
+
+        .notification-time {
+          font-size: 0.75rem;
+          color: var(--text-tertiary);
+        }
+
+        .mark-all {
+          background: none;
+          border: none;
+          color: var(--gradient-start);
+          font-size: 0.75rem;
+          cursor: pointer;
+          padding: 0;
+        }
+
+        .mark-all:hover {
+          text-decoration: underline;
         }
 
         /* Mobile Menu Toggle */
@@ -1351,7 +1415,7 @@ const SuperAdminDashboard = () => {
         .dashboard-main {
           max-width: 1600px;
           margin: 0 auto;
-          padding: 2rem 1.5rem;
+          padding: 1.5rem;
         }
 
         .calculator-container-wrapper {
@@ -1398,6 +1462,7 @@ const SuperAdminDashboard = () => {
 
         .stat-info {
           flex: 1;
+          min-width: 0;
         }
 
         .stat-value {
@@ -1421,6 +1486,7 @@ const SuperAdminDashboard = () => {
           font-weight: 500;
           padding: 0.25rem 0.5rem;
           border-radius: 2rem;
+          flex-shrink: 0;
         }
 
         .stat-trend.positive {
@@ -1529,20 +1595,9 @@ const SuperAdminDashboard = () => {
           padding: 0;
         }
 
-        .content-card {
-          background: var(--card-bg);
-          border-radius: 1rem;
-          border: 1px solid var(--border-color);
-          overflow: hidden;
-        }
-
         .dashboard-main:has(.property-divider-container-full) {
           padding: 0;
           max-width: 100%;
-        }
-
-        .calculator-container-wrapper {
-          width: 100%;
         }
 
         /* Responsive Styles */
@@ -1577,12 +1632,12 @@ const SuperAdminDashboard = () => {
 
         @media (max-width: 768px) {
           .nav-container {
-            padding: 0 1rem;
-            gap: 0.5rem;
+            padding: 0 0.75rem;
+            gap: 0.25rem;
           }
           
           .dashboard-main {
-            padding: 1rem;
+            padding: 0.75rem;
           }
           
           .dashboard-main:has(.property-divider-container-full) {
@@ -1591,11 +1646,13 @@ const SuperAdminDashboard = () => {
           
           .stats-grid {
             grid-template-columns: 1fr;
+            gap: 1rem;
           }
           
           .content-header {
             flex-direction: column;
             align-items: flex-start;
+            padding: 1rem;
           }
 
           .property-divider-container-full {
@@ -1608,12 +1665,14 @@ const SuperAdminDashboard = () => {
 
           .notifications-dropdown {
             width: 280px;
-            right: -4rem;
+            max-width: 85vw;
+            right: -2rem;
           }
 
           .user-dropdown {
             width: 240px;
-            right: -2rem;
+            max-width: 85vw;
+            right: -1rem;
           }
 
           .tablet-nav {
@@ -1625,14 +1684,113 @@ const SuperAdminDashboard = () => {
           }
         }
 
-        @media (max-width: 640px) {
-          .nav-brand .logo-text {
-            display: none;
+        @media (max-width: 480px) {
+          .nav-container {
+            padding: 0 0.5rem;
+            gap: 0.25rem;
+            height: 60px;
+          }
+
+          .logo-text {
+            font-size: 1rem;
+          }
+
+          .logo-icon {
+            width: 1.5rem;
+            height: 1.5rem;
+          }
+
+          .icon-btn {
+            padding: 0.375rem;
+          }
+
+          .icon-btn svg {
+            width: 1rem;
+            height: 1rem;
+          }
+
+          .user-avatar-small {
+            width: 1.75rem;
+            height: 1.75rem;
+            font-size: 0.75rem;
+          }
+
+          .dashboard-main {
+            padding: 0.5rem;
+          }
+
+          .stat-card {
+            padding: 1rem;
+            gap: 0.75rem;
+          }
+
+          .stat-value {
+            font-size: 1.5rem;
+          }
+
+          .stat-icon-wrapper {
+            width: 2.75rem;
+            height: 2.75rem;
+          }
+
+          .stat-icon {
+            width: 1.25rem;
+            height: 1.25rem;
+          }
+
+          .content-title {
+            font-size: 1.25rem;
+          }
+
+          .placeholder-content {
+            padding: 2rem 1rem;
+          }
+
+          .placeholder-icon {
+            width: 3rem;
+            height: 3rem;
           }
 
           .notifications-dropdown {
             width: 260px;
-            right: -6rem;
+            max-width: 85vw;
+            right: -3rem;
+          }
+
+          .user-dropdown {
+            width: 220px;
+            max-width: 85vw;
+            right: -2rem;
+          }
+
+          .mobile-menu-inner {
+            padding: 0.5rem;
+            gap: 0.15rem;
+          }
+
+          .mobile-nav-item {
+            padding: 0.625rem 0.75rem;
+            font-size: 0.8125rem;
+          }
+
+          .property-divider-container-full {
+            height: calc(100vh - 60px);
+          }
+        }
+
+        @media (max-width: 380px) {
+          .nav-actions {
+            gap: 0.25rem;
+          }
+
+          .notifications-dropdown {
+            width: 240px;
+            right: -4rem;
+          }
+
+          .user-dropdown {
+            width: 200px;
+            right: -3rem;
           }
         }
       `}</style>

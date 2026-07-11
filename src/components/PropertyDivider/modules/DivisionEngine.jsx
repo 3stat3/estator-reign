@@ -429,56 +429,63 @@ const DivisionEngine = ({
   // RENDER FUNCTIONS
   // ============================================================
 
-  const renderSummaryCards = () => {
-    if (!divisionResults) return null;
-    const { heirs, totalEstate } = divisionResults;
-    
-    return (
-      <div className="de-summary-grid">
-        <motion.div 
-          className="de-summary-card"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0 }}
-        >
-          <div className="de-summary-icon">🏛️</div>
-          <div className="de-summary-value">{formatNumber(totalEstate)}</div>
-          <div className="de-summary-label">Total Estate</div>
-          <div className="de-summary-unit">sqm</div>
-        </motion.div>
-        <motion.div 
-          className="de-summary-card"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.05 }}
-        >
-          <div className="de-summary-icon">👥</div>
-          <div className="de-summary-value">{heirs.length}</div>
-          <div className="de-summary-label">Total Heirs</div>
-        </motion.div>
-        <motion.div 
-          className="de-summary-card"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.1 }}
-        >
-          <div className="de-summary-icon">📊</div>
-          <div className="de-summary-value">{heirs.length}</div>
-          <div className="de-summary-label">Total Shares</div>
-        </motion.div>
-        <motion.div 
-          className="de-summary-card de-summary-highlight"
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ delay: 0.15 }}
-        >
-          <div className="de-summary-icon">⚖️</div>
-          <div className="de-summary-value">Intestate</div>
-          <div className="de-summary-label">Succession Type</div>
-        </motion.div>
-      </div>
-    );
-  };
+    const renderSummaryCards = () => {
+      if (!divisionResults) return null;
+      const { heirs, totalEstate, properties } = divisionResults;
+      
+      const conjugalProps = properties?.conjugal || [];
+      const exclusiveProps = properties?.exclusive || [];
+      const conjugalTotal = conjugalProps.reduce((sum, p) => sum + (p.totalSqm || 0), 0);
+      const exclusiveTotal = exclusiveProps.reduce((sum, p) => sum + (p.totalSqm || 0), 0);
+      
+      return (
+        <>
+          <div className="de-summary-grid">
+            <motion.div 
+              className="de-summary-card"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0 }}
+            >
+              <div className="de-summary-icon">🏛️</div>
+              <div className="de-summary-value">{formatNumber(totalEstate)}</div>
+              <div className="de-summary-label">Total Estate</div>
+              <div className="de-summary-unit">sqm</div>
+            </motion.div>
+            <motion.div 
+              className="de-summary-card"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.05 }}
+            >
+              <div className="de-summary-icon">👥</div>
+              <div className="de-summary-value">{heirs.length}</div>
+              <div className="de-summary-label">Total Heirs</div>
+            </motion.div>
+            <motion.div 
+              className="de-summary-card"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.1 }}
+            >
+              <div className="de-summary-icon">📊</div>
+              <div className="de-summary-value">{heirs.length}</div>
+              <div className="de-summary-label">Total Shares</div>
+            </motion.div>
+            <motion.div 
+              className="de-summary-card de-summary-highlight"
+              initial={{ opacity: 0, y: 10 }}
+              animate={{ opacity: 1, y: 0 }}
+              transition={{ delay: 0.15 }}
+            >
+              <div className="de-summary-icon">⚖️</div>
+              <div className="de-summary-value">Intestate</div>
+              <div className="de-summary-label">Succession Type</div>
+            </motion.div>
+          </div>
+        </>
+      );
+    };
 
   const renderDeathTimeline = () => {
     if (!divisionResults) return null;
@@ -1594,19 +1601,19 @@ const DivisionEngine = ({
           }
         }
 
-        /* ============================================================
-           DARK MODE SUPPORT
-           ============================================================ */
-        [data-theme="dark"] .de-wrapper {
-          --bg-primary: #0f172a;
-          --bg-secondary: #1e293b;
-          --card-bg: #1e293b;
-          --text-primary: #f1f5f9;
-          --text-secondary: #94a3b8;
-          --border-color: #334155;
-          --hover-bg: #334155;
-        }
-      `}</style>
+          /* ============================================================
+            DARK MODE SUPPORT
+            ============================================================ */
+          [data-theme="dark"] .de-wrapper {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --card-bg: #1e293b;
+            --text-primary: #f1f5f9;
+            --text-secondary: #94a3b8;
+            --border-color: #334155;
+            --hover-bg: #334155;
+          }
+        `}</style>
     </div>
   );
 };
