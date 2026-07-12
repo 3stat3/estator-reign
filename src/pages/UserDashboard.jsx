@@ -7,6 +7,7 @@ import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import TaxSettings from '../components/Settings/TaxSettings';
 import InterestCalculator from '../components/HelpfulTools/InterestCalculator';
+import VanishingDeductionCalculator from '../components/HelpfulTools/VanishingDeductionCalculator';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -27,7 +28,8 @@ import {
   XMarkIcon,
   WrenchScrewdriverIcon,
   ChartPieIcon,
-  Bars3Icon
+  Bars3Icon,
+  ShieldCheckIcon
 } from '@heroicons/react/24/outline';
 import { useFeatureAccess } from '../hooks/useFeatureAccess';
 
@@ -160,6 +162,7 @@ const UserDashboard = () => {
   const helpfulToolsItems = [
     { id: 'onnet-tracker', label: 'ONNET and eLA Tracker', icon: ChartPieIcon },
     { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon },
+    { id: 'vanishing-deduction', label: 'Vanishing Deduction', icon: ShieldCheckIcon },
     { id: 'tool2', label: 'Tool 2', icon: WrenchScrewdriverIcon },
     { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
   ];
@@ -299,6 +302,20 @@ const UserDashboard = () => {
             className="content-card"
           >
             <InterestCalculator />
+          </motion.div>
+        );
+
+      case 'vanishing-deduction':
+        return (
+          <motion.div
+            key="vanishing-deduction"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <VanishingDeductionCalculator />
           </motion.div>
         );
 

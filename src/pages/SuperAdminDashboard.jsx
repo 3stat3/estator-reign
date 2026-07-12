@@ -7,6 +7,7 @@ import TaxSettings from '../components/Settings/TaxSettings';
 import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
 import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
 import InterestCalculator from '../components/HelpfulTools/InterestCalculator';
+import VanishingDeductionCalculator from '../components/HelpfulTools/VanishingDeductionCalculator';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -118,6 +119,7 @@ const SuperAdminDashboard = () => {
   const helpfulToolsItems = [
     { id: 'onnet-tracker', label: 'ONNET & eLA Tracker', icon: ChartPieIcon },
     { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon },
+    { id: 'vanishing-deduction', label: 'Vanishing Deduction', icon: ShieldCheckIcon },
     { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
   ];
 
@@ -320,29 +322,17 @@ const SuperAdminDashboard = () => {
           </motion.div>
         );
 
-      case 'tool3':
+      case 'vanishing-deduction':
         return (
           <motion.div
-            key="tool3"
+            key="vanishing-deduction"
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             exit={{ opacity: 0, y: -20 }}
             transition={{ duration: 0.3 }}
             className="content-card"
           >
-            <div className="content-header">
-              <div>
-                <h2 className="content-title">Tool 3</h2>
-                <p className="content-description">
-                  Coming soon...
-                </p>
-              </div>
-            </div>
-            <div className="placeholder-content">
-              <WrenchScrewdriverIcon className="placeholder-icon" />
-              <h3>Tool 3</h3>
-              <p>This tool is currently under development.</p>
-            </div>
+            <VanishingDeductionCalculator />
           </motion.div>
         );
 
