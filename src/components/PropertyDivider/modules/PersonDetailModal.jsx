@@ -364,11 +364,16 @@ const PersonDetailModal = ({
           <button className="pdm-footer-btn pdm-footer-secondary" onClick={onClose}>
             Close
           </button>
-          <button 
+            <button 
             className="pdm-footer-btn pdm-footer-primary"
             onClick={() => {
+              // Close the modal and trigger edit mode
+              // The parent component will handle opening the edit form
+              onClose();
+              // Signal that we want to edit this person
               if (onUpdatePerson) {
-                onClose();
+                // Pass the person to be edited
+                onUpdatePerson({ ...person, _edit: true });
               }
             }}
           >

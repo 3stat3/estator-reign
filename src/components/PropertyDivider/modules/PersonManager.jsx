@@ -4,6 +4,7 @@ import { motion, AnimatePresence } from 'framer-motion';
 import * as XLSX from 'xlsx';
 import PersonDetailModal from './PersonDetailModal';
 import { assignGenerations } from '../services/familyTreeService';
+import SmartBulkGenerator from './SmartBulkGenerator';
 
 const PersonManager = ({ 
   darkMode = false, 
@@ -26,6 +27,7 @@ const PersonManager = ({
 
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedPersonForDetail, setSelectedPersonForDetail] = useState(null);
+  const [showSmartBulk, setShowSmartBulk] = useState(false);
 
   const fileInputRef = useRef(null);
 
@@ -584,6 +586,9 @@ const PersonManager = ({
         <div className="pm-header-actions">
           <button className="pm-btn pm-btn-secondary" onClick={() => setShowBulkAdd(true)}>
             📋 Bulk Add Person
+          </button>
+          <button className="pm-btn pm-btn-secondary" onClick={() => setShowSmartBulk(true)}>
+            ⚡ Smart Bulk Generate
           </button>
           <button className="pm-btn pm-btn-primary" onClick={() => setShowAddForm(true)}>
             + Add Person
@@ -1147,33 +1152,73 @@ const PersonManager = ({
         )}
       </AnimatePresence>
 
-      <AnimatePresence>
-        {showDetailModal && selectedPersonForDetail && (
-          <PersonDetailModal
-            darkMode={darkMode}
-            person={selectedPersonForDetail}
-            persons={persons}
-            properties={properties}
-            onClose={() => {
-              setShowDetailModal(false);
-              setSelectedPersonForDetail(null);
-            }}
-            onAddProperty={() => {
-              const personId = selectedPersonForDetail.id;
-              setShowDetailModal(false);
-              setSelectedPersonForDetail(null);
-              if (onNavigateToPropertyManager) {
-                onNavigateToPropertyManager(personId);
-              }
-            }}
-            onUpdatePerson={(updatedPerson) => {
-              onUpdate(persons.map(p => p.id === updatedPerson.id ? updatedPerson : p));
-            }}
-          />
-        )}
-      </AnimatePresence>
+            <AnimatePresence>
+              {showDetailModal && selectedPersonForDetail && (
+                <PersonDetailModal
+                  darkMode={darkMode}
+                  person={selectedPersonForDetail}
+                  persons={persons}
+                  properties={properties}
+                  onClose={() => {
+                    setShowDetailModal(false);
+                    setSelectedPersonForDetail(null);
+                  }}
+                  onAddProperty={() => {
+                    const personId = selectedPersonForDetail.id;
+                    setShowDetailModal(false);
+                    setSelectedPersonForDetail(null);
+                    if (onNavigateToPropertyManager) {
+                      onNavigateToPropertyManager(personId);
+                    }
+                  }}
+                  onUpdatePerson={(updatedPerson) => {
+                    // Check if this is an edit request (not an actual update)
+                    if (updatedPerson._edit) {
+                      // Open the edit form with this person's data
+                      const personToEdit = persons.find(p => p.id === updatedPerson.id);
+                      if (personToEdit) {
+                        setEditingPerson(personToEdit);
+                        setFormData({
+                          name: personToEdit.name,
+                          fatherId: personToEdit.fatherId || '',
+                          motherId: personToEdit.motherId || '',
+                          spouseId: personToEdit.spouseId || '',
+                          isDeceased: personToEdit.isDeceased || false,
+                          dateOfDeath: personToEdit.dateOfDeath || '',
+                          gender: personToEdit.gender || 'Male'
+                        });
+                        setShowAddForm(true);
+                      }
+                      return;
+                    }
+                    // Normal update (if needed in the future)
+                    onUpdate(persons.map(p => p.id === updatedPerson.id ? updatedPerson : p));
+                  }}
+                />
+              )}
+            </AnimatePresence>
 
-      <style>{`
+            {/* Smart Bulk Generator */}
+            <SmartBulkGenerator
+              darkMode={darkMode}
+              isOpen={showSmartBulk}
+              onClose={() => {
+                setShowSmartBulk(false);
+                // Reset any state if needed
+              }}
+              onImport={(newPersons) => {
+                // Assign generations and update persons
+                const updatedPersons = [...persons, ...newPersons];
+                const personsWithGenerations = assignGenerations(updatedPersons, propositusId);
+                onUpdate(personsWithGenerations);
+                // SmartBulkGenerator handles showing the success modal
+                // We do NOT close the modal here - SmartBulkGenerator's success modal handles that
+                // We do NOT show any alert - SmartBulkGenerator shows a professional success modal
+              }}
+              persons={persons}
+            />
+
+            <style>{`
         .pm-wrapper {
           height: 100%;
           display: flex;
