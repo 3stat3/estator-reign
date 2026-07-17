@@ -51,8 +51,10 @@ const PropertyManager = ({
     return person ? person.name : 'Unknown';
   };
 
-  const getCoOwnerName = (ownerId) => {
+  const getCoOwnerName = (ownerId, classification) => {
     if (!ownerId) return '';
+    // Only show co-owner for Conjugal properties
+    if (classification !== 'Conjugal') return '';
     const person = persons.find(p => p.id === ownerId);
     if (!person) return '';
     if (person.spouseId) {
@@ -238,7 +240,7 @@ const PropertyManager = ({
           filteredProperties.map((property) => {
             const isSelected = selectedProperty?.id === property.id;
             const ownerName = getOwnerName(property.ownerId);
-            const coOwner = getCoOwnerName(property.ownerId);
+            const coOwner = getCoOwnerName(property.ownerId, property.classification);
             
             return (
               <motion.div

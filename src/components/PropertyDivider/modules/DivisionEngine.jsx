@@ -16,7 +16,7 @@ const DivisionEngine = ({
     const [showOCSModal, setShowOCSModal] = useState(false);
 
   // ============================================================
-  // HELPER FUNCTIONS (UNCHANGED - KEPT EXACTLY AS IS)
+  // HELPER FUNCTIONS
   // ============================================================
 
   const getChildren = (personId) => {
@@ -85,8 +85,27 @@ const DivisionEngine = ({
     return heirs;
   };
 
+  // Find the original owners of conjugal property (the couple who owns it)
+  const getConjugalPropertyOwners = () => {
+    const owners = new Set();
+    const conjugalProperties = properties.filter(p => p.classification === 'Conjugal');
+    conjugalProperties.forEach(prop => {
+      if (prop.ownerId) {
+        // Add the owner
+        owners.add(prop.ownerId);
+        
+        // Also add the owner's spouse (since conjugal property is owned by both)
+        const owner = persons.find(p => p.id === prop.ownerId);
+        if (owner && owner.spouseId) {
+          owners.add(owner.spouseId);
+        }
+      }
+    });
+    return Array.from(owners);
+  };
+
   // ============================================================
-  // MAIN CALCULATION (UNCHANGED - KEPT EXACTLY AS IS)
+  // MAIN CALCULATION
   // ============================================================
 
   const calculateDivision = () => {
@@ -109,38 +128,80 @@ const DivisionEngine = ({
       const exclusivePropertyMap = {};
       const inheritanceHistory = {};
       const excludedSet = new Set();
+      const predeceasedInheritanceMap = {}; // Track what predeceased persons inherit from propositus
 
+      // ============================================================
+      // FIX: Assign conjugal property based on ACTUAL OWNERS
+      // ============================================================
       const conjugalProperties = properties.filter(p => p.classification === 'Conjugal');
       const conjugalTotal = conjugalProperties.reduce((sum, p) => sum + (p.totalSqm || 0), 0);
       
       if (conjugalTotal > 0) {
-        const spouse = getSpouse(propositusId);
-        if (spouse) {
-          conjugalShareMap[propositusId] = conjugalTotal / 2;
-          conjugalShareMap[spouse.id] = conjugalTotal / 2;
+        // Get the actual owners of conjugal property
+        const conjugalOwners = getConjugalPropertyOwners();
+        
+        if (conjugalOwners.length > 0) {
+          // Split conjugal property equally among the actual owners
+          const sharePerOwner = conjugalTotal / conjugalOwners.length;
+          conjugalOwners.forEach(ownerId => {
+            conjugalShareMap[ownerId] = (conjugalShareMap[ownerId] || 0) + sharePerOwner;
+          });
+          
+          // Log for debugging
+          const ownerNames = conjugalOwners.map(id => {
+            const person = persons.find(p => p.id === id);
+            return person ? person.name : id;
+          });
+          console.log(`   💑 Conjugal property (${conjugalTotal} sqm) assigned to: ${ownerNames.join(' & ')} (${sharePerOwner} sqm each)`);
         } else {
-          conjugalShareMap[propositusId] = conjugalTotal;
+          // Fallback: if no owners found, use the old logic (propositus + spouse)
+          const spouse = getSpouse(propositusId);
+          if (spouse) {
+            conjugalShareMap[propositusId] = conjugalTotal / 2;
+            conjugalShareMap[spouse.id] = conjugalTotal / 2;
+            console.log(`   💑 Fallback: ${propositus.name} gets ${conjugalTotal/2} sqm, ${spouse.name} gets ${conjugalTotal/2} sqm`);
+          } else {
+            conjugalShareMap[propositusId] = conjugalTotal;
+            console.log(`   💑 Fallback: ${propositus.name} gets ${conjugalTotal} sqm`);
+          }
         }
       }
 
+      // Handle Exclusive Properties - belongs entirely to the owner (NOT split)
       const exclusiveProperties = properties.filter(p => p.classification === 'Exclusive');
       exclusiveProperties.forEach(prop => {
         if (prop.ownerId) {
+          // Exclusive property goes 100% to the owner
           exclusivePropertyMap[prop.ownerId] = (exclusivePropertyMap[prop.ownerId] || 0) + prop.totalSqm;
           if (!inheritanceHistory[prop.ownerId]) inheritanceHistory[prop.ownerId] = [];
           inheritanceHistory[prop.ownerId].push({
-            source: 'Own Exclusive Property',
+            source: `Own Exclusive Property: ${prop.name}`,
             amount: prop.totalSqm,
-            propertyName: prop.name
+            propertyName: prop.name,
+            type: 'Exclusive'
           });
+          const owner = persons.find(p => p.id === prop.ownerId);
+          console.log(`   🏛️ Exclusive property "${prop.name}" (${prop.totalSqm} sqm) belongs to ${owner?.name || prop.ownerId}`);
         }
       });
 
+      // ============================================================
+      // Process deaths chronologically
+      // ============================================================
       const deceasedPersons = persons
         .filter(p => isActuallyDeceased(p))
         .sort((a, b) => new Date(a.dateOfDeath) - new Date(b.dateOfDeath));
 
       const deathEvents = [];
+
+      // After processing all deaths, update predeceased persons with what they should have received
+      for (const event of deathEvents) {
+        if (event.isRepresented && predeceasedInheritanceMap[event.person.id]) {
+          event.shouldHaveReceived = predeceasedInheritanceMap[event.person.id];
+          // Also update the event's totalEstate to show the inheritance amount
+          event.totalEstate = predeceasedInheritanceMap[event.person.id];
+        }
+      }
 
       for (const deceased of deceasedPersons) {
         if (excludedSet.has(deceased.id)) {
@@ -149,9 +210,11 @@ const DivisionEngine = ({
             conjugalShare: 0,
             exclusiveProperty: 0,
             totalEstate: 0,
+            shouldHaveReceived: 0,
             heirs: [],
             distribution: [],
-            isExcluded: true
+            isExcluded: true,
+            isRepresented: false
           });
           continue;
         }
@@ -160,26 +223,44 @@ const DivisionEngine = ({
         const exclusiveProp = exclusivePropertyMap[deceased.id] || 0;
         const totalEstate = conjugalShare + exclusiveProp;
 
+        console.log(`\n💀 ${deceased.name} (${deceased.dateOfDeath})`);
+        console.log(`   Conjugal Share: ${conjugalShare} sqm`);
+        console.log(`   Exclusive Property: ${exclusiveProp} sqm`);
+        console.log(`   Total Estate: ${totalEstate} sqm`);
+
         if (totalEstate === 0) {
           const isPreDeceased = new Date(deceased.dateOfDeath) < new Date(propositus.dateOfDeath);
+          let shouldHaveReceived = 0;
+          let isExcluded = false;
+          
           if (isPreDeceased) {
             const children = getChildren(deceased.id);
             const hasLivingKids = children.some(c => !isActuallyDeceased(c));
             if (!hasLivingKids) {
               excludedSet.add(deceased.id);
+              isExcluded = true;
+              console.log(`   ❌ Pre-deceased with no children - EXCLUDED`);
+            } else {
+              console.log(`   ℹ️ Pre-deceased with children - will be represented`);
+              shouldHaveReceived = totalEstate; // This is 0, but we need to track it
             }
           }
           delete conjugalShareMap[deceased.id];
           delete exclusivePropertyMap[deceased.id];
           
+          // Check if this predeceased person will inherit from the propositus
+          const willInheritFromPropositus = isPreDeceased && !isExcluded;
+
           deathEvents.push({
             person: deceased,
             conjugalShare: conjugalShare,
             exclusiveProperty: exclusiveProp,
             totalEstate: 0,
+            shouldHaveReceived: 0, // Will be updated later
             heirs: [],
             distribution: [],
-            isExcluded: excludedSet.has(deceased.id)
+            isExcluded: isExcluded,
+            isRepresented: willInheritFromPropositus
           });
           continue;
         }
@@ -192,6 +273,7 @@ const DivisionEngine = ({
         if (spouse && !isDeceasedAtDate(spouse, currentDeathDate) && !excludedSet.has(spouse.id)) {
           heirs.push(spouse);
           heirDetails.push({ person: spouse, type: 'Spouse', representation: null, share: 0 });
+          console.log(`   💑 Spouse: ${spouse.name}`);
         }
 
         const children = getChildren(deceased.id);
@@ -202,6 +284,7 @@ const DivisionEngine = ({
           if (!excludedSet.has(child.id)) {
             heirs.push(child);
             heirDetails.push({ person: child, type: 'Child', representation: null, share: 0 });
+            console.log(`   👶 Living child: ${child.name}`);
           }
         }
         
@@ -216,8 +299,10 @@ const DivisionEngine = ({
               representation: heirsOfChild,
               share: 0
             });
+            console.log(`   👶 Represented child: ${child.name} → ${heirsOfChild.map(r => r.name).join(', ')}`);
           } else {
             excludedSet.add(child.id);
+            console.log(`   ❌ ${child.name} (deceased, no living heirs) - EXCLUDED`);
           }
         }
 
@@ -229,6 +314,7 @@ const DivisionEngine = ({
           for (const parent of livingParents) {
             heirs.push(parent);
             heirDetails.push({ person: parent, type: 'Parent', representation: null, share: 0 });
+            console.log(`   👴👵 Parent: ${parent.name}`);
           }
         }
 
@@ -244,6 +330,7 @@ const DivisionEngine = ({
           for (const sibling of livingSiblings) {
             heirs.push(sibling);
             heirDetails.push({ person: sibling, type: 'Sibling', representation: null, share: 0 });
+            console.log(`   👥 Living sibling: ${sibling.name}`);
           }
           
           for (const sibling of deceasedSiblings) {
@@ -256,6 +343,7 @@ const DivisionEngine = ({
                 representation: heirsOfSibling,
                 share: 0
               });
+              console.log(`   👥 Represented sibling: ${sibling.name} → ${heirsOfSibling.map(r => r.name).join(', ')}`);
             }
           }
         }
@@ -264,19 +352,26 @@ const DivisionEngine = ({
         delete exclusivePropertyMap[deceased.id];
 
         if (heirs.length === 0) {
+          console.log(`   ⚠️ No heirs found - estate abandoned`);
           deathEvents.push({
             person: deceased,
             conjugalShare: conjugalShare,
             exclusiveProperty: exclusiveProp,
             totalEstate: totalEstate,
+            shouldHaveReceived: totalEstate,
             heirs: [],
             distribution: [],
-            isAbandoned: true
+            isAbandoned: true,
+            isExcluded: false,
+            isRepresented: false
           });
           continue;
         }
 
         const sharePerHeir = totalEstate / heirs.length;
+        console.log(`   📊 ${heirs.length} heirs, each gets ${sharePerHeir.toFixed(4)} sqm`);
+        console.log(`   Heirs:`, heirs.map(h => h.name).join(', '));
+
         const distribution = [];
         
         for (let i = 0; i < heirs.length; i++) {
@@ -284,12 +379,19 @@ const DivisionEngine = ({
           const detail = heirDetails[i];
           const shareAmount = sharePerHeir;
           
+          // If this is the propositus distributing to heirs, track predeceased children
+          if (deceased.id === propositusId && detail && (detail.type === 'Represented Child' || detail.type === 'Represented Sibling')) {
+            // Store what this predeceased child would have received
+            predeceasedInheritanceMap[heir.id] = shareAmount;
+          }
+          
           if (detail && (detail.type === 'Represented Child' || detail.type === 'Represented Sibling')) {
             exclusivePropertyMap[heir.id] = (exclusivePropertyMap[heir.id] || 0) + shareAmount;
             if (!inheritanceHistory[heir.id]) inheritanceHistory[heir.id] = [];
             inheritanceHistory[heir.id].push({
               source: `Inherited from ${deceased.name}`,
-              amount: shareAmount
+              amount: shareAmount,
+              type: 'Exclusive'
             });
             
             const repShare = shareAmount / detail.representation.length;
@@ -298,7 +400,8 @@ const DivisionEngine = ({
               if (!inheritanceHistory[rep.id]) inheritanceHistory[rep.id] = [];
               inheritanceHistory[rep.id].push({
                 source: `Inherited from ${deceased.name} (through ${heir.name})`,
-                amount: repShare
+                amount: repShare,
+                type: 'Exclusive'
               });
             }
             
@@ -316,7 +419,8 @@ const DivisionEngine = ({
             if (!inheritanceHistory[heir.id]) inheritanceHistory[heir.id] = [];
             inheritanceHistory[heir.id].push({
               source: `Inherited from ${deceased.name}`,
-              amount: shareAmount
+              amount: shareAmount,
+              type: 'Exclusive'
             });
             
             distribution.push({
@@ -328,17 +432,29 @@ const DivisionEngine = ({
           }
         }
 
-        deathEvents.push({
-          person: deceased,
-          conjugalShare: conjugalShare,
-          exclusiveProperty: exclusiveProp,
-          totalEstate: totalEstate,
-          heirs: heirs,
-          distribution: distribution,
-          sharePerHeir: sharePerHeir
-        });
+        // Store the inheritance amount for predeceased persons
+          if (deceased.id === propositusId) {
+            // If this is the propositus, their estate is distributed to heirs
+            // We'll track what each heir (including predeceased children) receives
+          }
+
+          deathEvents.push({
+            person: deceased,
+            conjugalShare: conjugalShare,
+            exclusiveProperty: exclusiveProp,
+            totalEstate: totalEstate,
+            shouldHaveReceived: totalEstate,
+            heirs: heirs,
+            distribution: distribution,
+            sharePerHeir: sharePerHeir,
+            isExcluded: false,
+            isRepresented: false
+          });
       }
 
+      // ============================================================
+      // Calculate final heirs
+      // ============================================================
       const finalHeirs = [];
       
       for (const person of persons) {
@@ -377,6 +493,13 @@ const DivisionEngine = ({
       finalHeirs.sort((a, b) => b.total - a.total);
       const totalEstate = finalHeirs.reduce((sum, h) => sum + h.total, 0);
 
+      console.log(`\n📊 FINAL RESULTS`);
+      console.log(`Total Estate: ${totalEstate} sqm`);
+      finalHeirs.forEach(h => {
+        const pct = (h.total / totalEstate) * 100;
+        console.log(`   ${h.person.name}: ${h.total.toFixed(4)} sqm (${pct.toFixed(1)}%)`);
+      });
+
       setDivisionResults({
         heirs: finalHeirs,
         totalEstate: totalEstate,
@@ -394,7 +517,7 @@ const DivisionEngine = ({
   };
 
   // ============================================================
-  // UI HELPERS
+  // UI HELPERS (UNCHANGED)
   // ============================================================
 
   const formatDate = (dateStr) => {
@@ -509,47 +632,62 @@ const DivisionEngine = ({
           </button>
         </div>
         <div className="de-timeline-list">
-          {deathEvents.map((event, index) => (
-            <motion.div
-              key={index}
-              className={`de-timeline-item ${event.isExcluded ? 'de-timeline-excluded' : ''} ${event.isAbandoned ? 'de-timeline-abandoned' : ''}`}
-              initial={{ opacity: 0, y: 8 }}
-              animate={{ opacity: 1, y: 0 }}
-              transition={{ delay: index * 0.04 }}
-              onClick={() => {
-                if (event.distribution && event.distribution.length > 0) {
-                  setSelectedEvent(event);
-                  setShowEventModal(true);
-                }
-              }}
-              style={{ cursor: event.distribution && event.distribution.length > 0 ? 'pointer' : 'default' }}
-            >
-              <div className="de-timeline-marker">
-                <span className="de-timeline-number">{index + 1}</span>
-              </div>
-              <div className="de-timeline-content">
-                <div className="de-timeline-header">
-                  <span className="de-timeline-name">
-                    {event.person.name}
-                    {event.isExcluded && <span className="de-badge de-badge-excluded">Excluded</span>}
-                    {event.isAbandoned && <span className="de-badge de-badge-abandoned">Abandoned</span>}
-                  </span>
-                  <span className="de-timeline-date">{formatDate(event.person.dateOfDeath)}</span>
+          {deathEvents.map((event, index) => {
+            // Check if this event has distribution to show
+            const hasDistribution = event.distribution && event.distribution.length > 0;
+            // Check if this is a predeceased person with representation (has children)
+            const isPredeceasedWithRep = event.isRepresented === true;
+            
+            return (
+              <motion.div
+                key={index}
+                className={`de-timeline-item ${event.isExcluded ? 'de-timeline-excluded' : ''} ${event.isAbandoned ? 'de-timeline-abandoned' : ''} ${isPredeceasedWithRep ? 'de-timeline-represented' : ''}`}
+                initial={{ opacity: 0, y: 8 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ delay: index * 0.04 }}
+                onClick={() => {
+                  // Show modal if there's distribution OR if it's a predeceased person with representation
+                  if (hasDistribution || isPredeceasedWithRep) {
+                    setSelectedEvent(event);
+                    setShowEventModal(true);
+                  }
+                }}
+                style={{ cursor: (hasDistribution || isPredeceasedWithRep) ? 'pointer' : 'default' }}
+              >
+                <div className="de-timeline-marker">
+                  <span className="de-timeline-number">{index + 1}</span>
                 </div>
-                <div className="de-timeline-details">
-                  <span className="de-timeline-estate">
-                    Estate: <strong>{formatNumber(event.totalEstate)}</strong> sqm
-                  </span>
-                  <span className="de-timeline-heirs">
-                    Heirs: <strong>{event.heirs?.length || 0}</strong>
-                  </span>
-                  {event.distribution && event.distribution.length > 0 && (
-                    <span className="de-timeline-click">Click to view →</span>
-                  )}
+                <div className="de-timeline-content">
+                  <div className="de-timeline-header">
+                    <span className="de-timeline-name">
+                      {event.person.name}
+                      {event.isExcluded && <span className="de-badge de-badge-excluded">Excluded</span>}
+                      {isPredeceasedWithRep && <span className="de-badge de-badge-represented">Represented</span>}
+                      {event.isAbandoned && <span className="de-badge de-badge-abandoned">Abandoned</span>}
+                    </span>
+                    <span className="de-timeline-date">{formatDate(event.person.dateOfDeath)}</span>
+                  </div>
+                  <div className="de-timeline-details">
+                    <span className="de-timeline-estate">
+                      Estate: <strong>{formatNumber(event.totalEstate)}</strong> sqm
+                    </span>
+                    {/* Show "Should have received" for predeceased persons with representation */}
+                    {isPredeceasedWithRep && (
+                      <span className="de-timeline-should-have">
+                        Should have received: <strong>{formatNumber(event.shouldHaveReceived || 0)}</strong> sqm
+                      </span>
+                    )}
+                    <span className="de-timeline-heirs">
+                      Heirs: <strong>{event.heirs?.length || 0}</strong>
+                    </span>
+                    {(hasDistribution || isPredeceasedWithRep) && (
+                      <span className="de-timeline-click">Click to view →</span>
+                    )}
+                  </div>
                 </div>
-              </div>
-            </motion.div>
-          ))}
+              </motion.div>
+            );
+          })}
         </div>
       </div>
     );
@@ -638,6 +776,9 @@ const DivisionEngine = ({
   const renderModal = () => {
     if (!selectedEvent) return null;
 
+    // Check if this is a represented predeceased person
+    const isRepresentedPredeceased = selectedEvent.isRepresented === true;
+
     return (
       <AnimatePresence>
         {showEventModal && (
@@ -658,7 +799,7 @@ const DivisionEngine = ({
               <div className="de-modal-header">
                 <div className="de-modal-header-left">
                   <div className="de-modal-avatar" style={{
-                    background: 'linear-gradient(135deg, #6366f1, #8b5cf6)',
+                    background: isRepresentedPredeceased ? 'linear-gradient(135deg, #8b5cf6, #6366f1)' : 'linear-gradient(135deg, #6366f1, #8b5cf6)',
                     width: '48px',
                     height: '48px',
                     borderRadius: '50%',
@@ -676,6 +817,11 @@ const DivisionEngine = ({
                     <h2 className="de-modal-title">{selectedEvent.person.name}</h2>
                     <p className="de-modal-subtitle">
                       ⚰️ Died: {formatDate(selectedEvent.person.dateOfDeath)}
+                      {isRepresentedPredeceased && (
+                        <span style={{ display: 'block', color: '#8b5cf6', fontWeight: '600' }}>
+                          ⚖️ Predeceased — Estate distributed to representatives
+                        </span>
+                      )}
                     </p>
                   </div>
                 </div>
@@ -684,10 +830,15 @@ const DivisionEngine = ({
 
               <div className="de-modal-body">
                 <div className="de-modal-estate">
-                  <div className="de-modal-estate-item de-modal-estate-total">
+                  <div className={`de-modal-estate-item ${isRepresentedPredeceased ? 'de-modal-estate-should-have' : 'de-modal-estate-total'}`}>
                     <div className="de-modal-estate-icon">🏛️</div>
-                    <span className="de-modal-estate-label">Total Estate</span>
-                    <span className="de-modal-estate-value">{formatNumber(selectedEvent.totalEstate)} <span className="de-modal-estate-unit">sqm</span></span>
+                    <span className="de-modal-estate-label">
+                      {isRepresentedPredeceased ? 'Should Have Received' : 'Total Estate'}
+                    </span>
+                    <span className="de-modal-estate-value">
+                      {formatNumber(isRepresentedPredeceased ? selectedEvent.shouldHaveReceived : selectedEvent.totalEstate)}
+                      <span className="de-modal-estate-unit"> sqm</span>
+                    </span>
                   </div>
                   <div className="de-modal-estate-item">
                     <div className="de-modal-estate-icon">💑</div>
@@ -701,56 +852,120 @@ const DivisionEngine = ({
                   </div>
                 </div>
 
-                <div className="de-modal-distribution">
-                  <h4 className="de-modal-section-title">
-                    <span className="de-modal-section-icon">📤</span>
-                    Distribution
-                  </h4>
-                  <div className="de-modal-dist-list">
-                    {selectedEvent.distribution.map((dist, idx) => {
-                      const color = getTypeColor(dist.type);
-                      return (
-                        <div key={idx} className="de-modal-dist-item">
-                          <div className="de-modal-dist-left">
-                            <div className="de-modal-dist-avatar" style={{
-                              background: color.bg,
-                              color: color.color,
-                              width: '32px',
-                              height: '32px',
-                              borderRadius: '50%',
-                              display: 'flex',
-                              alignItems: 'center',
-                              justifyContent: 'center',
-                              fontSize: '12px',
-                              fontWeight: '600'
-                            }}>
-                              {getInitials(dist.heir.name)}
-                            </div>
-                            <div>
-                              <span className="de-modal-dist-name">{dist.heir.name}</span>
-                              <span className="de-modal-dist-type" style={{
+                {/* Show distribution or representation info */}
+                {selectedEvent.distribution && selectedEvent.distribution.length > 0 ? (
+                  <div className="de-modal-distribution">
+                    <h4 className="de-modal-section-title">
+                      <span className="de-modal-section-icon">📤</span>
+                      {isRepresentedPredeceased ? 'Distribution to Representatives' : 'Distribution'}
+                    </h4>
+                    <div className="de-modal-dist-list">
+                      {selectedEvent.distribution.map((dist, idx) => {
+                        const color = getTypeColor(dist.type);
+                        return (
+                          <div key={idx} className="de-modal-dist-item">
+                            <div className="de-modal-dist-left">
+                              <div className="de-modal-dist-avatar" style={{
                                 background: color.bg,
                                 color: color.color,
+                                width: '32px',
+                                height: '32px',
+                                borderRadius: '50%',
+                                display: 'flex',
+                                alignItems: 'center',
+                                justifyContent: 'center',
+                                fontSize: '12px',
+                                fontWeight: '600'
                               }}>
-                                {dist.type}
-                              </span>
+                                {getInitials(dist.heir.name)}
+                              </div>
+                              <div>
+                                <span className="de-modal-dist-name">{dist.heir.name}</span>
+                                <span className="de-modal-dist-type" style={{
+                                  background: color.bg,
+                                  color: color.color,
+                                }}>
+                                  {dist.type}
+                                </span>
+                              </div>
+                            </div>
+                            <div className="de-modal-dist-right">
+                              <span className="de-modal-dist-share">{formatNumber(dist.share)} <span className="de-modal-dist-unit">sqm</span></span>
+                              {dist.passedTo && (
+                                <div className="de-modal-dist-passed">
+                                  ⤷ {dist.passedTo.map(p => 
+                                    `${p.person.name}: ${formatNumber(p.share)} sqm`
+                                  ).join(', ')}
+                                </div>
+                              )}
                             </div>
                           </div>
-                          <div className="de-modal-dist-right">
-                            <span className="de-modal-dist-share">{formatNumber(dist.share)} <span className="de-modal-dist-unit">sqm</span></span>
-                            {dist.passedTo && (
-                              <div className="de-modal-dist-passed">
-                                ⤷ {dist.passedTo.map(p => 
-                                  `${p.person.name}: ${formatNumber(p.share)} sqm`
-                                ).join(', ')}
-                              </div>
-                            )}
+                        );
+                      })}
+                    </div>
+                  </div>
+                ) : isRepresentedPredeceased && selectedEvent.shouldHaveReceived > 0 ? (
+                  <div className="de-modal-representation">
+                    <h4 className="de-modal-section-title">
+                      <span className="de-modal-section-icon">👥</span>
+                      Representatives
+                    </h4>
+                    <p style={{ 
+                      fontSize: '13px', 
+                      color: 'var(--text-secondary, #64748b)',
+                      marginBottom: '12px'
+                    }}>
+                      This predeceased person's estate of <strong>{formatNumber(selectedEvent.shouldHaveReceived)} sqm</strong> is distributed to their legal representatives.
+                    </p>
+                    <div className="de-modal-dist-list">
+                      <div className="de-modal-dist-item" style={{ 
+                        background: 'rgba(139, 92, 246, 0.04)',
+                        borderColor: 'rgba(139, 92, 246, 0.15)'
+                      }}>
+                        <div className="de-modal-dist-left">
+                          <div className="de-modal-dist-avatar" style={{
+                            background: 'rgba(139, 92, 246, 0.12)',
+                            color: '#8b5cf6',
+                            width: '32px',
+                            height: '32px',
+                            borderRadius: '50%',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '12px',
+                            fontWeight: '600'
+                          }}>
+                            👤
+                          </div>
+                          <div>
+                            <span className="de-modal-dist-name">Representatives</span>
+                            <span className="de-modal-dist-type" style={{
+                              background: 'rgba(139, 92, 246, 0.12)',
+                              color: '#8b5cf6',
+                            }}>
+                              Inherit by representation
+                            </span>
                           </div>
                         </div>
-                      );
-                    })}
+                        <div className="de-modal-dist-right">
+                          <span className="de-modal-dist-share">
+                            {formatNumber(selectedEvent.shouldHaveReceived)} <span className="de-modal-dist-unit">sqm</span>
+                          </span>
+                        </div>
+                      </div>
+                    </div>
                   </div>
-                </div>
+                ) : (
+                  <div className="de-modal-no-distribution">
+                    <p style={{ 
+                      textAlign: 'center', 
+                      color: 'var(--text-secondary, #64748b)',
+                      padding: '20px 0'
+                    }}>
+                      No distribution recorded for this event.
+                    </p>
+                  </div>
+                )}
               </div>
 
               <div className="de-modal-footer">
@@ -1246,6 +1461,16 @@ const DivisionEngine = ({
     border-color: rgba(99, 102, 241, 0.15);
   }
 
+  .de-timeline-item.de-timeline-represented {
+    background: rgba(139, 92, 246, 0.06);
+    border-color: rgba(139, 92, 246, 0.15);
+  }
+
+  .de-timeline-item.de-timeline-represented:hover {
+    background: rgba(139, 92, 246, 0.1);
+    border-color: rgba(139, 92, 246, 0.25);
+  }
+
   .de-timeline-excluded {
     opacity: 0.5;
     background: rgba(220, 38, 38, 0.04);
@@ -1270,6 +1495,11 @@ const DivisionEngine = ({
     color: white;
     font-size: 10px;
     font-weight: 700;
+  }
+
+  .de-timeline-represented .de-timeline-marker {
+    background: linear-gradient(135deg, #8b5cf6, #6366f1);
+    border: 2px solid rgba(139, 92, 246, 0.3);
   }
 
   .de-timeline-excluded .de-timeline-marker {
@@ -1318,8 +1548,17 @@ const DivisionEngine = ({
   }
 
   .de-timeline-estate strong,
-  .de-timeline-heirs strong {
+  .de-timeline-heirs strong,
+  .de-timeline-should-have strong {
     color: var(--text-primary, #0f172a);
+  }
+
+  .de-timeline-should-have {
+    color: #8b5cf6;
+  }
+
+  .de-timeline-should-have strong {
+    color: #8b5cf6;
   }
 
   .de-timeline-click {
@@ -1340,6 +1579,11 @@ const DivisionEngine = ({
   .de-badge-excluded {
     background: rgba(220, 38, 38, 0.1);
     color: #dc2626;
+  }
+
+  .de-badge-represented {
+    background: rgba(139, 92, 246, 0.12);
+    color: #8b5cf6;
   }
 
   .de-badge-abandoned {
@@ -1582,6 +1826,15 @@ const DivisionEngine = ({
     border: 1px solid var(--border-color, #e2e8f0);
   }
 
+  .de-modal-estate-should-have {
+    background: rgba(139, 92, 246, 0.08);
+    border-color: rgba(139, 92, 246, 0.2);
+  }
+
+  .de-modal-estate-should-have .de-modal-estate-value {
+    color: #8b5cf6;
+  }
+
   .de-modal-estate-label {
     display: block;
     font-size: 9px;
@@ -1735,6 +1988,15 @@ const DivisionEngine = ({
 
   .de-modal-estate-total .de-modal-estate-value {
     color: #6366f1;
+  }
+
+  .de-modal-estate-should-have {
+    background: linear-gradient(135deg, rgba(139, 92, 246, 0.08), rgba(99, 102, 241, 0.06));
+    border-color: rgba(139, 92, 246, 0.25);
+  }
+
+  .de-modal-estate-should-have .de-modal-estate-value {
+    color: #8b5cf6;
   }
 
   .de-modal-estate-icon {
