@@ -10,11 +10,22 @@ const PropertyManager = ({
   selectedPersonId = null
 }) => {
   const [showAddForm, setShowAddForm] = useState(false);
+  const [showBulkUpload, setShowBulkUpload] = useState(false);
   const [editingProperty, setEditingProperty] = useState(null);
   const [searchQuery, setSearchQuery] = useState('');
   const [filterType, setFilterType] = useState('all');
   const [isMobile, setIsMobile] = useState(window.innerWidth < 768);
   const [selectedProperty, setSelectedProperty] = useState(null);
+  const [bulkErrors, setBulkErrors] = useState([]);
+  const [bulkRows, setBulkRows] = useState([{ 
+    name: '', 
+    totalSqm: '', 
+    ownerId: '', 
+    type: 'Land', 
+    classification: 'Conjugal', 
+    location: '', 
+    description: '' 
+  }]);
 
   useEffect(() => {
     const handleResize = () => {
@@ -53,7 +64,6 @@ const PropertyManager = ({
 
   const getCoOwnerName = (ownerId, classification) => {
     if (!ownerId) return '';
-    // Only show co-owner for Conjugal properties
     if (classification !== 'Conjugal') return '';
     const person = persons.find(p => p.id === ownerId);
     if (!person) return '';
@@ -83,6 +93,95 @@ const PropertyManager = ({
       month: 'short',
       day: 'numeric'
     });
+  };
+
+  // Bulk row functions
+  const addBulkRow = () => {
+    setBulkRows([...bulkRows, { 
+      name: '', 
+      totalSqm: '', 
+      ownerId: '', 
+      type: 'Land', 
+      classification: 'Conjugal', 
+      location: '', 
+      description: '' 
+    }]);
+  };
+
+  const removeBulkRow = (index) => {
+    if (bulkRows.length <= 1) return;
+    setBulkRows(bulkRows.filter((_, i) => i !== index));
+  };
+
+  const updateBulkRow = (index, field, value) => {
+    const updated = [...bulkRows];
+    updated[index][field] = value;
+    setBulkRows(updated);
+    setBulkErrors([]);
+  };
+
+  const handleBulkUploadTable = () => {
+    const errors = [];
+    const newProperties = [];
+
+    bulkRows.forEach((row, index) => {
+      const lineNum = index + 1;
+      
+      // Validate required fields
+      if (!row.name.trim()) {
+        errors.push(`Row ${lineNum}: Missing property name`);
+        return;
+      }
+      if (!row.totalSqm || parseFloat(row.totalSqm) <= 0) {
+        errors.push(`Row ${lineNum}: Invalid totalSqm (must be a positive number)`);
+        return;
+      }
+      if (!row.ownerId) {
+        errors.push(`Row ${lineNum}: Missing owner selection`);
+        return;
+      }
+
+      // Check if owner exists
+      const owner = persons.find(p => p.id === row.ownerId);
+      if (!owner) {
+        errors.push(`Row ${lineNum}: Owner not found`);
+        return;
+      }
+
+      newProperties.push({
+        id: `pr_${Date.now()}_${index}`,
+        name: row.name.trim(),
+        type: row.type || 'Land',
+        classification: row.classification || 'Conjugal',
+        totalSqm: parseFloat(row.totalSqm),
+        ownerId: row.ownerId,
+        location: row.location || '',
+        description: row.description || '',
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString()
+      });
+    });
+
+    if (errors.length > 0) {
+      setBulkErrors(errors);
+      return;
+    }
+
+    // Clear errors and add properties
+    setBulkErrors([]);
+    onUpdate([...properties, ...newProperties]);
+    setBulkRows([{ 
+      name: '', 
+      totalSqm: '', 
+      ownerId: '', 
+      type: 'Land', 
+      classification: 'Conjugal', 
+      location: '', 
+      description: '' 
+    }]);
+    setShowBulkUpload(false);
+    
+    alert(`✅ Successfully added ${newProperties.length} property(ies)!`);
   };
 
   const handleSubmit = (e) => {
@@ -190,6 +289,24 @@ const PropertyManager = ({
         </div>
         
         <div className="pr-header-actions">
+          <button 
+            className="pr-btn pr-btn-secondary"
+            onClick={() => {
+              setBulkRows([{ 
+                name: '', 
+                totalSqm: '', 
+                ownerId: '', 
+                type: 'Land', 
+                classification: 'Conjugal', 
+                location: '', 
+                description: '' 
+              }]);
+              setBulkErrors([]);
+              setShowBulkUpload(true);
+            }}
+          >
+            📤 Bulk Upload
+          </button>
           <button 
             className="pr-btn pr-btn-primary" 
             onClick={() => {
@@ -311,6 +428,7 @@ const PropertyManager = ({
         )}
       </div>
 
+      {/* Add/Edit Property Modal */}
       <AnimatePresence>
         {showAddForm && (
           <motion.div
@@ -444,6 +562,192 @@ const PropertyManager = ({
                   </button>
                 </div>
               </form>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
+
+      {/* Bulk Upload Modal */}
+      <AnimatePresence>
+        {showBulkUpload && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="pr-modal-overlay"
+            onClick={() => {
+              setShowBulkUpload(false);
+              setBulkErrors([]);
+            }}
+          >
+            <motion.div
+              initial={{ scale: 0.9, y: 20 }}
+              animate={{ scale: 1, y: 0 }}
+              exit={{ scale: 0.9, y: 20 }}
+              className="pr-modal pr-modal-wide"
+              onClick={(e) => e.stopPropagation()}
+            >
+              <h2 className="pr-modal-title">📤 Bulk Upload Properties</h2>
+              <p className="pr-modal-subtitle">
+                Add multiple properties at once using the table below. Each row represents one property.
+              </p>
+
+              <div className="pr-bulk-table-container">
+                <div className="pr-bulk-table-scroll">
+                  <table className="pr-bulk-table">
+                    <thead>
+                      <tr>
+                        <th>Name *</th>
+                        <th>Total Sqm *</th>
+                        <th>Owner *</th>
+                        <th>Type</th>
+                        <th>Classification</th>
+                        <th>Location</th>
+                        <th>Description</th>
+                        <th style={{ width: '40px' }}></th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {bulkRows.map((row, index) => (
+                        <tr key={index}>
+                          <td>
+                            <input
+                              type="text"
+                              value={row.name}
+                              onChange={(e) => updateBulkRow(index, 'name', e.target.value)}
+                              placeholder="Property name"
+                              className="pr-bulk-input"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="number"
+                              step="0.01"
+                              value={row.totalSqm}
+                              onChange={(e) => updateBulkRow(index, 'totalSqm', e.target.value)}
+                              placeholder="0.00"
+                              className="pr-bulk-input pr-bulk-number"
+                            />
+                          </td>
+                          <td>
+                            <select
+                              value={row.ownerId}
+                              onChange={(e) => updateBulkRow(index, 'ownerId', e.target.value)}
+                              className="pr-bulk-select"
+                            >
+                              <option value="">Select</option>
+                              {persons.map(p => (
+                                <option key={p.id} value={p.id}>
+                                  {p.name} {p.isDeceased ? '⚰️' : ''}
+                                </option>
+                              ))}
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              value={row.type}
+                              onChange={(e) => updateBulkRow(index, 'type', e.target.value)}
+                              className="pr-bulk-select"
+                            >
+                              <option value="Land">Land</option>
+                              <option value="Building">Building</option>
+                            </select>
+                          </td>
+                          <td>
+                            <select
+                              value={row.classification}
+                              onChange={(e) => updateBulkRow(index, 'classification', e.target.value)}
+                              className="pr-bulk-select"
+                            >
+                              <option value="Conjugal">Conjugal</option>
+                              <option value="Exclusive">Exclusive</option>
+                            </select>
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              value={row.location}
+                              onChange={(e) => updateBulkRow(index, 'location', e.target.value)}
+                              placeholder="Location"
+                              className="pr-bulk-input"
+                            />
+                          </td>
+                          <td>
+                            <input
+                              type="text"
+                              value={row.description}
+                              onChange={(e) => updateBulkRow(index, 'description', e.target.value)}
+                              placeholder="Description"
+                              className="pr-bulk-input"
+                            />
+                          </td>
+                          <td>
+                            <button
+                              type="button"
+                              className="pr-bulk-remove-row"
+                              onClick={() => removeBulkRow(index)}
+                              disabled={bulkRows.length <= 1}
+                            >
+                              ✕
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+
+              {bulkErrors.length > 0 && (
+                <div className="pr-bulk-errors">
+                  <h4>❌ Errors Found:</h4>
+                  <ul>
+                    {bulkErrors.map((error, idx) => (
+                      <li key={idx}>{error}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+
+              <div className="pr-bulk-actions">
+                <button
+                  type="button"
+                  className="pr-btn pr-btn-secondary"
+                  onClick={addBulkRow}
+                >
+                  + Add Row
+                </button>
+                <span className="pr-bulk-row-count">{bulkRows.length} row{bulkRows.length > 1 ? 's' : ''}</span>
+              </div>
+
+              <div className="pr-form-actions">
+                <button
+                  type="button"
+                  className="pr-btn pr-btn-secondary"
+                  onClick={() => {
+                    setShowBulkUpload(false);
+                    setBulkErrors([]);
+                    setBulkRows([{ 
+                      name: '', 
+                      totalSqm: '', 
+                      ownerId: '', 
+                      type: 'Land', 
+                      classification: 'Conjugal', 
+                      location: '', 
+                      description: '' 
+                    }]);
+                  }}
+                >
+                  Cancel
+                </button>
+                <button 
+                  type="button" 
+                  className="pr-btn pr-btn-primary"
+                  onClick={handleBulkUploadTable}
+                >
+                  Upload {bulkRows.length} Properties
+                </button>
+              </div>
             </motion.div>
           </motion.div>
         )}
@@ -774,6 +1078,7 @@ const PropertyManager = ({
           color: var(--text-secondary);
         }
 
+        /* Modal Styles */
         .pr-modal-overlay {
           position: fixed;
           top: 0;
@@ -799,6 +1104,10 @@ const PropertyManager = ({
           overflow: auto;
           box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
           border: 1px solid var(--border-color);
+        }
+
+        .pr-modal-wide {
+          max-width: 820px;
         }
 
         .pr-modal-title {
@@ -873,6 +1182,182 @@ const PropertyManager = ({
           flex-wrap: wrap;
         }
 
+        /* Bulk Table Styles */
+        .pr-bulk-table-container {
+          border: 1px solid var(--border-color);
+          border-radius: 10px;
+          overflow: hidden;
+          margin-bottom: 12px;
+        }
+
+        .pr-bulk-table-scroll {
+          overflow-x: auto;
+          max-height: 400px;
+          overflow-y: auto;
+        }
+
+        .pr-bulk-table {
+          width: 100%;
+          border-collapse: collapse;
+          font-size: 13px;
+          min-width: 700px;
+        }
+
+        .pr-bulk-table thead {
+          background: var(--bg-secondary);
+          position: sticky;
+          top: 0;
+          z-index: 10;
+        }
+
+        .pr-bulk-table th {
+          padding: 8px 6px;
+          text-align: left;
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          color: var(--text-secondary);
+          border-bottom: 2px solid var(--border-color);
+          white-space: nowrap;
+        }
+
+        .pr-bulk-table td {
+          padding: 4px 4px;
+          border-bottom: 1px solid var(--border-color);
+          vertical-align: middle;
+        }
+
+        .pr-bulk-table tr:last-child td {
+          border-bottom: none;
+        }
+
+        .pr-bulk-input {
+          width: 100%;
+          padding: 6px 8px;
+          border: 1px solid transparent;
+          border-radius: 4px;
+          font-size: 12px;
+          background: transparent;
+          color: var(--text-primary);
+          transition: all 0.2s;
+          min-width: 60px;
+        }
+
+        .pr-bulk-input:hover {
+          background: var(--bg-secondary);
+        }
+
+        .pr-bulk-input:focus {
+          border-color: #667eea;
+          background: var(--bg-secondary);
+          outline: none;
+        }
+
+        .pr-bulk-number {
+          text-align: right;
+          font-variant-numeric: tabular-nums;
+          min-width: 70px;
+        }
+
+        .pr-bulk-select {
+          width: 100%;
+          padding: 6px 8px;
+          border: 1px solid transparent;
+          border-radius: 4px;
+          font-size: 12px;
+          background: transparent;
+          color: var(--text-primary);
+          cursor: pointer;
+          transition: all 0.2s;
+          min-width: 70px;
+        }
+
+        .pr-bulk-select:hover {
+          background: var(--bg-secondary);
+        }
+
+        .pr-bulk-select:focus {
+          border-color: #667eea;
+          background: var(--bg-secondary);
+          outline: none;
+        }
+
+        .pr-bulk-remove-row {
+          padding: 2px 6px;
+          border: none;
+          border-radius: 4px;
+          background: transparent;
+          color: var(--text-secondary);
+          cursor: pointer;
+          font-size: 12px;
+          transition: all 0.2s;
+        }
+
+        .pr-bulk-remove-row:hover:not(:disabled) {
+          background: rgba(220, 38, 38, 0.1);
+          color: #dc2626;
+        }
+
+        .pr-bulk-remove-row:disabled {
+          opacity: 0.3;
+          cursor: not-allowed;
+        }
+
+        .pr-bulk-actions {
+          display: flex;
+          align-items: center;
+          gap: 12px;
+          margin-bottom: 16px;
+          flex-wrap: wrap;
+        }
+
+        .pr-bulk-row-count {
+          font-size: 12px;
+          color: var(--text-secondary);
+        }
+
+        .pr-bulk-errors {
+          background: rgba(220, 38, 38, 0.08);
+          border: 1px solid rgba(220, 38, 38, 0.2);
+          border-radius: 10px;
+          padding: 12px 16px;
+          margin-bottom: 16px;
+        }
+
+        .pr-bulk-errors h4 {
+          font-size: 13px;
+          font-weight: 600;
+          color: #dc2626;
+          margin: 0 0 6px 0;
+        }
+
+        .pr-bulk-errors ul {
+          margin: 0;
+          padding-left: 20px;
+          font-size: 12px;
+          color: #dc2626;
+        }
+
+        .pr-bulk-errors li {
+          margin: 2px 0;
+        }
+
+        /* Dark mode */
+        [data-theme="dark"] .pr-bulk-table thead {
+          background: var(--bg-primary);
+        }
+
+        [data-theme="dark"] .pr-bulk-input,
+        [data-theme="dark"] .pr-bulk-select {
+          color: var(--text-primary);
+        }
+
+        [data-theme="dark"] .pr-bulk-input:hover,
+        [data-theme="dark"] .pr-bulk-select:hover {
+          background: var(--bg-secondary);
+        }
+
         @media (max-width: 768px) {
           .pr-wrapper {
             gap: 16px;
@@ -899,6 +1384,8 @@ const PropertyManager = ({
           .pr-header-actions .pr-btn {
             flex: 1;
             text-align: center;
+            font-size: 12px;
+            padding: 6px 12px;
           }
 
           .pr-title {
@@ -936,6 +1423,10 @@ const PropertyManager = ({
             max-width: 100%;
           }
 
+          .pr-modal-wide {
+            max-width: 100%;
+          }
+
           .pr-form-row {
             grid-template-columns: 1fr;
           }
@@ -957,6 +1448,27 @@ const PropertyManager = ({
             padding: 5px 10px;
             height: 30px;
           }
+
+          .pr-bulk-table {
+            font-size: 11px;
+            min-width: 500px;
+          }
+          
+          .pr-bulk-input,
+          .pr-bulk-select {
+            font-size: 11px;
+            padding: 4px 6px;
+            min-width: 50px;
+          }
+          
+          .pr-bulk-table th {
+            font-size: 9px;
+            padding: 6px 4px;
+          }
+          
+          .pr-bulk-table td {
+            padding: 3px 3px;
+          }
         }
 
         @media (max-width: 480px) {
@@ -976,6 +1488,23 @@ const PropertyManager = ({
           .pr-filter-btn {
             font-size: 11px;
             padding: 3px 10px;
+          }
+
+          .pr-bulk-table {
+            font-size: 10px;
+            min-width: 400px;
+          }
+          
+          .pr-bulk-input,
+          .pr-bulk-select {
+            font-size: 10px;
+            padding: 3px 4px;
+            min-width: 40px;
+          }
+          
+          .pr-bulk-table th {
+            font-size: 8px;
+            padding: 4px 3px;
           }
         }
       `}</style>

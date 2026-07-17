@@ -34,6 +34,11 @@ const PersonDetailModal = ({
     });
   };
 
+  const formatNumber = (num) => {
+    if (!num) return '0';
+    return Number(num).toFixed(2).replace(/\B(?=(\d{3})+(?!\d))/g, ',');
+  };
+
   const getSpouseName = () => {
     if (!person.spouseId) return 'None';
     const spouse = persons.find(p => p.id === person.spouseId);
@@ -58,21 +63,19 @@ const PersonDetailModal = ({
   };
 
   const getConjugalProperties = () => {
-    // For conjugal properties, show them if:
-    // 1. The person is the owner, OR
-    // 2. The person is the spouse of the owner
     return properties.filter(p => {
       if (p.classification !== 'Conjugal') return false;
-      
-      // If this person owns it directly
       if (p.ownerId === person.id) return true;
-      
-      // If this person is the spouse of the owner
       const owner = persons.find(per => per.id === p.ownerId);
       if (owner && owner.spouseId === person.id) return true;
-      
       return false;
     });
+  };
+
+  const getTotalEstate = () => {
+    const exclusiveTotal = getExclusiveProperties().reduce((sum, p) => sum + (p.totalSqm || 0), 0);
+    const conjugalTotal = getConjugalProperties().reduce((sum, p) => sum + (p.totalSqm || 0), 0);
+    return exclusiveTotal + conjugalTotal;
   };
 
   const getPropertyAuditTrail = (property) => {
@@ -99,6 +102,7 @@ const PersonDetailModal = ({
   const children = getChildren();
   const exclusiveProps = getExclusiveProperties();
   const conjugalProps = getConjugalProperties();
+  const totalEstate = getTotalEstate();
 
   return (
     <motion.div
@@ -120,10 +124,10 @@ const PersonDetailModal = ({
           <div className="pdm-header-left">
             <div className={`pdm-avatar ${person.isDeceased ? 'deceased' : ''}`} style={{
               background: person.isDeceased 
-                ? '#dc2626' 
+                ? 'linear-gradient(135deg, #dc2626, #991b1b)' 
                 : person.gender === 'Female' 
-                  ? 'linear-gradient(135deg, #ec4899, #db2777)'
-                  : 'linear-gradient(135deg, #3b82f6, #2563eb)'
+                  ? 'linear-gradient(135deg, #ec4899, #be185d)'
+                  : 'linear-gradient(135deg, #3b82f6, #1d4ed8)'
             }}>
               {person.name?.split(' ').map(n => n[0]).join('').toUpperCase().slice(0, 2)}
             </div>
@@ -134,10 +138,31 @@ const PersonDetailModal = ({
               </h2>
               <p className="pdm-subtitle">
                 {person.isDeceased ? `Died: ${formatDate(person.dateOfDeath)}` : 'Living'} · {person.gender}
+                {person.generation && ` · ${person.generation}${person.generation === 1 ? 'st' : person.generation === 2 ? 'nd' : person.generation === 3 ? 'rd' : 'th'} Generation`}
               </p>
             </div>
           </div>
           <button className="pdm-close-btn" onClick={onClose}>✕</button>
+        </div>
+
+        {/* Quick Stats */}
+        <div className="pdm-stats">
+          <div className="pdm-stat-item">
+            <span className="pdm-stat-value">{totalEstate > 0 ? formatNumber(totalEstate) : '0'}</span>
+            <span className="pdm-stat-label">Total Estate (sqm)</span>
+          </div>
+          <div className="pdm-stat-item">
+            <span className="pdm-stat-value">{exclusiveProps.length + conjugalProps.length}</span>
+            <span className="pdm-stat-label">Properties</span>
+          </div>
+          <div className="pdm-stat-item">
+            <span className="pdm-stat-value">{children.length}</span>
+            <span className="pdm-stat-label">Children</span>
+          </div>
+          <div className="pdm-stat-item">
+            <span className="pdm-stat-value">{person.isDeceased ? 'Deceased' : 'Living'}</span>
+            <span className="pdm-stat-label">Status</span>
+          </div>
         </div>
 
         {/* Tabs */}
@@ -160,8 +185,12 @@ const PersonDetailModal = ({
         <div className="pdm-body">
           {activeTab === 'details' && (
             <>
+              {/* Personal Information */}
               <div className="pdm-section">
-                <h3 className="pdm-section-title">Personal Information</h3>
+                <h3 className="pdm-section-title">
+                  <span className="pdm-section-icon">👤</span>
+                  Personal Information
+                </h3>
                 <div className="pdm-info-grid">
                   <div className="pdm-info-item">
                     <span className="pdm-info-label">Full Name</span>
@@ -174,7 +203,9 @@ const PersonDetailModal = ({
                   <div className="pdm-info-item">
                     <span className="pdm-info-label">Status</span>
                     <span className="pdm-info-value">
-                      {person.isDeceased ? 'Deceased' : 'Living'}
+                      <span className={`pdm-status-badge ${person.isDeceased ? 'deceased' : 'living'}`}>
+                        {person.isDeceased ? '⚰️ Deceased' : '✅ Living'}
+                      </span>
                       {person.isDeceased && ` (${formatDate(person.dateOfDeath)})`}
                     </span>
                   </div>
@@ -203,16 +234,19 @@ const PersonDetailModal = ({
                 </div>
               </div>
 
+              {/* Children */}
               {children.length > 0 && (
                 <div className="pdm-section">
-                  <h3 className="pdm-section-title">👶 Children</h3>
-                  <div className="pdm-info-grid">
+                  <h3 className="pdm-section-title">
+                    <span className="pdm-section-icon">👶</span>
+                    Children
+                  </h3>
+                  <div className="pdm-children-grid">
                     {children.map(child => (
-                      <div key={child.id} className="pdm-info-item">
-                        <span className="pdm-info-value">{child.name}</span>
-                        <span className="pdm-info-label">
-                          {child.isDeceased ? 'Deceased' : 'Living'}
-                          {child.isDeceased && child.dateOfDeath && ` (${formatDate(child.dateOfDeath)})`}
+                      <div key={child.id} className="pdm-child-item">
+                        <span className="pdm-child-name">{child.name}</span>
+                        <span className={`pdm-child-status ${child.isDeceased ? 'deceased' : 'living'}`}>
+                          {child.isDeceased ? '⚰️' : '✅'}
                         </span>
                       </div>
                     ))}
@@ -225,7 +259,10 @@ const PersonDetailModal = ({
           {activeTab === 'exclusive' && (
             <div className="pdm-section">
               <div className="pdm-section-header">
-                <h3 className="pdm-section-title">🏠 Exclusive Properties</h3>
+                <h3 className="pdm-section-title">
+                  <span className="pdm-section-icon">🏠</span>
+                  Exclusive Properties
+                </h3>
                 <button 
                   className="pdm-add-btn"
                   onClick={() => {
@@ -245,21 +282,27 @@ const PersonDetailModal = ({
                   <p>No exclusive properties assigned to this person.</p>
                 </div>
               ) : (
-                exclusiveProps.map(prop => (
-                  <div key={prop.id} className="pdm-property-card">
-                    <div className="pdm-property-header">
-                      <h4 className="pdm-property-name">{prop.name}</h4>
-                      <span className="pdm-property-badge pdm-badge-exclusive">
-                        {prop.type || 'Property'}
-                      </span>
+                <div className="pdm-property-list">
+                  {exclusiveProps.map(prop => (
+                    <div key={prop.id} className="pdm-property-card">
+                      <div className="pdm-property-header">
+                        <h4 className="pdm-property-name">{prop.name}</h4>
+                        <span className="pdm-property-badge pdm-badge-exclusive">
+                          Exclusive
+                        </span>
+                      </div>
+                      <div className="pdm-property-details">
+                        <span className="pdm-property-area">📏 {formatNumber(prop.totalSqm)} sqm</span>
+                        {prop.location && <span>📍 {prop.location}</span>}
+                        {prop.description && <span className="pdm-property-desc">{prop.description}</span>}
+                      </div>
                     </div>
-                    <div className="pdm-property-details">
-                      <span>📏 {prop.totalSqm || 0} sqm</span>
-                      <span>📂 Exclusive</span>
-                      {prop.location && <span>📍 {prop.location}</span>}
-                    </div>
+                  ))}
+                  <div className="pdm-property-total">
+                    <span>Total Exclusive Estate</span>
+                    <span>{formatNumber(exclusiveProps.reduce((sum, p) => sum + (p.totalSqm || 0), 0))} sqm</span>
                   </div>
-                ))
+                </div>
               )}
             </div>
           )}
@@ -267,7 +310,10 @@ const PersonDetailModal = ({
           {activeTab === 'conjugal' && (
             <div className="pdm-section">
               <div className="pdm-section-header">
-                <h3 className="pdm-section-title">💑 Conjugal Properties</h3>
+                <h3 className="pdm-section-title">
+                  <span className="pdm-section-icon">💑</span>
+                  Conjugal Properties
+                </h3>
                 <button 
                   className="pdm-add-btn"
                   onClick={() => {
@@ -287,45 +333,52 @@ const PersonDetailModal = ({
                   <p>No conjugal properties assigned to this person.</p>
                 </div>
               ) : (
-                conjugalProps.map(prop => {
-                  const owner = persons.find(p => p.id === prop.ownerId);
-                  const spouse = owner ? persons.find(p => p.id === owner.spouseId) : null;
-                  const isOwner = prop.ownerId === person.id;
-                  const isSpouse = owner && owner.spouseId === person.id;
-                  
-                  return (
-                    <div key={prop.id} className="pdm-property-card">
-                      <div className="pdm-property-header">
-                        <h4 className="pdm-property-name">{prop.name}</h4>
-                        <span className="pdm-property-badge pdm-badge-conjugal">
-                          {prop.type || 'Property'}
-                        </span>
+                <div className="pdm-property-list">
+                  {conjugalProps.map(prop => {
+                    const owner = persons.find(p => p.id === prop.ownerId);
+                    const spouse = owner ? persons.find(p => p.id === owner.spouseId) : null;
+                    const isOwner = prop.ownerId === person.id;
+                    
+                    return (
+                      <div key={prop.id} className="pdm-property-card pdm-conjugal-card">
+                        <div className="pdm-property-header">
+                          <h4 className="pdm-property-name">{prop.name}</h4>
+                          <span className="pdm-property-badge pdm-badge-conjugal">
+                            Conjugal
+                          </span>
+                        </div>
+                        <div className="pdm-property-details">
+                          <span className="pdm-property-area">📏 {formatNumber(prop.totalSqm)} sqm</span>
+                          {owner && <span>👤 Owner: {owner.name}</span>}
+                          {spouse && <span>💍 Spouse: {spouse.name}</span>}
+                          {prop.location && <span>📍 {prop.location}</span>}
+                          <span className="pdm-conjugal-share">
+                            {isOwner 
+                              ? `Your share: 50% (${formatNumber(prop.totalSqm / 2)} sqm)`
+                              : `Your share: 50% (${formatNumber(prop.totalSqm / 2)} sqm)`
+                            }
+                          </span>
+                        </div>
                       </div>
-                      <div className="pdm-property-details">
-                        <span>📏 {prop.totalSqm || 0} sqm</span>
-                        <span>📂 Conjugal</span>
-                        {owner && <span>👤 Owner: {owner.name}</span>}
-                        {spouse && <span>💍 Spouse: {spouse.name}</span>}
-                        {prop.location && <span>📍 {prop.location}</span>}
-                        <span className="pdm-conjugal-warning">
-                          {isOwner 
-                            ? `⚠️ You own 50%, ${spouse?.name || 'spouse'} owns 50%`
-                            : `⚠️ ${owner?.name || 'Owner'} owns 50%, you own 50%`
-                          }
-                        </span>
-                      </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                  <div className="pdm-property-total">
+                    <span>Total Conjugal Estate</span>
+                    <span>{formatNumber(conjugalProps.reduce((sum, p) => sum + (p.totalSqm || 0), 0))} sqm</span>
+                  </div>
+                </div>
               )}
             </div>
           )}
 
           {activeTab === 'audit' && (
             <div className="pdm-section">
-              <h3 className="pdm-section-title">📜 Property Audit Trail</h3>
+              <h3 className="pdm-section-title">
+                <span className="pdm-section-icon">📜</span>
+                Property Audit Trail
+              </h3>
               <p className="pdm-audit-description">
-                Ownership history of all properties associated with {person.name}
+                Complete ownership history of all properties associated with {person.name}
               </p>
               
               {properties.filter(p => p.ownerId === person.id).length === 0 ? (
@@ -334,26 +387,35 @@ const PersonDetailModal = ({
                   <p>No properties found for this person.</p>
                 </div>
               ) : (
-                properties.filter(p => p.ownerId === person.id).map(prop => {
-                  const auditTrail = getPropertyAuditTrail(prop);
-                  return (
-                    <div key={prop.id} className="pdm-property-card pdm-audit-card">
-                      <h4 className="pdm-property-name">{prop.name}</h4>
-                      <div className="pdm-audit-trail">
-                        {auditTrail.map((record, idx) => (
-                          <div key={idx} className="pdm-audit-item">
-                            <span className="pdm-audit-label">
-                              {record.owner} · {record.source}
-                            </span>
-                            <span className="pdm-audit-value">
-                              {record.fromDate} → {record.toDate} ({record.share})
-                            </span>
-                          </div>
-                        ))}
+                <div className="pdm-audit-list">
+                  {properties.filter(p => p.ownerId === person.id).map(prop => {
+                    const auditTrail = getPropertyAuditTrail(prop);
+                    return (
+                      <div key={prop.id} className="pdm-audit-card">
+                        <div className="pdm-audit-card-header">
+                          <h4 className="pdm-property-name">{prop.name}</h4>
+                          <span className={`pdm-audit-classification ${prop.classification === 'Conjugal' ? 'conjugal' : 'exclusive'}`}>
+                            {prop.classification || 'Property'}
+                          </span>
+                        </div>
+                        <div className="pdm-audit-trail">
+                          {auditTrail.map((record, idx) => (
+                            <div key={idx} className="pdm-audit-item">
+                              <span className="pdm-audit-label">
+                                <span className="pdm-audit-owner">{record.owner}</span>
+                                <span className="pdm-audit-source">· {record.source}</span>
+                              </span>
+                              <span className="pdm-audit-value">
+                                {record.fromDate} → {record.toDate}
+                                <span className="pdm-audit-share">({record.share})</span>
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
-                    </div>
-                  );
-                })
+                    );
+                  })}
+                </div>
               )}
             </div>
           )}
@@ -364,15 +426,11 @@ const PersonDetailModal = ({
           <button className="pdm-footer-btn pdm-footer-secondary" onClick={onClose}>
             Close
           </button>
-            <button 
+          <button 
             className="pdm-footer-btn pdm-footer-primary"
             onClick={() => {
-              // Close the modal and trigger edit mode
-              // The parent component will handle opening the edit form
               onClose();
-              // Signal that we want to edit this person
               if (onUpdatePerson) {
-                // Pass the person to be edited
                 onUpdatePerson({ ...person, _edit: true });
               }
             }}
@@ -383,7 +441,9 @@ const PersonDetailModal = ({
       </motion.div>
 
       <style>{`
-        /* PersonDetailModal - Uses Global CSS Variables */
+        /* ============================================================
+           PersonDetailModal - Professional Layout
+           ============================================================ */
         .pdm-overlay {
           position: fixed;
           top: 0;
@@ -396,192 +456,314 @@ const PersonDetailModal = ({
           align-items: center;
           justify-content: center;
           z-index: 2000;
-          padding: 10px;
+          padding: 20px;
         }
 
         .pdm-modal {
-          background: var(--card-bg);
-          border-radius: 16px;
-          max-width: 900px;
+          background: var(--card-bg, #ffffff);
+          border-radius: 20px;
+          max-width: 960px;
           width: 100%;
           max-height: 90vh;
           overflow: hidden;
           box-shadow: 0 25px 60px rgba(0, 0, 0, 0.5);
-          border: 1px solid var(--border-color);
+          border: 1px solid var(--border-color, #e2e8f0);
           display: flex;
           flex-direction: column;
         }
 
-        /* Header */
+        /* ============================================================
+           HEADER
+           ============================================================ */
         .pdm-header {
-          padding: 16px 20px;
-          border-bottom: 1px solid var(--border-color);
+          padding: 20px 24px;
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
           display: flex;
           justify-content: space-between;
           align-items: center;
           flex-shrink: 0;
-          flex-wrap: wrap;
-          gap: 8px;
-          background: var(--bg-secondary);
+          background: var(--bg-secondary, #f8fafc);
         }
 
         .pdm-header-left {
           display: flex;
           align-items: center;
-          gap: 12px;
+          gap: 16px;
         }
 
         .pdm-avatar {
-          width: 44px;
-          height: 44px;
+          width: 52px;
+          height: 52px;
           border-radius: 50%;
           display: flex;
           align-items: center;
           justify-content: center;
-          font-size: 16px;
+          font-size: 18px;
           font-weight: 700;
           color: white;
           flex-shrink: 0;
+          box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+        }
+
+        .pdm-avatar.deceased {
+          box-shadow: 0 4px 12px rgba(220, 38, 38, 0.3);
         }
 
         .pdm-title {
-          font-size: 18px;
+          font-size: 20px;
           font-weight: 700;
-          color: var(--text-primary);
+          color: var(--text-primary, #0f172a);
           margin: 0;
         }
 
         .pdm-subtitle {
-          font-size: 12px;
-          color: var(--text-secondary);
+          font-size: 13px;
+          color: var(--text-secondary, #64748b);
           margin: 2px 0 0 0;
         }
 
         .pdm-close-btn {
           background: none;
           border: none;
-          font-size: 20px;
-          color: var(--text-secondary);
+          font-size: 22px;
+          color: var(--text-secondary, #64748b);
           cursor: pointer;
-          padding: 4px 8px;
-          border-radius: 6px;
+          padding: 4px 10px;
+          border-radius: 8px;
           transition: all 0.2s;
         }
 
         .pdm-close-btn:hover {
-          background: var(--border-color);
+          background: var(--border-color, #e2e8f0);
         }
 
-        /* Tabs */
+        /* ============================================================
+           QUICK STATS
+           ============================================================ */
+        .pdm-stats {
+          display: grid;
+          grid-template-columns: repeat(4, 1fr);
+          gap: 12px;
+          padding: 16px 24px;
+          background: var(--bg-primary, #ffffff);
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .pdm-stat-item {
+          text-align: center;
+          padding: 8px 12px;
+          background: var(--bg-secondary, #f8fafc);
+          border-radius: 10px;
+          border: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .pdm-stat-value {
+          display: block;
+          font-size: 20px;
+          font-weight: 700;
+          color: var(--text-primary, #0f172a);
+        }
+
+        .pdm-stat-label {
+          display: block;
+          font-size: 10px;
+          font-weight: 500;
+          color: var(--text-secondary, #64748b);
+          text-transform: uppercase;
+          letter-spacing: 0.5px;
+          margin-top: 2px;
+        }
+
+        /* ============================================================
+           TABS
+           ============================================================ */
         .pdm-tabs {
           display: flex;
           gap: 4px;
-          padding: 8px 12px;
-          border-bottom: 1px solid var(--border-color);
+          padding: 8px 16px;
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
           flex-shrink: 0;
-          overflow: auto;
-          background: var(--bg-primary);
+          overflow-x: auto;
+          background: var(--bg-primary, #ffffff);
         }
 
         .pdm-tab {
-          padding: 6px 12px;
-          border-radius: 8px;
+          padding: 8px 16px;
+          border-radius: 10px;
           border: none;
-          font-size: 11px;
-          font-weight: 500;
+          font-size: 12px;
+          font-weight: 600;
           cursor: pointer;
           transition: all 0.2s;
           background: transparent;
-          color: var(--text-secondary);
+          color: var(--text-secondary, #64748b);
           white-space: nowrap;
         }
 
         .pdm-tab.active {
-          background: var(--border-color);
-          color: var(--text-primary);
+          background: var(--border-color, #e2e8f0);
+          color: var(--text-primary, #0f172a);
         }
 
         .pdm-tab:hover:not(.active) {
-          background: var(--border-color);
+          background: var(--border-color, #e2e8f0);
         }
 
-        /* Body */
+        /* ============================================================
+           BODY
+           ============================================================ */
         .pdm-body {
-          padding: 16px;
-          overflow: auto;
+          padding: 20px 24px;
+          overflow-y: auto;
           flex: 1;
-          background: var(--bg-primary);
+          background: var(--bg-primary, #ffffff);
         }
 
         .pdm-section {
-          margin-bottom: 20px;
+          margin-bottom: 24px;
+        }
+
+        .pdm-section:last-child {
+          margin-bottom: 0;
         }
 
         .pdm-section-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 12px;
+          margin-bottom: 14px;
           flex-wrap: wrap;
           gap: 8px;
         }
 
         .pdm-section-title {
-          font-size: 14px;
-          font-weight: 600;
-          color: var(--text-primary);
-          margin: 0 0 8px 0;
-          padding-bottom: 6px;
-          border-bottom: 1px solid var(--border-color);
+          font-size: 15px;
+          font-weight: 700;
+          color: var(--text-primary, #0f172a);
+          margin: 0 0 12px 0;
+          display: flex;
+          align-items: center;
+          gap: 8px;
+        }
+
+        .pdm-section-icon {
+          font-size: 16px;
         }
 
         .pdm-section-header .pdm-section-title {
-          border-bottom: none;
           margin: 0;
-          padding: 0;
         }
 
-        /* Info Grid */
+        /* ============================================================
+           INFO GRID
+           ============================================================ */
         .pdm-info-grid {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 10px;
+          grid-template-columns: 1fr 1fr 1fr 1fr;
+          gap: 12px;
         }
 
         .pdm-info-item {
           display: flex;
           flex-direction: column;
           gap: 2px;
+          padding: 10px 14px;
+          background: var(--bg-secondary, #f8fafc);
+          border-radius: 10px;
+          border: 1px solid var(--border-color, #e2e8f0);
         }
 
         .pdm-info-label {
           font-size: 9px;
-          font-weight: 500;
-          color: var(--text-secondary);
+          font-weight: 600;
+          color: var(--text-secondary, #64748b);
           text-transform: uppercase;
           letter-spacing: 0.5px;
         }
 
         .pdm-info-value {
-          font-size: 13px;
-          font-weight: 500;
-          color: var(--text-primary);
+          font-size: 14px;
+          font-weight: 600;
+          color: var(--text-primary, #0f172a);
         }
 
-        /* Property Card */
+        .pdm-status-badge {
+          display: inline-block;
+          padding: 2px 10px;
+          border-radius: 12px;
+          font-size: 11px;
+          font-weight: 600;
+        }
+
+        .pdm-status-badge.living {
+          background: rgba(16, 185, 129, 0.12);
+          color: #10b981;
+        }
+
+        .pdm-status-badge.deceased {
+          background: rgba(220, 38, 38, 0.12);
+          color: #dc2626;
+        }
+
+        /* ============================================================
+           CHILDREN
+           ============================================================ */
+        .pdm-children-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fill, minmax(150px, 1fr));
+          gap: 8px;
+        }
+
+        .pdm-child-item {
+          display: flex;
+          align-items: center;
+          justify-content: space-between;
+          padding: 8px 14px;
+          background: var(--bg-secondary, #f8fafc);
+          border-radius: 8px;
+          border: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .pdm-child-name {
+          font-size: 13px;
+          font-weight: 500;
+          color: var(--text-primary, #0f172a);
+        }
+
+        .pdm-child-status {
+          font-size: 14px;
+        }
+
+        /* ============================================================
+           PROPERTY LIST
+           ============================================================ */
+        .pdm-property-list {
+          display: flex;
+          flex-direction: column;
+          gap: 10px;
+        }
+
         .pdm-property-card {
-          background: var(--bg-secondary);
-          border-radius: 10px;
-          padding: 12px;
-          border: 1px solid var(--border-color);
-          margin-bottom: 10px;
+          background: var(--bg-secondary, #f8fafc);
+          border-radius: 12px;
+          padding: 14px 16px;
+          border: 1px solid var(--border-color, #e2e8f0);
+          transition: all 0.2s;
+        }
+
+        .pdm-property-card:hover {
+          border-color: rgba(99, 102, 241, 0.2);
+        }
+
+        .pdm-conjugal-card {
+          border-left: 3px solid #8b5cf6;
         }
 
         .pdm-property-header {
           display: flex;
           justify-content: space-between;
           align-items: center;
-          margin-bottom: 6px;
+          margin-bottom: 8px;
           flex-wrap: wrap;
           gap: 4px;
         }
@@ -589,94 +771,84 @@ const PersonDetailModal = ({
         .pdm-property-name {
           font-size: 14px;
           font-weight: 600;
-          color: var(--text-primary);
+          color: var(--text-primary, #0f172a);
           margin: 0;
         }
 
         .pdm-property-badge {
-          padding: 2px 10px;
+          padding: 2px 12px;
           border-radius: 12px;
           font-size: 10px;
-          font-weight: 500;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
         }
 
         .pdm-badge-exclusive {
-          background: #eff6ff;
+          background: rgba(59, 130, 246, 0.1);
           color: #3b82f6;
         }
 
         .pdm-badge-conjugal {
-          background: #f0fdf4;
-          color: #16a34a;
-        }
-
-        .dark .pdm-badge-exclusive {
-          background: #1a2a3a;
-          color: #60a5fa;
-        }
-
-        .dark .pdm-badge-conjugal {
-          background: #1a2a1a;
-          color: #34d399;
+          background: rgba(139, 92, 246, 0.1);
+          color: #8b5cf6;
         }
 
         .pdm-property-details {
           display: grid;
-          grid-template-columns: 1fr 1fr;
-          gap: 4px;
+          grid-template-columns: 1fr 1fr 1fr;
+          gap: 4px 16px;
           font-size: 12px;
-          color: var(--text-secondary);
+          color: var(--text-secondary, #64748b);
         }
 
-        .pdm-conjugal-warning {
+        .pdm-property-area {
+          font-weight: 600;
+          color: var(--text-primary, #0f172a);
+        }
+
+        .pdm-property-desc {
           grid-column: 1 / -1;
-          color: #f59e0b;
-          font-size: 11px;
+          font-style: italic;
         }
 
-        /* Audit */
-        .pdm-audit-description {
+        .pdm-conjugal-share {
+          grid-column: 1 / -1;
+          color: #8b5cf6;
+          font-weight: 500;
           font-size: 12px;
-          color: var(--text-secondary);
-          margin-bottom: 12px;
+          padding-top: 4px;
+          border-top: 1px dashed var(--border-color, #e2e8f0);
         }
 
-        .pdm-audit-card {
-          margin-bottom: 12px;
-        }
-
-        .pdm-audit-trail {
-          margin-top: 6px;
-        }
-
-        .pdm-audit-item {
+        .pdm-property-total {
           display: flex;
           justify-content: space-between;
-          padding: 6px 0;
-          border-bottom: 1px solid var(--border-color);
-          font-size: 12px;
-          flex-wrap: wrap;
-          gap: 4px;
+          padding: 12px 16px;
+          background: rgba(99, 102, 241, 0.04);
+          border-radius: 10px;
+          border: 2px solid var(--border-color, #e2e8f0);
+          font-weight: 700;
+          font-size: 14px;
+          color: var(--text-primary, #0f172a);
+          margin-top: 4px;
         }
 
-        .pdm-audit-label {
-          color: var(--text-secondary);
+        .pdm-property-total span:last-child {
+          color: #6366f1;
         }
 
-        .pdm-audit-value {
-          color: var(--text-primary);
-          font-weight: 500;
-        }
-
-        /* Add Button */
+        /* ============================================================
+           ADD BUTTON
+           ============================================================ */
         .pdm-add-btn {
-          padding: 6px 14px;
+          padding: 6px 16px;
           border-radius: 8px;
           border: none;
           font-size: 12px;
           font-weight: 600;
           cursor: pointer;
-          background: linear-gradient(135deg, #667eea, #764ba2);
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
           color: #ffffff;
           transition: all 0.2s;
           display: flex;
@@ -686,114 +858,257 @@ const PersonDetailModal = ({
 
         .pdm-add-btn:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+          box-shadow: 0 4px 12px rgba(99, 102, 241, 0.4);
         }
 
-        /* Empty State */
+        /* ============================================================
+           EMPTY STATE
+           ============================================================ */
         .pdm-empty-state {
           text-align: center;
-          padding: 30px 16px;
-          color: var(--text-secondary);
+          padding: 40px 16px;
+          color: var(--text-secondary, #64748b);
         }
 
         .pdm-empty-icon {
-          font-size: 40px;
-          margin-bottom: 10px;
+          font-size: 48px;
+          margin-bottom: 12px;
           opacity: 0.5;
         }
 
         .pdm-empty-state p {
           margin: 0;
-          font-size: 13px;
+          font-size: 14px;
         }
 
-        /* Footer */
-        .pdm-footer {
-          padding: 12px 16px;
-          border-top: 1px solid var(--border-color);
+        /* ============================================================
+           AUDIT TRAIL
+           ============================================================ */
+        .pdm-audit-description {
+          font-size: 13px;
+          color: var(--text-secondary, #64748b);
+          margin-bottom: 16px;
+        }
+
+        .pdm-audit-list {
           display: flex;
-          justify-content: flex-end;
-          gap: 10px;
-          flex-shrink: 0;
-          background: var(--bg-secondary);
+          flex-direction: column;
+          gap: 12px;
+        }
+
+        .pdm-audit-card {
+          background: var(--bg-secondary, #f8fafc);
+          border-radius: 12px;
+          padding: 14px 16px;
+          border: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .pdm-audit-card-header {
+          display: flex;
+          justify-content: space-between;
+          align-items: center;
+          margin-bottom: 10px;
+          padding-bottom: 8px;
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
+        }
+
+        .pdm-audit-classification {
+          font-size: 10px;
+          font-weight: 600;
+          text-transform: uppercase;
+          letter-spacing: 0.3px;
+          padding: 2px 12px;
+          border-radius: 12px;
+        }
+
+        .pdm-audit-classification.exclusive {
+          background: rgba(59, 130, 246, 0.1);
+          color: #3b82f6;
+        }
+
+        .pdm-audit-classification.conjugal {
+          background: rgba(139, 92, 246, 0.1);
+          color: #8b5cf6;
+        }
+
+        .pdm-audit-trail {
+          display: flex;
+          flex-direction: column;
+          gap: 4px;
+        }
+
+        .pdm-audit-item {
+          display: flex;
+          justify-content: space-between;
+          padding: 6px 0;
+          border-bottom: 1px solid var(--border-color, #e2e8f0);
+          font-size: 12px;
+          flex-wrap: wrap;
+          gap: 4px;
+        }
+
+        .pdm-audit-item:last-child {
+          border-bottom: none;
+        }
+
+        .pdm-audit-label {
+          color: var(--text-secondary, #64748b);
+          display: flex;
+          align-items: center;
+          gap: 6px;
           flex-wrap: wrap;
         }
 
-        .pdm-footer-btn {
-          padding: 6px 16px;
-          border-radius: 8px;
-          font-size: 12px;
+        .pdm-audit-owner {
+          font-weight: 600;
+          color: var(--text-primary, #0f172a);
+        }
+
+        .pdm-audit-source {
+          color: var(--text-secondary, #64748b);
+          font-size: 11px;
+        }
+
+        .pdm-audit-value {
+          color: var(--text-primary, #0f172a);
           font-weight: 500;
+          display: flex;
+          align-items: center;
+          gap: 6px;
+        }
+
+        .pdm-audit-share {
+          font-size: 11px;
+          color: var(--text-secondary, #64748b);
+          font-weight: 400;
+        }
+
+        /* ============================================================
+           FOOTER
+           ============================================================ */
+        .pdm-footer {
+          padding: 14px 24px;
+          border-top: 1px solid var(--border-color, #e2e8f0);
+          display: flex;
+          justify-content: flex-end;
+          gap: 12px;
+          flex-shrink: 0;
+          background: var(--bg-secondary, #f8fafc);
+        }
+
+        .pdm-footer-btn {
+          padding: 8px 20px;
+          border-radius: 10px;
+          font-size: 13px;
+          font-weight: 600;
           cursor: pointer;
           transition: all 0.2s;
         }
 
         .pdm-footer-secondary {
           background: transparent;
-          color: var(--text-primary);
-          border: 1px solid var(--border-color);
+          color: var(--text-primary, #0f172a);
+          border: 1px solid var(--border-color, #e2e8f0);
         }
 
         .pdm-footer-secondary:hover {
-          background: var(--border-color);
+          background: var(--border-color, #e2e8f0);
         }
 
         .pdm-footer-primary {
-          background: linear-gradient(135deg, #667eea, #764ba2);
+          background: linear-gradient(135deg, #6366f1, #8b5cf6);
           color: #ffffff;
           border: none;
         }
 
         .pdm-footer-primary:hover {
           transform: translateY(-2px);
-          box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+          box-shadow: 0 4px 16px rgba(99, 102, 241, 0.4);
         }
 
-        /* Dark mode overrides for specific elements */
-        .dark .pdm-close-btn:hover {
-          background: var(--border-color);
+        /* ============================================================
+           DARK MODE
+           ============================================================ */
+        [data-theme="dark"] .pdm-modal {
+          --bg-primary: #0f172a;
+          --bg-secondary: #1e293b;
+          --card-bg: #1e293b;
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --border-color: #334155;
         }
 
-        .dark .pdm-audit-item {
-          border-bottom-color: var(--border-color);
+        [data-theme="dark"] .pdm-status-badge.living {
+          background: rgba(16, 185, 129, 0.2);
         }
 
-        /* Mobile Responsive */
+        [data-theme="dark"] .pdm-status-badge.deceased {
+          background: rgba(220, 38, 38, 0.2);
+        }
+
+        [data-theme="dark"] .pdm-badge-exclusive {
+          background: rgba(59, 130, 246, 0.2);
+        }
+
+        [data-theme="dark"] .pdm-badge-conjugal {
+          background: rgba(139, 92, 246, 0.2);
+        }
+
+        [data-theme="dark"] .pdm-audit-classification.exclusive {
+          background: rgba(59, 130, 246, 0.2);
+        }
+
+        [data-theme="dark"] .pdm-audit-classification.conjugal {
+          background: rgba(139, 92, 246, 0.2);
+        }
+
+        /* ============================================================
+           RESPONSIVE
+           ============================================================ */
         @media (max-width: 768px) {
+          .pdm-overlay {
+            padding: 10px;
+          }
+
           .pdm-modal {
             max-width: 100%;
             max-height: 95vh;
           }
 
           .pdm-header {
-            padding: 12px 14px;
+            padding: 14px 16px;
           }
 
           .pdm-avatar {
-            width: 36px;
-            height: 36px;
+            width: 40px;
+            height: 40px;
             font-size: 14px;
           }
 
           .pdm-title {
-            font-size: 16px;
+            font-size: 17px;
           }
 
-          .pdm-subtitle {
-            font-size: 11px;
+          .pdm-stats {
+            grid-template-columns: repeat(2, 1fr);
+            padding: 12px 16px;
+          }
+
+          .pdm-stat-value {
+            font-size: 17px;
           }
 
           .pdm-tabs {
-            padding: 6px 10px;
+            padding: 6px 12px;
           }
 
           .pdm-tab {
-            font-size: 10px;
-            padding: 4px 10px;
+            font-size: 11px;
+            padding: 6px 12px;
           }
 
           .pdm-body {
-            padding: 12px;
+            padding: 14px 16px;
           }
 
           .pdm-info-grid {
@@ -801,25 +1116,26 @@ const PersonDetailModal = ({
             gap: 8px;
           }
 
+          .pdm-info-item {
+            padding: 8px 12px;
+          }
+
           .pdm-info-value {
-            font-size: 12px;
+            font-size: 13px;
           }
 
           .pdm-property-details {
             grid-template-columns: 1fr 1fr;
           }
 
-          .pdm-section-title {
-            font-size: 13px;
-          }
-
           .pdm-footer {
-            padding: 10px 14px;
+            padding: 10px 16px;
+            flex-wrap: wrap;
           }
 
           .pdm-footer-btn {
-            font-size: 11px;
-            padding: 5px 12px;
+            padding: 6px 16px;
+            font-size: 12px;
           }
         }
 
@@ -829,13 +1145,35 @@ const PersonDetailModal = ({
           }
 
           .pdm-avatar {
-            width: 32px;
-            height: 32px;
+            width: 34px;
+            height: 34px;
             font-size: 12px;
           }
 
           .pdm-title {
-            font-size: 14px;
+            font-size: 15px;
+          }
+
+          .pdm-subtitle {
+            font-size: 11px;
+          }
+
+          .pdm-stats {
+            grid-template-columns: 1fr 1fr;
+            padding: 8px 12px;
+            gap: 6px;
+          }
+
+          .pdm-stat-item {
+            padding: 6px 10px;
+          }
+
+          .pdm-stat-value {
+            font-size: 15px;
+          }
+
+          .pdm-stat-label {
+            font-size: 9px;
           }
 
           .pdm-info-grid {
@@ -846,13 +1184,17 @@ const PersonDetailModal = ({
             grid-template-columns: 1fr;
           }
 
+          .pdm-property-card {
+            padding: 10px 12px;
+          }
+
           .pdm-body {
-            padding: 10px;
+            padding: 10px 12px;
           }
 
           .pdm-tab {
-            font-size: 9px;
-            padding: 3px 8px;
+            font-size: 10px;
+            padding: 4px 10px;
           }
 
           .pdm-footer {
@@ -862,6 +1204,15 @@ const PersonDetailModal = ({
           .pdm-footer-btn {
             width: 100%;
             text-align: center;
+          }
+
+          .pdm-audit-item {
+            flex-direction: column;
+            gap: 2px;
+          }
+
+          .pdm-audit-value {
+            padding-left: 8px;
           }
         }
       `}</style>

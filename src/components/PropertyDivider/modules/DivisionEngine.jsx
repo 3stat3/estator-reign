@@ -2,6 +2,7 @@
 import React, { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertiesOCS from './PropertiesOCS';
+import ExportReport from './ExportReport';
 
 const DivisionEngine = ({ 
   darkMode = false,
@@ -14,6 +15,8 @@ const DivisionEngine = ({
     const [selectedEvent, setSelectedEvent] = useState(null);
     const [showEventModal, setShowEventModal] = useState(false);
     const [showOCSModal, setShowOCSModal] = useState(false);
+    const [expandedHeirId, setExpandedHeirId] = useState(null);
+    const [showExportModal, setShowExportModal] = useState(false);
 
   // ============================================================
   // HELPER FUNCTIONS
@@ -697,6 +700,11 @@ const DivisionEngine = ({
     if (!divisionResults) return null;
     const { heirs, totalEstate } = divisionResults;
 
+    // Toggle expansion
+    const toggleExpand = (heirId) => {
+      setExpandedHeirId(expandedHeirId === heirId ? null : heirId);
+    };
+
     return (
       <div className="de-heirs-section">
         <h3 className="de-section-title">
@@ -706,60 +714,153 @@ const DivisionEngine = ({
         <div className="de-heirs-list">
           {heirs.map((heir, index) => {
             const pct = (heir.total / totalEstate) * 100;
-            const color = getTypeColor('Heir');
+            const isExpanded = expandedHeirId === heir.person.id;
             
             return (
               <motion.div
                 key={heir.person.id}
-                className="de-heir-card"
+                className={`de-heir-card ${isExpanded ? 'de-heir-expanded' : ''}`}
                 initial={{ opacity: 0, x: -8 }}
                 animate={{ opacity: 1, x: 0 }}
                 transition={{ delay: index * 0.04 }}
               >
-                <div className="de-heir-info">
-                  <div className="de-heir-avatar" style={{
-                    background: heir.person.isDeceased && heir.person.dateOfDeath ? 
-                      'linear-gradient(135deg, #dc2626, #b91c1c)' : 
-                      'linear-gradient(135deg, #667eea, #764ba2)'
-                  }}>
-                    {getInitials(heir.person.name)}
-                  </div>
-                  <div>
-                    <div className="de-heir-name">
-                      {heir.person.name}
-                      {heir.person.isDeceased && heir.person.dateOfDeath && (
-                        <span className="de-heir-deceased">⚰️</span>
-                      )}
-                      <span className="de-heir-type-badge" style={{
-                        background: color.bg,
-                        color: color.color,
-                      }}>
-                        Exclusive
-                      </span>
+                {/* Clickable header */}
+                <div 
+                  className="de-heir-header" 
+                  onClick={() => toggleExpand(heir.person.id)}
+                  style={{ cursor: 'pointer' }}
+                >
+                  <div className="de-heir-info">
+                    <div className="de-heir-avatar" style={{
+                      background: heir.person.isDeceased && heir.person.dateOfDeath ? 
+                        'linear-gradient(135deg, #dc2626, #b91c1c)' : 
+                        'linear-gradient(135deg, #667eea, #764ba2)'
+                    }}>
+                      {getInitials(heir.person.name)}
                     </div>
-                    <div className="de-heir-source">
-                      {heir.inheritanceHistory && heir.inheritanceHistory.length > 0 && (
-                        heir.inheritanceHistory.map((item, idx) => (
-                          <span key={idx}>
-                            {idx > 0 && ' + '}
-                            <span className="de-source-item">
-                              {item.source}: {formatNumber(item.amount)} sqm
-                            </span>
+                    <div>
+                      <div className="de-heir-name">
+                        {heir.person.name}
+                        {heir.person.isDeceased && heir.person.dateOfDeath && (
+                          <span className="de-heir-deceased">⚰️</span>
+                        )}
+                        <span className="de-heir-type-badge" style={{
+                          background: getTypeColor('Heir').bg,
+                          color: getTypeColor('Heir').color,
+                        }}>
+                          Exclusive
+                        </span>
+                      </div>
+                      <div className="de-heir-source-preview">
+                        {heir.inheritanceHistory && heir.inheritanceHistory.length > 0 && (
+                          <span className="de-source-preview-text">
+                            {heir.inheritanceHistory.length} source{heir.inheritanceHistory.length > 1 ? 's' : ''}
                           </span>
-                        ))
-                      )}
+                        )}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="de-heir-share">
+                    <div className="de-heir-share-value">
+                      {formatNumber(heir.total)}
+                      <span className="de-heir-share-unit"> sqm</span>
+                    </div>
+                    <div className="de-heir-share-percent">
+                      {pct.toFixed(1)}%
+                    </div>
+                    <div className="de-heir-expand-icon">
+                      {isExpanded ? '▲' : '▼'}
                     </div>
                   </div>
                 </div>
-                <div className="de-heir-share">
-                  <div className="de-heir-share-value">
-                    {formatNumber(heir.total)}
-                    <span className="de-heir-share-unit"> sqm</span>
-                  </div>
-                  <div className="de-heir-share-percent">
-                    {pct.toFixed(1)}%
-                  </div>
-                </div>
+
+                {/* Expanded audit trail */}
+                <AnimatePresence>
+                  {isExpanded && (
+                    <motion.div
+                      className="de-heir-audit-trail"
+                      initial={{ opacity: 0, height: 0 }}
+                      animate={{ opacity: 1, height: 'auto' }}
+                      exit={{ opacity: 0, height: 0 }}
+                      transition={{ duration: 0.3 }}
+                    >
+                      <div className="de-audit-header">
+                        <span className="de-audit-title">📋 Property Audit Trail</span>
+                        <span className="de-audit-total">
+                          {formatNumber(heir.total)} sqm
+                        </span>
+                      </div>
+                      
+                      <div className="de-audit-table">
+                        <div className="de-audit-header-row">
+                          <span className="de-audit-col-source">Source</span>
+                          <span className="de-audit-col-amount">Area</span>
+                          <span className="de-audit-col-type">Type</span>
+                        </div>
+                        
+                        {heir.inheritanceHistory && heir.inheritanceHistory.length > 0 ? (
+                          <>
+                            {heir.inheritanceHistory.map((item, idx) => {
+                              // Clean up the source display
+                              let sourceDisplay = item.source;
+                              // Remove "Inherited from " prefix
+                              sourceDisplay = sourceDisplay.replace('Inherited from ', '');
+                              // Remove "Own Exclusive Property: " prefix
+                              sourceDisplay = sourceDisplay.replace('Own Exclusive Property: ', '');
+                              // Remove " (through " and everything after
+                              const throughIndex = sourceDisplay.indexOf(' (through ');
+                              if (throughIndex > -1) {
+                                sourceDisplay = sourceDisplay.substring(0, throughIndex);
+                              }
+                              
+                              let sourceIcon = '📤';
+                              if (item.source.includes('Own Exclusive Property')) {
+                                sourceIcon = '🏛️';
+                              } else if (item.source.includes('through')) {
+                                sourceIcon = '↳';
+                              } else if (item.source.includes('Inherited from')) {
+                                sourceIcon = '⬇️';
+                              }
+                              
+                              return (
+                                <div key={idx} className="de-audit-row">
+                                  <span className="de-audit-col-source">
+                                    <span className="de-audit-source-with-icon">
+                                      <span className="de-audit-source-icon">{sourceIcon}</span>
+                                      <span className="de-audit-source-text">{sourceDisplay}</span>
+                                    </span>
+                                  </span>
+                                  <span className="de-audit-col-amount">
+                                    <span className="de-audit-amount-value">{formatNumber(item.amount)}</span>
+                                    <span className="de-audit-amount-unit">sqm</span>
+                                  </span>
+                                  <span className="de-audit-col-type">
+                                    <span className="de-audit-type-badge">
+                                      {item.type || 'Inheritance'}
+                                    </span>
+                                  </span>
+                                </div>
+                              );
+                            })}
+                          </>
+                        ) : (
+                          <div className="de-audit-empty">No inheritance history available</div>
+                        )}
+                        
+                        {/* Total row */}
+                        {heir.inheritanceHistory && heir.inheritanceHistory.length > 1 && (
+                          <div className="de-audit-total-row">
+                            <span className="de-audit-col-source">Total</span>
+                            <span className="de-audit-col-amount">
+                              {formatNumber(heir.total)} <span style={{fontSize: '10px', fontWeight: '400'}}>sqm</span>
+                            </span>
+                            <span className="de-audit-col-type"></span>
+                          </div>
+                        )}
+                      </div>
+                    </motion.div>
+                  )}
+                </AnimatePresence>
               </motion.div>
             );
           })}
@@ -1028,20 +1129,30 @@ const DivisionEngine = ({
           </div>
         )}
         
-        <button 
-          className="de-btn de-btn-primary"
-          onClick={calculateDivision}
-          disabled={isCalculating || !propositusId}
-        >
-          {isCalculating ? (
-            <>
-              <span className="de-spinner" />
-              Calculating...
-            </>
-          ) : (
-            'Calculate Division'
+        <div className="de-header-actions">
+          {divisionResults && (
+            <button 
+              className="de-btn de-btn-export"
+              onClick={() => setShowExportModal(true)}
+            >
+              📄 Export Report
+            </button>
           )}
-        </button>
+          <button 
+            className="de-btn de-btn-primary"
+            onClick={calculateDivision}
+            disabled={isCalculating || !propositusId}
+          >
+            {isCalculating ? (
+              <>
+                <span className="de-spinner" />
+                Calculating...
+              </>
+            ) : (
+              'Calculate Division'
+            )}
+          </button>
+        </div>
       </div>
     </div>
 
@@ -1082,6 +1193,18 @@ const DivisionEngine = ({
           isOpen={showOCSModal}
           onClose={() => setShowOCSModal(false)}
         />
+
+        {/* Export Report Modal */}
+        {showExportModal && (
+          <ExportReport
+            darkMode={darkMode}
+            divisionResults={divisionResults}
+            persons={persons}
+            properties={properties}
+            propositusId={propositusId}
+            onClose={() => setShowExportModal(false)}
+          />
+        )}
 
       <style>{`
   /* ============================================================
@@ -1256,6 +1379,24 @@ const DivisionEngine = ({
   .de-btn-primary:hover:not(:disabled) {
     transform: translateY(-2px);
     box-shadow: 0 6px 20px rgba(99, 102, 241, 0.4);
+  }
+
+  .de-btn-export {
+    background: linear-gradient(135deg, #10b981, #059669);
+    color: #ffffff;
+    box-shadow: 0 4px 12px rgba(16, 185, 129, 0.3);
+  }
+
+  .de-btn-export:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: 0 6px 20px rgba(16, 185, 129, 0.4);
+  }
+
+  .de-header-actions {
+    display: flex;
+    gap: 10px;
+    flex-wrap: wrap;
+    align-items: center;
   }
 
   .de-btn:disabled {
@@ -2321,6 +2462,350 @@ const DivisionEngine = ({
     --border-color: #334155;
     --hover-bg: #334155;
   }
+
+  /* ============================================================
+   HEIRS LIST - EXPANDABLE
+   ============================================================ */
+.de-heir-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  width: 100%;
+  padding: 8px 12px;
+  border-radius: 10px;
+  transition: all 0.2s ease;
+  cursor: pointer;
+}
+
+.de-heir-header:hover {
+  background: var(--hover-bg, #f1f5f9);
+}
+
+.de-heir-card {
+  background: var(--bg-secondary, #f8fafc);
+  border-radius: 10px;
+  border: 1px solid transparent;
+  transition: all 0.2s ease;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.de-heir-card:hover {
+  border-color: rgba(99, 102, 241, 0.1);
+}
+
+.de-heir-card.de-heir-expanded {
+  border-color: rgba(99, 102, 241, 0.2);
+  background: var(--bg-secondary, #f8fafc);
+}
+
+.de-heir-expand-icon {
+  font-size: 10px;
+  color: var(--text-secondary, #64748b);
+  margin-left: 8px;
+  transition: transform 0.3s ease;
+}
+
+.de-heir-source-preview {
+  font-size: 10px;
+  color: var(--text-secondary, #64748b);
+}
+
+.de-source-preview-text {
+  background: var(--bg-secondary, #f1f5f9);
+  padding: 0 8px;
+  border-radius: 4px;
+  font-size: 9px;
+  color: var(--text-secondary, #64748b);
+}
+
+/* ============================================================
+   AUDIT TRAIL - CLEAN TABLE LAYOUT
+   ============================================================ */
+.de-heir-audit-trail {
+  padding: 12px 16px 16px 16px;
+  border-top: 1px solid var(--border-color, #e2e8f0);
+  margin-top: 4px;
+  overflow: hidden;
+}
+
+.de-audit-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0 12px 0;
+  font-size: 13px;
+  border-bottom: 2px solid var(--border-color, #e2e8f0);
+  margin-bottom: 12px;
+}
+
+.de-audit-title {
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+  font-size: 14px;
+}
+
+.de-audit-total {
+  font-weight: 700;
+  color: #6366f1;
+  font-size: 14px;
+  background: rgba(99, 102, 241, 0.08);
+  padding: 4px 16px;
+  border-radius: 6px;
+}
+
+.de-audit-table {
+  background: var(--card-bg, #ffffff);
+  border-radius: 10px;
+  border: 1px solid var(--border-color, #e2e8f0);
+  overflow: hidden;
+  width: 100%;
+}
+
+.de-audit-header-row {
+  display: table-row;
+  background: var(--bg-secondary, #f8fafc);
+  border-bottom: 2px solid var(--border-color, #e2e8f0);
+}
+
+.de-audit-header-row .de-audit-col-source,
+.de-audit-header-row .de-audit-col-amount,
+.de-audit-header-row .de-audit-col-type {
+  display: table-cell;
+  padding: 10px 16px;
+  font-weight: 700;
+  color: var(--text-secondary, #64748b);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.de-audit-row {
+  display: table-row;
+  border-bottom: 1px solid var(--border-color, #e2e8f0);
+}
+
+.de-audit-row:last-child {
+  border-bottom: none;
+}
+
+.de-audit-row:hover {
+  background: var(--hover-bg, #f1f5f9);
+}
+
+.de-audit-row .de-audit-col-source,
+.de-audit-row .de-audit-col-amount,
+.de-audit-row .de-audit-col-type {
+  display: table-cell;
+  padding: 10px 16px;
+  vertical-align: middle;
+}
+
+.de-audit-col-source {
+  color: var(--text-primary, #0f172a);
+  font-size: 13px;
+  font-weight: 500;
+  white-space: nowrap;
+  min-width: 120px;
+}
+
+.de-audit-col-amount {
+  color: var(--text-primary, #0f172a);
+  font-weight: 700;
+  font-size: 14px;
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  min-width: 100px;
+}
+
+.de-audit-col-type {
+  display: table-cell;
+  padding: 10px 16px;
+  vertical-align: middle;
+  white-space: nowrap;
+  min-width: 80px;
+}
+
+.de-audit-type-badge {
+  font-size: 9px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.4px;
+  padding: 4px 14px;
+  border-radius: 12px;
+  background: rgba(99, 102, 241, 0.08);
+  color: #6366f1;
+  border: 1px solid rgba(99, 102, 241, 0.15);
+  display: inline-block;
+  white-space: nowrap;
+}
+
+.de-audit-total-row {
+  display: table-row;
+  background: rgba(99, 102, 241, 0.05);
+  border-top: 2px solid var(--border-color, #e2e8f0);
+}
+
+.de-audit-total-row .de-audit-col-source,
+.de-audit-total-row .de-audit-col-amount,
+.de-audit-total-row .de-audit-col-type {
+  display: table-cell;
+  padding: 12px 16px;
+  vertical-align: middle;
+}
+
+.de-audit-total-row .de-audit-col-source {
+  font-weight: 700;
+  color: var(--text-primary, #0f172a);
+}
+
+.de-audit-total-row .de-audit-col-amount {
+  color: #6366f1;
+  font-size: 15px;
+  font-weight: 700;
+  text-align: right;
+}
+
+.de-audit-source-with-icon {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.de-audit-source-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.de-audit-source-text {
+  font-weight: 500;
+}
+
+.de-audit-amount-value {
+  font-weight: 700;
+}
+
+.de-audit-amount-unit {
+  font-size: 10px;
+  font-weight: 400;
+  color: var(--text-secondary, #64748b);
+  margin-left: 3px;
+}
+
+.de-audit-empty {
+  padding: 20px;
+  text-align: center;
+  color: var(--text-secondary, #64748b);
+  font-size: 13px;
+}
+
+/* Dark mode support */
+[data-theme="dark"] .de-audit-table {
+  background: var(--bg-secondary, #1e293b);
+}
+
+[data-theme="dark"] .de-audit-header-row {
+  background: var(--bg-primary, #0f172a);
+}
+
+[data-theme="dark"] .de-audit-total-row {
+  background: rgba(99, 102, 241, 0.08);
+}
+
+[data-theme="dark"] .de-audit-type-badge {
+  background: rgba(99, 102, 241, 0.15);
+  border-color: rgba(99, 102, 241, 0.25);
+}
+
+/* Mobile responsive */
+@media (max-width: 768px) {
+  .de-audit-col-source {
+    font-size: 12px;
+    min-width: 80px;
+  }
+  
+  .de-audit-col-amount {
+    font-size: 12px;
+    min-width: 70px;
+  }
+  
+  .de-audit-col-type {
+    min-width: 60px;
+  }
+  
+  .de-audit-type-badge {
+    font-size: 8px;
+    padding: 3px 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .de-heir-audit-trail {
+    padding: 8px 10px 12px 10px;
+  }
+  
+  /* Stack vertically on very small screens */
+  .de-audit-row {
+    display: flex;
+    flex-direction: column;
+    padding: 8px 12px;
+    border-bottom: 1px solid var(--border-color, #e2e8f0);
+  }
+  
+  .de-audit-row .de-audit-col-source,
+  .de-audit-row .de-audit-col-amount,
+  .de-audit-row .de-audit-col-type {
+    display: flex;
+    padding: 2px 0;
+    white-space: normal;
+  }
+  
+  .de-audit-header-row {
+    display: none;
+  }
+  
+  .de-audit-total-row {
+    display: flex;
+    flex-direction: row;
+    padding: 10px 12px;
+    justify-content: space-between;
+  }
+  
+  .de-audit-total-row .de-audit-col-source,
+  .de-audit-total-row .de-audit-col-amount,
+  .de-audit-total-row .de-audit-col-type {
+    display: flex;
+    padding: 0;
+  }
+  
+  .de-audit-col-source {
+    font-size: 12px;
+    min-width: auto;
+  }
+  
+  .de-audit-col-amount {
+    font-size: 12px;
+    text-align: left;
+    min-width: auto;
+  }
+  
+  .de-audit-col-type {
+    min-width: auto;
+  }
+  
+  .de-audit-header {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 4px;
+  }
+  
+  .de-audit-total {
+    font-size: 12px;
+    padding: 3px 12px;
+  }
+}
 `}</style>
     </div>
   );
