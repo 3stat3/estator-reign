@@ -1,5 +1,5 @@
 // src/components/PropertyDivider/modules/DivisionEngine.jsx
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertiesOCS from './PropertiesOCS';
 import ExportReport from './ExportReport';
@@ -17,10 +17,19 @@ const DivisionEngine = ({
     const [showOCSModal, setShowOCSModal] = useState(false);
     const [expandedHeirId, setExpandedHeirId] = useState(null);
     const [showExportModal, setShowExportModal] = useState(false);
+    const [resultsKey, setResultsKey] = useState(0);
+
+  const componentKey = propositusId || 'no-propositus';
 
   // ============================================================
   // HELPER FUNCTIONS
   // ============================================================
+
+  // Clear results when propositus changes
+  useEffect(() => {
+    setDivisionResults(null);
+    setExpandedHeirId(null);
+  }, [propositusId]);
 
   const getChildren = (personId) => {
     const person = persons.find(p => p.id === personId);
@@ -75,10 +84,6 @@ const DivisionEngine = ({
 
   const findAllHeirs = (person, currentDate) => {
     const heirs = [];
-    const spouse = getSpouse(person.id);
-    if (spouse && !isDeceasedAtDate(spouse, currentDate)) {
-      heirs.push(spouse);
-    }
     const children = getChildren(person.id);
     for (const child of children) {
       if (!isDeceasedAtDate(child, currentDate)) {
@@ -279,7 +284,8 @@ const DivisionEngine = ({
           console.log(`   💑 Spouse: ${spouse.name}`);
         }
 
-        const children = getChildren(deceased.id);
+        // Get children and filter out any that are already excluded
+        const children = getChildren(deceased.id).filter(c => !excludedSet.has(c.id));
         const livingChildren = children.filter(c => !isDeceasedAtDate(c, currentDeathDate));
         const deceasedChildren = children.filter(c => isDeceasedAtDate(c, currentDeathDate));
         
@@ -503,10 +509,112 @@ const DivisionEngine = ({
         console.log(`   ${h.person.name}: ${h.total.toFixed(4)} sqm (${pct.toFixed(1)}%)`);
       });
 
+      // ============================================================
+      // FILTER HEIRS - Show the propositus's direct heirs from their distribution
+      // ============================================================
+      // Get direct children of the propositus (needed for both filters)
+      const propositusChildren = getChildren(propositusId);
+      const childIds = new Set(propositusChildren.map(c => c.id));
+      const propositusSpouse = getSpouse(propositusId);
+
+      // Find the propositus's death event
+      const propositusEvent = deathEvents.find(event => event.person.id === propositusId);
+
+      let filteredFinalHeirs = [];
+      let filteredTotalEstate = 0;
+
+      if (propositusEvent && propositusEvent.distribution && propositusEvent.distribution.length > 0) {
+        // Get the direct heirs from the propositus's distribution
+        const directHeirs = [];
+        const usedIds = new Set();
+        
+        for (const dist of propositusEvent.distribution) {
+          // Skip if already processed (in case of duplicate entries)
+          if (usedIds.has(dist.heir.id)) continue;
+          usedIds.add(dist.heir.id);
+          
+          // Find the heir in finalHeirs to get their total share
+          const heirData = finalHeirs.find(h => h.person.id === dist.heir.id);
+          if (heirData) {
+            // Use the distribution share amount (what they directly inherited from propositus)
+            directHeirs.push({
+              person: dist.heir,
+              total: dist.share,
+              conjugalShare: 0,
+              exclusiveProperty: dist.share,
+              inheritanceHistory: heirData.inheritanceHistory || []
+            });
+          } else {
+            // If not in finalHeirs (shouldn't happen), create a basic entry
+            directHeirs.push({
+              person: dist.heir,
+              total: dist.share,
+              conjugalShare: 0,
+              exclusiveProperty: dist.share,
+              inheritanceHistory: []
+            });
+          }
+        }
+        
+        filteredFinalHeirs = directHeirs;
+        filteredTotalEstate = filteredFinalHeirs.reduce((sum, h) => sum + h.total, 0);
+      } else {
+        // Fallback: use the old filtering method
+        const allowedHeirIds = new Set();
+        allowedHeirIds.add(propositusId);
+        if (propositusSpouse) allowedHeirIds.add(propositusSpouse.id);
+        childIds.forEach(id => allowedHeirIds.add(id));
+
+        filteredFinalHeirs = finalHeirs.filter(heir => allowedHeirIds.has(heir.person.id));
+        filteredTotalEstate = filteredFinalHeirs.reduce((sum, h) => sum + h.total, 0);
+      }
+
+      console.log('Propositus distribution heirs:', filteredFinalHeirs.length);
+      console.log('Propositus distribution total estate:', filteredTotalEstate);
+
+      // ============================================================
+      // FILTER DEATH EVENTS - Only show propositus and immediate family
+      // ============================================================
+      const filteredDeathEvents = [];
+
+      // For each death event, check if it's relevant
+      for (const event of deathEvents) {
+        // ONLY include the propositus
+        if (event.person.id === propositusId) {
+          filteredDeathEvents.push(event);
+          continue;
+        }
+        
+        // Include if this person is the spouse of the propositus
+        if (propositusSpouse && event.person.id === propositusSpouse.id) {
+          filteredDeathEvents.push(event);
+          continue;
+        }
+        
+        // Include if this person is a child of the propositus
+        if (childIds.has(event.person.id)) {
+          filteredDeathEvents.push(event);
+          continue;
+        }
+      }
+
+      // Sort by date
+      filteredDeathEvents.sort((a, b) => new Date(a.person.dateOfDeath) - new Date(b.person.dateOfDeath));
+
+      console.log('========== DEATH EVENTS DEBUG ==========');
+      console.log('Propositus ID:', propositusId);
+      console.log('Propositus Name:', propositus.name);
+      console.log('Total deathEvents before filter:', deathEvents.length);
+      console.log('Filtered deathEvents count:', filteredDeathEvents.length);
+      console.log('==========================================');
+
+      // Increment key to force re-render
+      setResultsKey(prev => prev + 1);
+      
       setDivisionResults({
-        heirs: finalHeirs,
-        totalEstate: totalEstate,
-        deathEvents: deathEvents,
+        heirs: filteredFinalHeirs,
+        totalEstate: filteredTotalEstate,
+        deathEvents: filteredDeathEvents,
         inheritanceHistory: inheritanceHistory
       });
 
@@ -518,6 +626,21 @@ const DivisionEngine = ({
       setIsCalculating(false);
     }
   };
+
+  // ============================================================
+// AUTO-CALCULATE ON PROPOSITUS CHANGE
+// ============================================================
+useEffect(() => {
+  if (propositusId && persons.length > 0 && properties.length > 0 && !isCalculating) {
+    // Clear results first to force UI update
+    setDivisionResults(null);
+    // Then calculate
+    setTimeout(() => {
+      calculateDivision();
+    }, 50);
+  }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+}, [propositusId, persons.length, properties.length]);
 
   // ============================================================
   // UI HELPERS (UNCHANGED)
@@ -1086,7 +1209,7 @@ const DivisionEngine = ({
   // ============================================================
 
   return (
-    <div className="de-wrapper">
+    <div className="de-wrapper" key={componentKey}>
       <div className="de-header">
       <div className="de-header-top">
         <div className="de-header-left">
@@ -1099,12 +1222,15 @@ const DivisionEngine = ({
         {divisionResults && (
           <div className="de-summary-grid">
             <div className="de-summary-card">
-              <div className="de-summary-icon">🏛️</div>
-              <div className="de-summary-content">
-                <span className="de-summary-value">{formatNumber(divisionResults.totalEstate)}</span>
-                <span className="de-summary-label">Estate <span className="de-summary-unit">sqm</span></span>
-              </div>
+            <div className="de-summary-icon">🏛️</div>
+            <div className="de-summary-content">
+              <span className="de-summary-value">{formatNumber(divisionResults.totalEstate)}</span>
+              <span className="de-summary-label">
+                {propositusId ? persons.find(p => p.id === propositusId)?.name || 'Estate' : 'Estate'}
+                <span className="de-summary-unit"> sqm</span>
+              </span>
             </div>
+          </div>
             <div className="de-summary-card">
               <div className="de-summary-icon">👥</div>
               <div className="de-summary-content">
@@ -1178,7 +1304,7 @@ const DivisionEngine = ({
               <div className="de-empty-details">
                 <span>👥 {persons.length} persons</span>
                 <span>🏠 {properties.length} properties</span>
-                <span>🎯 {propositusId ? persons.find(p => p.id === propositusId)?.name : 'None'}</span>
+                <span>🎯 {propositusId ? persons.find(p => p.id === propositusId)?.name || 'None' : 'None'}</span>
               </div>
             </div>
           )}
