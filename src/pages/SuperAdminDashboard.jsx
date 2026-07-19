@@ -8,6 +8,7 @@ import TaxHelpers from '../components/TaxHelpers/TaxHelpers';
 import ONNETeLATracker from '../components/HelpfulTools/ONNETeLATracker';
 import InterestCalculator from '../components/HelpfulTools/InterestCalculator';
 import VanishingDeductionCalculator from '../components/HelpfulTools/VanishingDeductionCalculator';
+import PersonalFinanceTracker from '../components/PersonalTools/PersonalFinanceTracker';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -31,7 +32,9 @@ import {
   WrenchScrewdriverIcon,
   ChartPieIcon,
   Bars3Icon,
-  XMarkIcon
+  XMarkIcon,
+  UserCircleIcon,
+  WalletIcon
 } from '@heroicons/react/24/outline';
 import UserManagement from '../components/Admin/UserManagement';
 import FeatureToggles from '../components/Admin/FeatureToggles';
@@ -45,10 +48,12 @@ const SuperAdminDashboard = () => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
   const [showHelpfulToolsMenu, setShowHelpfulToolsMenu] = useState(false);
+  const [showPersonalToolsMenu, setShowPersonalToolsMenu] = useState(false);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   
   const estateTaxDropdownRef = useRef(null);
   const helpfulToolsDropdownRef = useRef(null);
+  const personalToolsDropdownRef = useRef(null);
   const mobileMenuRef = useRef(null);
   const menuButtonRef = useRef(null);
 
@@ -70,7 +75,6 @@ const SuperAdminDashboard = () => {
       const tablet = width <= 1024 && width > 768;
       setIsMobile(mobile);
       setIsTablet(tablet);
-      // Close mobile menu on resize to desktop
       if (!mobile && mobileMenuOpen) {
         setMobileMenuOpen(false);
       }
@@ -94,8 +98,10 @@ const SuperAdminDashboard = () => {
       if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
         setShowHelpfulToolsMenu(false);
       }
+      if (showPersonalToolsMenu && !e.target.closest('.personal-tools-menu-container')) {
+        setShowPersonalToolsMenu(false);
+      }
       if (mobileMenuOpen) {
-        // Only close if clicking outside AND not on the toggle button
         const isInsideMobileMenu = e.target.closest('.mobile-menu-container');
         const isToggleButton = e.target.closest('.mobile-menu-toggle');
         if (!isInsideMobileMenu && !isToggleButton) {
@@ -105,9 +111,8 @@ const SuperAdminDashboard = () => {
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu, mobileMenuOpen]);
+  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu, showPersonalToolsMenu, mobileMenuOpen]);
 
-  // Estate Tax sub-menu items
   const estateTaxItems = [
     { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon },
     { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon },
@@ -115,7 +120,6 @@ const SuperAdminDashboard = () => {
     { id: 'taxsettings', label: 'Estate Tax Settings', icon: Cog6ToothIcon },
   ];
 
-  // Revenuer Tools sub-menu items
   const helpfulToolsItems = [
     { id: 'onnet-tracker', label: 'ONNET & eLA Tracker', icon: ChartPieIcon },
     { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon },
@@ -123,7 +127,10 @@ const SuperAdminDashboard = () => {
     { id: 'tool3', label: 'Tool 3', icon: WrenchScrewdriverIcon },
   ];
 
-  // Other navigation items
+  const personalToolsItems = [
+    { id: 'personalfinance', label: 'Personal Finance Tracker', icon: WalletIcon },
+  ];
+
   const otherTabs = [
     { id: 'usermanagement', label: 'User Management', icon: UsersIcon },
     { id: 'calculations', label: 'Calculations', icon: DocumentTextIcon },
@@ -132,10 +139,10 @@ const SuperAdminDashboard = () => {
     { id: 'featuretoggles', label: 'Feature Toggles', icon: Cog6ToothIcon },
   ];
 
-  // All navigation items for mobile menu
   const allNavItems = [
     ...estateTaxItems,
     ...helpfulToolsItems,
+    ...personalToolsItems,
     ...otherTabs
   ];
 
@@ -336,6 +343,20 @@ const SuperAdminDashboard = () => {
           </motion.div>
         );
 
+      case 'personalfinance':
+        return (
+          <motion.div
+            key="personalfinance"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: -20 }}
+            transition={{ duration: 0.3 }}
+            className="content-card"
+          >
+            <PersonalFinanceTracker />
+          </motion.div>
+        );
+
       case 'usermanagement':
         return (
           <motion.div
@@ -451,6 +472,9 @@ const SuperAdminDashboard = () => {
     }
   };
 
+  // Check if any dropdown is open
+  const isAnyDropdownOpen = showEstateTaxMenu || showHelpfulToolsMenu || showPersonalToolsMenu;
+
   return (
     <div className={`dashboard-container ${darkMode ? 'dark' : 'light'}`} data-theme={darkMode ? 'dark' : 'light'}>
       <nav className="dashboard-nav">
@@ -464,114 +488,165 @@ const SuperAdminDashboard = () => {
             </div>
           </div>
 
-          {/* Desktop Navigation - Hidden on mobile/tablet */}
-          <div className={`nav-tabs desktop-nav ${isMobile || isTablet ? 'hidden' : ''}`}>
-            <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
-              <button
-                className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowEstateTaxMenu(!showEstateTaxMenu);
-                  setShowHelpfulToolsMenu(false);
-                }}
-              >
-                <Squares2X2Icon className="tab-icon" />
-                <span>Estate Tax Services</span>
-                <ChevronDownIcon className={`dropdown-chevron ${showEstateTaxMenu ? 'rotated' : ''}`} />
-                {estateTaxItems.some(item => item.id === activeTab) && (
-                  <motion.div className="tab-indicator" layoutId="activeTab" />
-                )}
-              </button>
-              
-              <AnimatePresence>
-                {showEstateTaxMenu && (
-                  <motion.div
-                    className="dropdown-menu"
-                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    {estateTaxItems.map((item) => (
-                      <button
-                        key={item.id}
-                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          setShowEstateTaxMenu(false);
-                        }}
-                      >
-                        <item.icon className="dropdown-item-icon" />
-                        <span>{item.label}</span>
-                        {activeTab === item.id && (
-                          <CheckBadgeIcon className="dropdown-item-check" />
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+          {/* Desktop Navigation - with overflow fix when dropdown is open */}
+          <div className={`nav-tabs-wrapper desktop-nav ${(!isMobile && !isTablet) ? '' : 'hidden'} ${isAnyDropdownOpen ? 'dropdown-open' : ''}`}>
+            <div className="nav-tabs">
+              <div className="estate-tax-menu-container" ref={estateTaxDropdownRef}>
+                <button
+                  className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowEstateTaxMenu(!showEstateTaxMenu);
+                    setShowHelpfulToolsMenu(false);
+                    setShowPersonalToolsMenu(false);
+                  }}
+                >
+                  <Squares2X2Icon className="tab-icon" />
+                  <span>Estate Tax Services</span>
+                  <ChevronDownIcon className={`dropdown-chevron ${showEstateTaxMenu ? 'rotated' : ''}`} />
+                  {estateTaxItems.some(item => item.id === activeTab) && (
+                    <motion.div className="tab-indicator" layoutId="activeTab" />
+                  )}
+                </button>
+                
+                <AnimatePresence>
+                  {showEstateTaxMenu && (
+                    <motion.div
+                      className="dropdown-menu"
+                      initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {estateTaxItems.map((item) => (
+                        <button
+                          key={item.id}
+                          className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setShowEstateTaxMenu(false);
+                          }}
+                        >
+                          <item.icon className="dropdown-item-icon" />
+                          <span>{item.label}</span>
+                          {activeTab === item.id && (
+                            <CheckBadgeIcon className="dropdown-item-check" />
+                          )}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-            {/* Helpful Tools Dropdown */}
-            <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
-              <button
-                className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setShowHelpfulToolsMenu(!showHelpfulToolsMenu);
-                  setShowEstateTaxMenu(false);
-                }}
-              >
-                <WrenchScrewdriverIcon className="tab-icon" />
-                <span>Revenuer Tools</span>
-                <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
-                {helpfulToolsItems.some(item => item.id === activeTab) && (
-                  <motion.div className="tab-indicator" layoutId="activeTab" />
-                )}
-              </button>
-              
-              <AnimatePresence>
-                {showHelpfulToolsMenu && (
-                  <motion.div
-                    className="dropdown-menu"
-                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
-                    animate={{ opacity: 1, y: 0, scale: 1 }}
-                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
-                    transition={{ duration: 0.15 }}
-                  >
-                    {helpfulToolsItems.map((item) => (
-                      <button
-                        key={item.id}
-                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
-                        onClick={() => {
-                          setActiveTab(item.id);
-                          setShowHelpfulToolsMenu(false);
-                        }}
-                      >
-                        <item.icon className="dropdown-item-icon" />
-                        <span>{item.label}</span>
-                        {activeTab === item.id && (
-                          <CheckBadgeIcon className="dropdown-item-check" />
-                        )}
-                      </button>
-                    ))}
-                  </motion.div>
-                )}
-              </AnimatePresence>
-            </div>
+              <div className="helpful-tools-menu-container" ref={helpfulToolsDropdownRef}>
+                <button
+                  className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowHelpfulToolsMenu(!showHelpfulToolsMenu);
+                    setShowEstateTaxMenu(false);
+                    setShowPersonalToolsMenu(false);
+                  }}
+                >
+                  <WrenchScrewdriverIcon className="tab-icon" />
+                  <span>Revenuer Tools</span>
+                  <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
+                  {helpfulToolsItems.some(item => item.id === activeTab) && (
+                    <motion.div className="tab-indicator" layoutId="activeTab" />
+                  )}
+                </button>
+                
+                <AnimatePresence>
+                  {showHelpfulToolsMenu && (
+                    <motion.div
+                      className="dropdown-menu"
+                      initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {helpfulToolsItems.map((item) => (
+                        <button
+                          key={item.id}
+                          className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setShowHelpfulToolsMenu(false);
+                          }}
+                        >
+                          <item.icon className="dropdown-item-icon" />
+                          <span>{item.label}</span>
+                          {activeTab === item.id && (
+                            <CheckBadgeIcon className="dropdown-item-check" />
+                          )}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
 
-            {otherTabs.map((tab) => (
-              <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
-              >
-                <tab.icon className="tab-icon" />
-                <span>{tab.label}</span>
-                {activeTab === tab.id && <motion.div className="tab-indicator" layoutId="activeTab" />}
-              </button>
-            ))}
+              <div className="personal-tools-menu-container" ref={personalToolsDropdownRef}>
+                <button
+                  className={`nav-tab dropdown-trigger ${personalToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    setShowPersonalToolsMenu(!showPersonalToolsMenu);
+                    setShowEstateTaxMenu(false);
+                    setShowHelpfulToolsMenu(false);
+                  }}
+                >
+                  <UserCircleIcon className="tab-icon" />
+                  <span>Personal Tools</span>
+                  <ChevronDownIcon className={`dropdown-chevron ${showPersonalToolsMenu ? 'rotated' : ''}`} />
+                  {personalToolsItems.some(item => item.id === activeTab) && (
+                    <motion.div className="tab-indicator" layoutId="activeTab" />
+                  )}
+                </button>
+                
+                <AnimatePresence>
+                  {showPersonalToolsMenu && (
+                    <motion.div
+                      className="dropdown-menu"
+                      initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                      animate={{ opacity: 1, y: 0, scale: 1 }}
+                      exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                      transition={{ duration: 0.15 }}
+                    >
+                      {personalToolsItems.map((item) => (
+                        <button
+                          key={item.id}
+                          className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                          onClick={() => {
+                            setActiveTab(item.id);
+                            setShowPersonalToolsMenu(false);
+                          }}
+                        >
+                          <item.icon className="dropdown-item-icon" />
+                          <span>{item.label}</span>
+                          {activeTab === item.id && (
+                            <CheckBadgeIcon className="dropdown-item-check" />
+                          )}
+                        </button>
+                      ))}
+                    </motion.div>
+                  )}
+                </AnimatePresence>
+              </div>
+
+              {otherTabs.map((tab) => (
+                <button
+                  key={tab.id}
+                  onClick={() => setActiveTab(tab.id)}
+                  className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
+                >
+                  <tab.icon className="tab-icon" />
+                  <span>{tab.label}</span>
+                  {activeTab === tab.id && <motion.div className="tab-indicator" layoutId="activeTab" />}
+                </button>
+              ))}
+            </div>
           </div>
 
           {/* Tablet Navigation - Icon only with dropdowns (hidden on mobile) */}
@@ -583,6 +658,7 @@ const SuperAdminDashboard = () => {
                   e.stopPropagation();
                   setShowEstateTaxMenu(!showEstateTaxMenu);
                   setShowHelpfulToolsMenu(false);
+                  setShowPersonalToolsMenu(false);
                 }}
               >
                 <Squares2X2Icon className="tab-icon" />
@@ -630,10 +706,10 @@ const SuperAdminDashboard = () => {
                   e.stopPropagation();
                   setShowHelpfulToolsMenu(!showHelpfulToolsMenu);
                   setShowEstateTaxMenu(false);
+                  setShowPersonalToolsMenu(false);
                 }}
               >
                 <WrenchScrewdriverIcon className="tab-icon" />
-                <span>Revenuer Tools</span>
                 <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
                 {helpfulToolsItems.some(item => item.id === activeTab) && (
                   <motion.div className="tab-indicator" layoutId="activeTab" />
@@ -656,6 +732,54 @@ const SuperAdminDashboard = () => {
                         onClick={() => {
                           setActiveTab(item.id);
                           setShowHelpfulToolsMenu(false);
+                          setMobileMenuOpen(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        {activeTab === item.id && (
+                          <CheckBadgeIcon className="dropdown-item-check" />
+                        )}
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            <div className="personal-tools-menu-container" ref={personalToolsDropdownRef}>
+              <button
+                className={`nav-tab dropdown-trigger ${personalToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  setShowPersonalToolsMenu(!showPersonalToolsMenu);
+                  setShowEstateTaxMenu(false);
+                  setShowHelpfulToolsMenu(false);
+                }}
+              >
+                <UserCircleIcon className="tab-icon" />
+                <ChevronDownIcon className={`dropdown-chevron ${showPersonalToolsMenu ? 'rotated' : ''}`} />
+                {personalToolsItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showPersonalToolsMenu && (
+                  <motion.div
+                    className="dropdown-menu tablet-dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                  >
+                    {personalToolsItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''}`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowPersonalToolsMenu(false);
                           setMobileMenuOpen(false);
                         }}
                       >
@@ -684,7 +808,6 @@ const SuperAdminDashboard = () => {
             ))}
           </div>
 
-          {/* Mobile Menu Toggle - Always visible on mobile */}
           <button 
             ref={menuButtonRef}
             className={`mobile-menu-toggle ${isMobile ? '' : 'hidden'}`}
@@ -782,7 +905,6 @@ const SuperAdminDashboard = () => {
           </div>
         </div>
 
-        {/* Mobile Menu - Only on mobile */}
         <AnimatePresence>
           {mobileMenuOpen && isMobile && (
             <motion.div 
@@ -928,21 +1050,50 @@ const SuperAdminDashboard = () => {
           color: var(--gradient-start);
         }
 
-        .nav-tabs {
+        /* ===== NAVIGATION WITH DROPDOWN SUPPORT ===== */
+
+        .nav-tabs-wrapper {
           flex: 1;
+          overflow-x: auto;
+          overflow-y: visible;
           display: flex;
           align-items: center;
-          gap: 0.25rem;
-          overflow: visible !important;
-          scrollbar-width: none;
+          padding: 0 0.2rem;
+          -webkit-overflow-scrolling: touch;
+          scrollbar-width: thin;
           position: relative;
-          min-width: 0;
-          padding: 0 0.25rem;
-          flex-wrap: nowrap;
+          min-height: 40px;
         }
 
-        .nav-tabs::-webkit-scrollbar {
-          display: none;
+        /* When dropdown is open, show overflow */
+        .nav-tabs-wrapper.dropdown-open {
+          overflow: visible !important;
+          overflow-x: visible !important;
+        }
+
+        .nav-tabs-wrapper::-webkit-scrollbar {
+          height: 2px;
+        }
+
+        .nav-tabs-wrapper::-webkit-scrollbar-track {
+          background: transparent;
+        }
+
+        .nav-tabs-wrapper::-webkit-scrollbar-thumb {
+          background: var(--gradient-start);
+          border-radius: 3px;
+          opacity: 0.3;
+        }
+
+        .nav-tabs {
+          display: flex;
+          align-items: center;
+          gap: 0.15rem;
+          overflow: visible !important;
+          flex-wrap: nowrap;
+          position: relative;
+          padding: 0.2rem 0;
+          min-height: 40px;
         }
 
         .nav-tabs.hidden {
@@ -957,16 +1108,26 @@ const SuperAdminDashboard = () => {
           display: none !important;
         }
 
+        .estate-tax-menu-container,
+        .helpful-tools-menu-container,
+        .personal-tools-menu-container {
+          position: relative;
+          display: inline-block;
+          flex-shrink: 0;
+          overflow: visible !important;
+          z-index: 100;
+        }
+
         .nav-tab {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
-          padding: 0.5rem 0.75rem;
+          gap: 0.25rem;
+          padding: 0.4rem 0.6rem;
           background: none;
           border: none;
-          border-radius: 0.5rem;
+          border-radius: 0.4rem;
           color: var(--text-secondary);
-          font-size: 0.875rem;
+          font-size: 0.8rem;
           font-weight: 500;
           cursor: pointer;
           transition: all 0.2s;
@@ -987,8 +1148,8 @@ const SuperAdminDashboard = () => {
         }
 
         .tab-icon {
-          width: 1.25rem;
-          height: 1.25rem;
+          width: 1rem;
+          height: 1rem;
           flex-shrink: 0;
         }
 
@@ -1002,24 +1163,17 @@ const SuperAdminDashboard = () => {
           border-radius: 2px;
         }
 
-        .estate-tax-menu-container,
-        .helpful-tools-menu-container {
-          position: relative;
-          display: inline-block;
-          flex-shrink: 0;
-          overflow: visible !important;
-          z-index: 10;
-        }
-
         .dropdown-trigger {
           display: flex;
           align-items: center;
-          gap: 0.5rem;
+          gap: 0.25rem;
+          position: relative;
+          z-index: 10;
         }
 
         .dropdown-chevron {
-          width: 1rem;
-          height: 1rem;
+          width: 0.75rem;
+          height: 0.75rem;
           transition: transform 0.2s ease;
           flex-shrink: 0;
         }
@@ -1622,40 +1776,49 @@ const SuperAdminDashboard = () => {
           }
 
           .tablet-nav .nav-tab {
-            padding: 0.5rem 0.5rem;
+            padding: 0.4rem 0.5rem;
           }
 
           .tablet-nav .nav-tab span {
             display: none;
           }
 
+          .tablet-nav .tab-icon {
+            width: 1.2rem;
+            height: 1.2rem;
+          }
+
           .user-name-nav {
             display: none;
+          }
+
+          .nav-tabs-wrapper {
+            overflow-x: auto;
           }
         }
 
         /* Mobile */
         @media (max-width: 768px) {
           .nav-container {
-            padding: 0 0.75rem;
-            gap: 0.25rem;
-            height: 60px;
-            min-height: 60px;
+            padding: 0 0.5rem;
+            gap: 0.15rem;
+            height: 56px;
+            min-height: 56px;
           }
-          
+
           .dashboard-main {
             padding: 0.75rem;
           }
-          
+
           .dashboard-main:has(.property-divider-container-full) {
             padding: 0;
           }
-          
+
           .stats-grid {
             grid-template-columns: 1fr;
             gap: 1rem;
           }
-          
+
           .content-header {
             flex-direction: column;
             align-items: flex-start;
@@ -1682,39 +1845,41 @@ const SuperAdminDashboard = () => {
             right: -1rem;
           }
 
-          /* Hide tablet nav on mobile */
           .tablet-nav {
             display: none !important;
           }
 
-          /* Show mobile toggle on mobile */
           .mobile-menu-toggle {
             display: flex !important;
             align-items: center;
             justify-content: center;
+          }
+
+          .nav-tabs-wrapper {
+            display: none !important;
           }
         }
 
         /* Small phones */
         @media (max-width: 480px) {
           .nav-container {
-            padding: 0 0.5rem;
-            gap: 0.25rem;
-            height: 56px;
-            min-height: 56px;
+            padding: 0 0.3rem;
+            gap: 0.15rem;
+            height: 50px;
+            min-height: 50px;
           }
 
           .logo-text {
-            font-size: 1rem;
+            font-size: 0.85rem;
           }
 
           .logo-icon {
-            width: 1.5rem;
-            height: 1.5rem;
+            width: 1.25rem;
+            height: 1.25rem;
           }
 
           .icon-btn {
-            padding: 0.375rem;
+            padding: 0.3rem;
           }
 
           .icon-btn svg {
@@ -1723,9 +1888,9 @@ const SuperAdminDashboard = () => {
           }
 
           .user-avatar-small {
-            width: 1.75rem;
-            height: 1.75rem;
-            font-size: 0.75rem;
+            width: 1.5rem;
+            height: 1.5rem;
+            font-size: 0.65rem;
           }
 
           .dashboard-main {
@@ -1787,20 +1952,20 @@ const SuperAdminDashboard = () => {
           }
 
           .property-divider-container-full {
-            height: calc(100vh - 56px);
+            height: calc(100vh - 50px);
           }
         }
 
         /* Very small phones */
         @media (max-width: 380px) {
           .nav-container {
-            padding: 0 0.25rem;
-            height: 52px;
-            min-height: 52px;
+            padding: 0 0.2rem;
+            height: 46px;
+            min-height: 46px;
           }
 
           .nav-actions {
-            gap: 0.25rem;
+            gap: 0.15rem;
           }
 
           .notifications-dropdown {
@@ -1814,28 +1979,28 @@ const SuperAdminDashboard = () => {
           }
 
           .logo-text {
-            font-size: 0.875rem;
+            font-size: 0.75rem;
           }
 
           .logo-icon {
-            width: 1.25rem;
-            height: 1.25rem;
+            width: 1rem;
+            height: 1rem;
           }
         }
 
         /* Landscape phones */
         @media (max-height: 500px) and (orientation: landscape) {
           .nav-container {
-            height: 48px;
-            min-height: 48px;
+            height: 46px;
+            min-height: 46px;
           }
 
           .property-divider-container-full {
-            height: calc(100vh - 48px);
+            height: calc(100vh - 46px);
           }
 
           .logo-text {
-            font-size: 0.875rem;
+            font-size: 0.85rem;
           }
 
           .logo-icon {

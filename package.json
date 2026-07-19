@@ -24,6 +24,7 @@
     "react-d3-tree": "^3.6.6",
     "react-dom": "^18.3.1",
     "react-family-tree": "^1.0.0",
+    "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.15.1",
     "reactflow": "^11.11.4",
     "relatives-tree": "^1.0.0",
