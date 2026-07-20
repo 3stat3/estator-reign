@@ -10,6 +10,8 @@ import {
   CalendarIcon,
   ChevronLeftIcon,
   ChevronRightIcon,
+  SunIcon,
+  MoonIcon,
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from './useFinance';
@@ -20,8 +22,9 @@ import Bills from './Bills';
 import Reports from './Reports';
 
 const PersonalFinanceTracker = () => {
-  const { user } = useAuth();
+  const { user, darkMode, toggleDarkMode } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
+  const [filterBill, setFilterBill] = useState(null); // Add this state
 
   const finance = useFinance();
   const { selectedMonth, setSelectedMonth } = finance;
@@ -52,22 +55,10 @@ const PersonalFinanceTracker = () => {
     setSelectedMonth(new Date());
   };
 
-  // Render content based on active tab
-  const renderContent = () => {
-    switch (activeView) {
-      case 'dashboard':
-        return <Dashboard finance={finance} setActiveView={setActiveView} />;
-      case 'transactions':
-        return <Transactions finance={finance} />;
-      case 'budget':
-        return <Budget finance={finance} />;
-      case 'bills':
-        return <Bills finance={finance} />;
-      case 'reports':
-        return <Reports finance={finance} />;
-      default:
-        return <Dashboard finance={finance} setActiveView={setActiveView} />;
-    }
+  // Handle navigation with filter
+  const handleNavigate = (view, filter = null) => {
+    setActiveView(view);
+    setFilterBill(filter);
   };
 
   // Format month for display
@@ -81,17 +72,35 @@ const PersonalFinanceTracker = () => {
            today.getFullYear() === selectedMonth.getFullYear();
   };
 
+  // Render content based on active tab
+  const renderContent = () => {
+    switch (activeView) {
+      case 'dashboard':
+        return <Dashboard finance={finance} setActiveView={setActiveView} />;
+      case 'transactions':
+        return <Transactions finance={finance} filterBill={filterBill} clearFilter={() => setFilterBill(null)} />;
+      case 'budget':
+        return <Budget finance={finance} />;
+      case 'bills':
+        return <Bills finance={finance} setActiveView={handleNavigate} />;
+      case 'reports':
+        return <Reports finance={finance} />;
+      default:
+        return <Dashboard finance={finance} setActiveView={setActiveView} />;
+    }
+  };
+
   return (
-    <div className="personal-finance-tracker">
+    <div className={`personal-finance-tracker ${darkMode ? 'dark' : 'light'}`}>
       {/* Toast Container */}
       <Toaster
         position="top-right"
         toastOptions={{
           duration: 3000,
           style: {
-            background: 'var(--card-bg, #ffffff)',
-            color: 'var(--text-primary, #0f172a)',
-            border: '1px solid var(--border-color, #e2e8f0)',
+            background: darkMode ? '#1e293b' : '#ffffff',
+            color: darkMode ? '#f1f5f9' : '#0f172a',
+            border: `1px solid ${darkMode ? '#334155' : '#e2e8f0'}`,
             borderRadius: '0.75rem',
             padding: '1rem',
           },
@@ -120,13 +129,27 @@ const PersonalFinanceTracker = () => {
         <div className="finance-sidebar-header">
           <WalletIcon className="finance-sidebar-logo" />
           <span>Finance Tracker</span>
+          <button 
+            className="finance-dark-mode-toggle" 
+            onClick={toggleDarkMode}
+            aria-label="Toggle dark mode"
+          >
+            {darkMode ? (
+              <SunIcon className="finance-dark-mode-icon" />
+            ) : (
+              <MoonIcon className="finance-dark-mode-icon" />
+            )}
+          </button>
         </div>
         <nav className="finance-sidebar-nav">
           {navigationItems.map((item) => (
             <button
               key={item.id}
               className={`finance-nav-item ${activeView === item.id ? 'active' : ''}`}
-              onClick={() => setActiveView(item.id)}
+              onClick={() => {
+                setActiveView(item.id);
+                setFilterBill(null); // Clear filter when navigating
+              }}
             >
               <item.icon className="finance-nav-icon" />
               <span>{item.label}</span>
@@ -156,31 +179,33 @@ const PersonalFinanceTracker = () => {
           <h1 className="finance-page-title">
             {activeView.charAt(0).toUpperCase() + activeView.slice(1)}
           </h1>
-          <div className="finance-month-selector">
-            <button 
-              className="finance-month-btn"
-              onClick={goToPreviousMonth}
-              aria-label="Previous month"
-            >
-              <ChevronLeftIcon className="finance-month-icon" />
-            </button>
-            <button 
-              className="finance-month-label"
-              onClick={goToCurrentMonth}
-              title="Go to current month"
-            >
-              {formatMonth(selectedMonth)}
-              {!isCurrentMonth() && (
-                <span className="finance-month-badge">Go to today</span>
-              )}
-            </button>
-            <button 
-              className="finance-month-btn"
-              onClick={goToNextMonth}
-              aria-label="Next month"
-            >
-              <ChevronRightIcon className="finance-month-icon" />
-            </button>
+          <div className="finance-header-actions">
+            <div className="finance-month-selector">
+              <button 
+                className="finance-month-btn"
+                onClick={goToPreviousMonth}
+                aria-label="Previous month"
+              >
+                <ChevronLeftIcon className="finance-month-icon" />
+              </button>
+              <button 
+                className="finance-month-label"
+                onClick={goToCurrentMonth}
+                title="Go to current month"
+              >
+                {formatMonth(selectedMonth)}
+                {!isCurrentMonth() && (
+                  <span className="finance-month-badge">Go to today</span>
+                )}
+              </button>
+              <button 
+                className="finance-month-btn"
+                onClick={goToNextMonth}
+                aria-label="Next month"
+              >
+                <ChevronRightIcon className="finance-month-icon" />
+              </button>
+            </div>
           </div>
         </div>
 
@@ -205,6 +230,43 @@ const PersonalFinanceTracker = () => {
           background: var(--bg-primary, #f8fafc);
           color: var(--text-primary, #0f172a);
           position: relative;
+          transition: background 0.3s ease, color 0.3s ease;
+        }
+
+        /* Dark Mode Variables */
+        .personal-finance-tracker.dark {
+          --bg-primary: #0f172a;
+          --bg-secondary: #1e293b;
+          --text-primary: #f1f5f9;
+          --text-secondary: #94a3b8;
+          --text-tertiary: #64748b;
+          --border-color: #334155;
+          --card-bg: #1e293b;
+          --nav-bg: #1e293b;
+          --hover-bg: #334155;
+          --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.3);
+          --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.4);
+          --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.5);
+          --gradient-start: #818cf8;
+          --gradient-end: #6366f1;
+        }
+
+        /* Light Mode Variables */
+        .personal-finance-tracker.light {
+          --bg-primary: #f8fafc;
+          --bg-secondary: #ffffff;
+          --text-primary: #0f172a;
+          --text-secondary: #64748b;
+          --text-tertiary: #94a3b8;
+          --border-color: #e2e8f0;
+          --card-bg: #ffffff;
+          --nav-bg: #ffffff;
+          --hover-bg: #f1f5f9;
+          --shadow-sm: 0 1px 2px 0 rgba(0, 0, 0, 0.05);
+          --shadow-md: 0 4px 6px -1px rgba(0, 0, 0, 0.1);
+          --shadow-lg: 0 10px 15px -3px rgba(0, 0, 0, 0.1);
+          --gradient-start: #667eea;
+          --gradient-end: #764ba2;
         }
 
         /* Sidebar */
@@ -219,6 +281,7 @@ const PersonalFinanceTracker = () => {
           position: sticky;
           top: 0;
           height: calc(100vh - 70px);
+          transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .finance-sidebar-header {
@@ -231,12 +294,37 @@ const PersonalFinanceTracker = () => {
           font-size: 1.125rem;
           font-weight: 600;
           color: var(--text-primary, #0f172a);
+          transition: border-color 0.3s ease;
         }
 
         .finance-sidebar-logo {
           width: 1.5rem;
           height: 1.5rem;
           color: var(--gradient-start, #667eea);
+        }
+
+        .finance-dark-mode-toggle {
+          margin-left: auto;
+          background: var(--bg-primary, #f1f5f9);
+          border: 1px solid var(--border-color, #e2e8f0);
+          border-radius: 0.5rem;
+          padding: 0.375rem;
+          cursor: pointer;
+          color: var(--text-primary, #0f172a);
+          transition: all 0.2s;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .finance-dark-mode-toggle:hover {
+          background: var(--hover-bg, #e2e8f0);
+          transform: scale(1.05);
+        }
+
+        .finance-dark-mode-icon {
+          width: 1.125rem;
+          height: 1.125rem;
         }
 
         .finance-sidebar-nav {
@@ -294,6 +382,7 @@ const PersonalFinanceTracker = () => {
         .finance-sidebar-footer {
           border-top: 1px solid var(--border-color, #e2e8f0);
           padding-top: 1rem;
+          transition: border-color 0.3s ease;
         }
 
         .finance-sidebar-user {
@@ -335,6 +424,8 @@ const PersonalFinanceTracker = () => {
           padding: 1.5rem;
           overflow-y: auto;
           max-height: calc(100vh - 70px);
+          background: var(--bg-primary, #f8fafc);
+          transition: background 0.3s ease;
         }
 
         .finance-content-wrapper {
@@ -359,6 +450,12 @@ const PersonalFinanceTracker = () => {
           margin: 0;
         }
 
+        .finance-header-actions {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+        }
+
         .finance-month-selector {
           display: flex;
           align-items: center;
@@ -367,6 +464,7 @@ const PersonalFinanceTracker = () => {
           border: 1px solid var(--border-color, #e2e8f0);
           border-radius: 0.75rem;
           padding: 0.25rem;
+          transition: background 0.3s ease, border-color 0.3s ease;
         }
 
         .finance-month-btn {
@@ -423,13 +521,6 @@ const PersonalFinanceTracker = () => {
           margin-top: 0.125rem;
         }
 
-        /* Toast customization */
-        :root {
-          --toast-success: #10b981;
-          --toast-error: #ef4444;
-          --toast-warning: #f59e0b;
-        }
-
         /* Responsive */
         @media (max-width: 1024px) {
           .finance-sidebar {
@@ -446,7 +537,7 @@ const PersonalFinanceTracker = () => {
             width: 100%;
             height: auto;
             position: relative;
-            padding: 1rem;
+            padding: 0.75rem 1rem;
             border-right: none;
             border-bottom: 1px solid var(--border-color, #e2e8f0);
             flex-direction: row;
@@ -459,6 +550,7 @@ const PersonalFinanceTracker = () => {
             border-bottom: none;
             padding: 0;
             margin: 0;
+            gap: 0.5rem;
           }
 
           .finance-sidebar-nav {
@@ -466,7 +558,7 @@ const PersonalFinanceTracker = () => {
             gap: 0.25rem;
             flex: 1;
             overflow-x: auto;
-            padding: 0 1rem;
+            padding: 0 0.5rem;
           }
 
           .finance-nav-item {
@@ -501,6 +593,10 @@ const PersonalFinanceTracker = () => {
             text-align: center;
           }
 
+          .finance-header-actions {
+            justify-content: center;
+          }
+
           .finance-month-selector {
             justify-content: center;
           }
@@ -508,7 +604,7 @@ const PersonalFinanceTracker = () => {
 
         @media (max-width: 480px) {
           .finance-main-content {
-            padding: 0.5rem;
+            padding: 0.75rem;
           }
 
           .finance-month-label {
@@ -518,6 +614,15 @@ const PersonalFinanceTracker = () => {
 
           .finance-month-badge {
             font-size: 0.5rem;
+          }
+
+          .finance-header-actions {
+            flex-direction: column;
+            width: 100%;
+          }
+
+          .finance-month-selector {
+            width: 100%;
           }
         }
       `}</style>

@@ -1,10 +1,11 @@
 // src/components/PersonalTools/Reports.jsx
-import React from 'react';
+import React, { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import {
   ArrowPathIcon,
 } from '@heroicons/react/24/outline';
 import ExcelExport from './ExcelExport';
+import { ChartContainer, CategoryPieChart, CHART_COLORS } from './Chart';
 
 const Reports = ({ finance }) => {
   const {
@@ -15,6 +16,10 @@ const Reports = ({ finance }) => {
     getSavingsRate,
     loadAllData,
   } = finance;
+
+  const [categoryData, setCategoryData] = useState([]);
+  const [monthlyTrendData, setMonthlyTrendData] = useState([]);
+  const [incomeExpenseData, setIncomeExpenseData] = useState([]);
 
   const monthlyIncome = getMonthlyIncome();
   const monthlyExpenses = getMonthlyExpenses();
@@ -30,6 +35,88 @@ const Reports = ({ finance }) => {
 
   const sortedCategories = Object.entries(categorySpending)
     .sort((a, b) => b[1] - a[1]);
+
+  // Prepare chart data
+  useEffect(() => {
+    // Get last 6 months of data
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      months.push({
+        month: d.toLocaleString('default', { month: 'short' }),
+        year: d.getFullYear(),
+        monthNum: d.getMonth() + 1,
+      });
+    }
+
+    // Group transactions by month
+    const monthlyData = months.map((m) => {
+      const monthTransactions = transactions.filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === m.year && tDate.getMonth() + 1 === m.monthNum;
+      });
+
+      const income = monthTransactions
+        .filter((t) => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const expenses = monthTransactions
+        .filter((t) => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      return {
+        month: m.month,
+        income,
+        expenses,
+        cashFlow: income - expenses,
+      };
+    });
+
+    setMonthlyTrendData(monthlyData);
+
+    // Income vs Expenses data for the year
+    const currentYear = new Date().getFullYear();
+    const yearMonths = [];
+    for (let i = 0; i < 12; i++) {
+      const d = new Date(currentYear, i, 1);
+      yearMonths.push({
+        month: d.toLocaleString('default', { month: 'short' }),
+        year: currentYear,
+        monthNum: i + 1,
+      });
+    }
+
+    const yearData = yearMonths.map((m) => {
+      const monthTransactions = transactions.filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === m.year && tDate.getMonth() + 1 === m.monthNum;
+      });
+
+      const income = monthTransactions
+        .filter((t) => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const expenses = monthTransactions
+        .filter((t) => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      return {
+        month: m.month,
+        income,
+        expenses,
+      };
+    });
+
+    setIncomeExpenseData(yearData);
+
+    // Category data for pie chart
+    const pieData = Object.entries(categorySpending)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value);
+
+    setCategoryData(pieData);
+  }, [transactions]);
 
   // Generate random colors for categories
   const getColor = (index) => {
@@ -58,6 +145,7 @@ const Reports = ({ finance }) => {
         </div>
       </div>
 
+      {/* Summary Cards */}
       <div className="finance-report-summary">
         <div className="finance-report-card">
           <h3>Income</h3>
@@ -77,9 +165,93 @@ const Reports = ({ finance }) => {
         </div>
       </div>
 
+      {/* Charts Section */}
+      <div className="finance-report-charts">
+        <div className="finance-chart-row">
+          <ChartContainer title="Income vs Expenses (Year)">
+            <div className="chart-wrapper">
+              {incomeExpenseData.some(d => d.income > 0 || d.expenses > 0) ? (
+                <div className="chart-bar-container">
+                  {incomeExpenseData.map((item, index) => (
+                    <div key={index} className="chart-bar-group">
+                      <div className="chart-bar-label">{item.month}</div>
+                      <div className="chart-bar-wrapper">
+                        <div 
+                          className="chart-bar income-bar"
+                          style={{ 
+                            height: `${Math.min((item.income / Math.max(...incomeExpenseData.map(d => d.income + d.expenses), 1)) * 100, 100)}%`,
+                            background: CHART_COLORS.income
+                          }}
+                          title={`Income: ₱${item.income.toLocaleString()}`}
+                        />
+                        <div 
+                          className="chart-bar expense-bar"
+                          style={{ 
+                            height: `${Math.min((item.expenses / Math.max(...incomeExpenseData.map(d => d.income + d.expenses), 1)) * 100, 100)}%`,
+                            background: CHART_COLORS.expense
+                          }}
+                          title={`Expenses: ₱${item.expenses.toLocaleString()}`}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="chart-empty-state">
+                  <p>No transaction data available</p>
+                </div>
+              )}
+            </div>
+          </ChartContainer>
+        </div>
+
+        <div className="finance-chart-row two-col">
+          <ChartContainer title="Spending by Category">
+            {categoryData.length > 0 ? (
+              <CategoryPieChart data={categoryData} height={300} />
+            ) : (
+              <div className="chart-empty-state">
+                <p>No expense data available</p>
+              </div>
+            )}
+          </ChartContainer>
+
+          <ChartContainer title="Monthly Cash Flow Trend">
+            <div className="chart-wrapper">
+              {monthlyTrendData.some(d => d.cashFlow !== 0) ? (
+                <div className="chart-line-container">
+                  {monthlyTrendData.map((item, index) => (
+                    <div key={index} className="chart-line-point">
+                      <div 
+                        className="chart-line-bar"
+                        style={{ 
+                          height: `${Math.min(Math.abs(item.cashFlow) / Math.max(...monthlyTrendData.map(d => Math.abs(d.cashFlow)), 1) * 100, 100)}%`,
+                          background: item.cashFlow >= 0 ? CHART_COLORS.income : CHART_COLORS.expense
+                        }}
+                      />
+                      <div className="chart-line-label">
+                        {item.month}
+                      </div>
+                      <div className="chart-line-value" style={{ color: item.cashFlow >= 0 ? CHART_COLORS.income : CHART_COLORS.expense }}>
+                        ₱{item.cashFlow.toLocaleString()}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <div className="chart-empty-state">
+                  <p>No cash flow data available</p>
+                </div>
+              )}
+            </div>
+          </ChartContainer>
+        </div>
+      </div>
+
+      {/* Category Breakdown */}
       {sortedCategories.length > 0 && (
         <div className="finance-report-categories">
-          <h3>Spending by Category</h3>
+          <h3>Spending by Category (Details)</h3>
           <div className="finance-category-list">
             {sortedCategories.map(([category, amount], index) => (
               <div key={category} className="finance-category-row">
@@ -94,6 +266,9 @@ const Reports = ({ finance }) => {
                   />
                 </div>
                 <span>₱{amount.toLocaleString()}</span>
+                <span className="finance-category-percent">
+                  {((amount / monthlyExpenses) * 100).toFixed(1)}%
+                </span>
               </div>
             ))}
           </div>
@@ -186,6 +361,135 @@ const Reports = ({ finance }) => {
           color: var(--text-primary, #0f172a);
         }
 
+        /* Charts Section */
+        .finance-report-charts {
+          margin-bottom: 1.5rem;
+        }
+
+        .finance-chart-row {
+          margin-bottom: 1.5rem;
+        }
+
+        .finance-chart-row.two-col {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1.5rem;
+        }
+
+        .chart-wrapper {
+          height: 280px;
+          display: flex;
+          align-items: flex-end;
+          justify-content: center;
+          padding: 1rem 0;
+          width: 100%;
+        }
+
+        /* Bar Chart */
+        .chart-bar-container {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-around;
+          width: 100%;
+          height: 100%;
+          gap: 0.5rem;
+        }
+
+        .chart-bar-group {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          height: 100%;
+          justify-content: flex-end;
+          flex: 1;
+          min-width: 30px;
+        }
+
+        .chart-bar-label {
+          font-size: 0.7rem;
+          color: var(--text-secondary, #64748b);
+          margin-top: 0.5rem;
+          font-weight: 500;
+        }
+
+        .chart-bar-wrapper {
+          display: flex;
+          align-items: flex-end;
+          gap: 2px;
+          height: 90%;
+          width: 100%;
+          justify-content: center;
+        }
+
+        .chart-bar {
+          width: 18px;
+          border-radius: 3px 3px 0 0;
+          min-height: 4px;
+          transition: height 0.6s ease;
+          position: relative;
+        }
+
+        .chart-bar.income-bar {
+          background: ${CHART_COLORS.income};
+        }
+
+        .chart-bar.expense-bar {
+          background: ${CHART_COLORS.expense};
+        }
+
+        .chart-bar:hover {
+          opacity: 0.8;
+        }
+
+        /* Line Chart */
+        .chart-line-container {
+          display: flex;
+          align-items: flex-end;
+          justify-content: space-around;
+          width: 100%;
+          height: 100%;
+          gap: 0.5rem;
+        }
+
+        .chart-line-point {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          height: 100%;
+          justify-content: flex-end;
+          flex: 1;
+        }
+
+        .chart-line-bar {
+          width: 6px;
+          border-radius: 3px 3px 0 0;
+          min-height: 2px;
+          transition: height 0.6s ease;
+        }
+
+        .chart-line-label {
+          font-size: 0.7rem;
+          color: var(--text-secondary, #64748b);
+          margin-top: 0.5rem;
+        }
+
+        .chart-line-value {
+          font-size: 0.6rem;
+          font-weight: 600;
+          margin-top: 0.25rem;
+        }
+
+        .chart-empty-state {
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          height: 100%;
+          width: 100%;
+          color: var(--text-secondary, #64748b);
+          font-size: 0.875rem;
+        }
+
+        /* Category List */
         .finance-report-categories {
           background: var(--card-bg, #ffffff);
           border-radius: 0.75rem;
@@ -225,6 +529,13 @@ const Reports = ({ finance }) => {
           text-align: right;
           font-weight: 600;
           color: var(--text-primary, #0f172a);
+        }
+
+        .finance-category-percent {
+          min-width: 60px;
+          text-align: right;
+          font-size: 0.75rem;
+          color: var(--text-secondary, #64748b);
         }
 
         .finance-category-bar-wrapper {
@@ -282,6 +593,12 @@ const Reports = ({ finance }) => {
           color: var(--text-secondary, #64748b);
         }
 
+        @media (max-width: 1024px) {
+          .chart-bar {
+            width: 14px;
+          }
+        }
+
         @media (max-width: 768px) {
           .finance-view-header {
             flex-direction: column;
@@ -302,18 +619,39 @@ const Reports = ({ finance }) => {
             grid-template-columns: 1fr 1fr;
           }
 
+          .finance-chart-row.two-col {
+            grid-template-columns: 1fr;
+          }
+
           .finance-category-row {
             flex-wrap: wrap;
+            gap: 0.5rem;
           }
 
           .finance-category-row span:first-child {
             min-width: 80px;
+          }
+
+          .chart-bar {
+            width: 12px;
+          }
+
+          .chart-bar-label {
+            font-size: 0.6rem;
           }
         }
 
         @media (max-width: 480px) {
           .finance-report-summary {
             grid-template-columns: 1fr;
+          }
+
+          .chart-bar {
+            width: 10px;
+          }
+
+          .chart-line-value {
+            font-size: 0.5rem;
           }
         }
       `}</style>

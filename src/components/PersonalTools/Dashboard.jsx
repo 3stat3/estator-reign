@@ -13,6 +13,13 @@ import {
   XCircleIcon,
   ClockIcon,
 } from '@heroicons/react/24/outline';
+import {
+  ChartContainer,
+  IncomeExpenseBarChart,
+  CategoryPieChart,
+  CashFlowLineChart,
+  CHART_COLORS,
+} from './Chart';
 
 const Dashboard = ({ finance, setActiveView }) => {
   const {
@@ -30,6 +37,8 @@ const Dashboard = ({ finance, setActiveView }) => {
 
   const [billsWithStatus, setBillsWithStatus] = useState([]);
   const [isLoadingBills, setIsLoadingBills] = useState(false);
+  const [chartData, setChartData] = useState([]);
+  const [categoryData, setCategoryData] = useState([]);
 
   const monthlyIncome = getMonthlyIncome();
   const monthlyExpenses = getMonthlyExpenses();
@@ -50,10 +59,71 @@ const Dashboard = ({ finance, setActiveView }) => {
     loadBillsWithStatus();
   }, [getUpcomingBillsWithStatus]);
 
+  // Prepare chart data
+  useEffect(() => {
+    // Get last 6 months of data
+    const months = [];
+    const now = new Date();
+    for (let i = 5; i >= 0; i--) {
+      const d = new Date(now.getFullYear(), now.getMonth() - i, 1);
+      const monthKey = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}`;
+      months.push({
+        month: d.toLocaleString('default', { month: 'short' }),
+        key: monthKey,
+        year: d.getFullYear(),
+        monthNum: d.getMonth() + 1,
+      });
+    }
+
+    // Group transactions by month
+    const monthlyData = months.map((m) => {
+      const monthTransactions = transactions.filter((t) => {
+        const tDate = new Date(t.date);
+        return tDate.getFullYear() === m.year && tDate.getMonth() + 1 === m.monthNum;
+      });
+
+      const income = monthTransactions
+        .filter((t) => t.type === 'income')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      const expenses = monthTransactions
+        .filter((t) => t.type === 'expense')
+        .reduce((sum, t) => sum + t.amount, 0);
+
+      return {
+        month: m.month,
+        income,
+        expenses,
+        cashFlow: income - expenses,
+      };
+    });
+
+    setChartData(monthlyData);
+
+    // Prepare category data for pie chart (current month)
+    const currentMonthTransactions = transactions.filter((t) => {
+      const tDate = new Date(t.date);
+      const now = new Date();
+      return tDate.getMonth() === now.getMonth() && 
+             tDate.getFullYear() === now.getFullYear() &&
+             t.type === 'expense';
+    });
+
+    const categoryTotals = currentMonthTransactions.reduce((acc, t) => {
+      acc[t.category] = (acc[t.category] || 0) + t.amount;
+      return acc;
+    }, {});
+
+    const pieData = Object.entries(categoryTotals)
+      .map(([name, value]) => ({ name, value }))
+      .sort((a, b) => b.value - a.value)
+      .slice(0, 8); // Show top 8 categories
+
+    setCategoryData(pieData);
+  }, [transactions]);
+
   // Get bills that are overdue
-  const overdueBills = billsWithStatus.filter(b => b.isOverdue);
-  const upcomingBillsWithStatus = billsWithStatus.filter(b => b.isUpcoming || b.status === 'unpaid');
-  const paidBills = billsWithStatus.filter(b => b.isPaidExact || b.isOverpaid || b.isUnderpaid);
+  const overdueBills = billsWithStatus.filter((b) => b.isOverdue);
 
   // Get status icon for bill
   const getBillStatusIcon = (bill) => {
@@ -174,13 +244,37 @@ const Dashboard = ({ finance, setActiveView }) => {
         </div>
       )}
 
+      {/* Charts Section */}
+      <div className="finance-charts-grid">
+        <ChartContainer title="Income vs Expenses">
+          <IncomeExpenseBarChart data={chartData} height={280} />
+        </ChartContainer>
+
+        <ChartContainer title="Spending by Category">
+          {categoryData.length > 0 ? (
+            <CategoryPieChart data={categoryData} height={280} />
+          ) : (
+            <div className="chart-empty-state">
+              <p>No expense data for this month</p>
+              <p className="chart-empty-sub">Add some expenses to see the breakdown</p>
+            </div>
+          )}
+        </ChartContainer>
+      </div>
+
+      <div className="finance-charts-grid single">
+        <ChartContainer title="Cash Flow Trend">
+          <CashFlowLineChart data={chartData} height={280} />
+        </ChartContainer>
+      </div>
+
       {/* Budget Progress Summary */}
       {budgetStatus.length > 0 && (
         <div className="finance-savings-rate">
           <div className="finance-savings-rate-header">
             <span>Budget Summary</span>
             <span className="finance-savings-rate-value">
-              {budgetStatus.filter(b => b.status === 'good').length} / {budgetStatus.length} on track
+              {budgetStatus.filter((b) => b.status === 'good').length} / {budgetStatus.length} on track
             </span>
           </div>
           <div className="finance-budget-summary">
@@ -202,7 +296,7 @@ const Dashboard = ({ finance, setActiveView }) => {
         </div>
       )}
 
-      {/* Upcoming Bills with Status */}
+      {/* Bills Overview */}
       {billsWithStatus.length > 0 && (
         <div className="finance-recent-transactions">
           <div className="finance-section-header">
@@ -376,6 +470,40 @@ const Dashboard = ({ finance, setActiveView }) => {
         .finance-stat-trend-icon {
           width: 0.875rem;
           height: 0.875rem;
+        }
+
+        /* Charts Grid */
+        .finance-charts-grid {
+          display: grid;
+          grid-template-columns: 1fr 1fr;
+          gap: 1.5rem;
+          margin-bottom: 1.5rem;
+        }
+
+        .finance-charts-grid.single {
+          grid-template-columns: 1fr;
+          max-width: 70%;
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        .chart-empty-state {
+          display: flex;
+          flex-direction: column;
+          align-items: center;
+          justify-content: center;
+          height: 200px;
+          color: var(--text-secondary, #64748b);
+        }
+
+        .chart-empty-state p {
+          font-size: 0.875rem;
+          margin: 0.25rem 0;
+        }
+
+        .chart-empty-sub {
+          font-size: 0.75rem;
+          color: var(--text-tertiary, #94a3b8);
         }
 
         /* Overdue Alert */
@@ -778,9 +906,23 @@ const Dashboard = ({ finance, setActiveView }) => {
           color: var(--text-secondary, #64748b);
         }
 
+        @media (max-width: 1024px) {
+          .finance-charts-grid.single {
+            max-width: 85%;
+          }
+        }
+
         @media (max-width: 768px) {
           .finance-stats-grid {
             grid-template-columns: 1fr 1fr;
+          }
+
+          .finance-charts-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .finance-charts-grid.single {
+            max-width: 100%;
           }
 
           .finance-bill-status-item {

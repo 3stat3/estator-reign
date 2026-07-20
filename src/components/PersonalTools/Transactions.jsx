@@ -1,5 +1,5 @@
 // src/components/PersonalTools/Transactions.jsx
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
@@ -16,7 +16,7 @@ import {
 } from '@heroicons/react/24/outline';
 import Modal from './Modal';
 
-const Transactions = ({ finance }) => {
+const Transactions = ({ finance, filterBill = null, clearFilter = null }) => {
   const {
     transactions,
     loading,
@@ -45,8 +45,16 @@ const Transactions = ({ finance }) => {
   const [bulkErrors, setBulkErrors] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [uploadProgress, setUploadProgress] = useState(0);
-  const [bulkTab, setBulkTab] = useState('add'); // 'add' or 'upload'
+  const [bulkTab, setBulkTab] = useState('add');
   const fileInputRef = useRef(null);
+
+  // Apply filter when coming from Bills
+  useEffect(() => {
+    if (filterBill) {
+      setFilterCategory(filterBill.category || 'all');
+      setSearchQuery(filterBill.name || '');
+    }
+  }, [filterBill]);
 
   const expenseCategories = [
     'Food', 'Housing', 'Transportation', 'Utilities',
@@ -60,6 +68,8 @@ const Transactions = ({ finance }) => {
   ];
 
   const allCategories = [...incomeCategories, ...expenseCategories];
+
+  const isFiltered = filterBill !== null;
 
   // ========== SINGLE TRANSACTION CRUD ==========
   const openAdd = () => {
@@ -87,7 +97,6 @@ const Transactions = ({ finance }) => {
   };
 
   const openBulkModal = () => {
-    // Start with 2 empty rows
     const initialRows = [
       {
         id: Date.now() + Math.random(),
@@ -183,10 +192,8 @@ const Transactions = ({ finance }) => {
         return item;
       });
 
-      // Check if the last row is valid and has all required fields filled
       const lastRow = updatedItems[updatedItems.length - 1];
       if (lastRow && lastRow.isValid) {
-        // Add a new empty row
         const newRow = {
           id: Date.now() + Math.random(),
           date: new Date().toISOString().split('T')[0],
@@ -231,7 +238,6 @@ const Transactions = ({ finance }) => {
   };
 
   const handleBulkSubmit = async () => {
-    // Filter out empty rows (rows with no data) before submitting
     const validItems = bulkItems.filter(item => 
       item.description.trim() !== '' || 
       item.category !== '' || 
@@ -418,7 +424,6 @@ const Transactions = ({ finance }) => {
   const renderBulkModal = () => {
     if (!showBulkModal) return null;
 
-    // Only check non-empty rows for validation
     const nonEmptyRows = bulkItems.filter(item => 
       item.description.trim() !== '' || 
       item.category !== '' || 
@@ -438,7 +443,6 @@ const Transactions = ({ finance }) => {
           </div>
 
           <div className="bulk-modal-body">
-            {/* Tab Switcher */}
             <div className="bulk-tabs">
               <button
                 className={`bulk-tab ${bulkTab === 'add' ? 'active' : ''}`}
@@ -457,7 +461,6 @@ const Transactions = ({ finance }) => {
             </div>
 
             {bulkTab === 'add' ? (
-              // Manual Add Tab
               <>
                 <div className="bulk-actions">
                   <button className="bulk-add-row-btn" onClick={addBulkRow}>
@@ -500,7 +503,6 @@ const Transactions = ({ finance }) => {
                           const isEmpty = item.description.trim() === '' && 
                                          item.category === '' && 
                                          item.amount === '';
-                          // Only show status if not empty
                           const showStatus = !isEmpty;
                           return (
                             <tr key={item.id} className={!isValidRow && !isEmpty ? 'bulk-row-invalid' : ''}>
@@ -592,7 +594,6 @@ const Transactions = ({ finance }) => {
                 )}
               </>
             ) : (
-              // Upload CSV Tab
               <div className="bulk-upload-section">
                 <div className="bulk-upload-area">
                   <ArrowUpTrayIcon className="bulk-upload-icon" />
@@ -737,6 +738,18 @@ const Transactions = ({ finance }) => {
             onChange={(e) => setSearchQuery(e.target.value)}
           />
         </div>
+        {isFiltered && (
+          <div className="finance-filter-badge">
+            <span>🔍 Filtering: {filterBill?.name}</span>
+            <button 
+              className="finance-filter-clear" 
+              onClick={clearFilter}
+              title="Clear filter"
+            >
+              <XMarkIcon className="w-4 h-4" />
+            </button>
+          </div>
+        )}
         <div className="finance-filter-actions">
           <select
             className="finance-filter-select"
@@ -808,7 +821,6 @@ const Transactions = ({ finance }) => {
 
       {loading && <div className="finance-loading">Loading...</div>}
 
-      {/* Single Transaction Modal */}
       <Modal
         isOpen={showModal}
         onClose={() => setShowModal(false)}
@@ -884,7 +896,6 @@ const Transactions = ({ finance }) => {
         </form>
       </Modal>
 
-      {/* Bulk Modal */}
       {renderBulkModal()}
 
       <style>{`
@@ -952,6 +963,35 @@ const Transactions = ({ finance }) => {
           gap: 1rem;
           margin-bottom: 1.5rem;
           flex-wrap: wrap;
+        }
+
+        .finance-filter-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          padding: 0.25rem 0.75rem;
+          background: rgba(102, 126, 234, 0.1);
+          border: 1px solid var(--gradient-start);
+          border-radius: 0.5rem;
+          font-size: 0.875rem;
+          color: var(--gradient-start);
+        }
+
+        .finance-filter-clear {
+          background: none;
+          border: none;
+          cursor: pointer;
+          color: var(--text-secondary);
+          padding: 0.125rem;
+          border-radius: 0.25rem;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+        }
+
+        .finance-filter-clear:hover {
+          background: rgba(239, 68, 68, 0.1);
+          color: #ef4444;
         }
 
         .finance-search-box {
@@ -1209,7 +1249,7 @@ const Transactions = ({ finance }) => {
           cursor: not-allowed;
         }
 
-        /* ===== BULK MODAL OVERLAY ===== */
+        /* Bulk Modal Styles */
         .bulk-modal-overlay {
           position: fixed;
           top: 0;
@@ -1226,23 +1266,13 @@ const Transactions = ({ finance }) => {
         }
 
         @keyframes fadeIn {
-          from {
-            opacity: 0;
-          }
-          to {
-            opacity: 1;
-          }
+          from { opacity: 0; }
+          to { opacity: 1; }
         }
 
         @keyframes slideUp {
-          from {
-            transform: translateY(30px);
-            opacity: 0;
-          }
-          to {
-            transform: translateY(0);
-            opacity: 1;
-          }
+          from { transform: translateY(30px); opacity: 0; }
+          to { transform: translateY(0); opacity: 1; }
         }
 
         .bulk-modal-container {
@@ -1350,7 +1380,6 @@ const Transactions = ({ finance }) => {
           cursor: not-allowed;
         }
 
-        /* ===== BULK TABLE STYLES ===== */
         .bulk-tabs {
           display: flex;
           gap: 0.5rem;
@@ -1604,7 +1633,6 @@ const Transactions = ({ finance }) => {
           color: #f59e0b;
         }
 
-        /* Upload Tab */
         .bulk-upload-section {
           padding: 0.5rem 0;
         }

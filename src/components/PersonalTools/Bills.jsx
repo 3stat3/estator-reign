@@ -1,5 +1,5 @@
 // src/components/PersonalTools/Bills.jsx
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import { motion } from 'framer-motion';
 import toast from 'react-hot-toast';
 import {
@@ -8,14 +8,13 @@ import {
   TrashIcon,
   CreditCardIcon,
   ClockIcon,
-  CheckCircleIcon,
-  ExclamationCircleIcon,
+  DocumentTextIcon,
   XMarkIcon,
 } from '@heroicons/react/24/outline';
 import Modal from './Modal';
 import BillPaymentModal from './BillPaymentModal';
 
-const Bills = ({ finance }) => {
+const Bills = ({ finance, setActiveView }) => {
   const {
     bills,
     loading,
@@ -23,15 +22,12 @@ const Bills = ({ finance }) => {
     updateBill,
     deleteBill,
     recordBillPayment,
-    getBillPaymentHistory,
     loadAllData,
   } = finance;
 
   const [showModal, setShowModal] = useState(false);
   const [showPaymentModal, setShowPaymentModal] = useState(false);
-  const [showHistoryModal, setShowHistoryModal] = useState(false);
   const [selectedBill, setSelectedBill] = useState(null);
-  const [paymentHistory, setPaymentHistory] = useState([]);
   const [isProcessing, setIsProcessing] = useState(false);
   const [editingItem, setEditingItem] = useState(null);
   const [billForm, setBillForm] = useState({
@@ -52,17 +48,6 @@ const Bills = ({ finance }) => {
   ];
 
   const frequencies = ['monthly', 'quarterly', 'annually', 'weekly'];
-
-  // Get bill status icon and color
-  const getStatusInfo = (bill) => {
-    // This will be enhanced when we have payment data
-    // For now, use simple status
-    if (bill.active === false) {
-      return { icon: <XMarkIcon className="w-4 h-4" />, color: '#94a3b8', label: 'Inactive' };
-    }
-    // Default to active
-    return { icon: <ClockIcon className="w-4 h-4" />, color: '#3b82f6', label: 'Active' };
-  };
 
   const openAdd = () => {
     setEditingItem(null);
@@ -95,15 +80,6 @@ const Bills = ({ finance }) => {
   const openPaymentModal = (bill) => {
     setSelectedBill(bill);
     setShowPaymentModal(true);
-  };
-
-  const openHistoryModal = async (bill) => {
-    setSelectedBill(bill);
-    setIsProcessing(true);
-    const history = await getBillPaymentHistory(bill.id);
-    setPaymentHistory(history);
-    setIsProcessing(false);
-    setShowHistoryModal(true);
   };
 
   const handlePayment = async (paymentData) => {
@@ -182,307 +158,17 @@ const Bills = ({ finance }) => {
     }
   };
 
-    // Render Payment History Modal
-  const renderHistoryModal = () => {
-    if (!showHistoryModal) return null;
+  // src/components/PersonalTools/Bills.jsx
+  // The viewBillTransactions function should be:
 
-    return (
-      <>
-        <div className="history-modal-overlay" onClick={() => setShowHistoryModal(false)}>
-          <div className="history-modal-container" onClick={(e) => e.stopPropagation()}>
-            <div className="history-modal-header">
-              <h3>Payment History - {selectedBill?.name}</h3>
-              <button className="history-modal-close" onClick={() => setShowHistoryModal(false)}>
-                <XMarkIcon className="w-5 h-5" />
-              </button>
-            </div>
-            <div className="history-modal-body">
-              {isProcessing ? (
-                <div className="history-loading">Loading payment history...</div>
-              ) : paymentHistory.length === 0 ? (
-                <div className="history-empty">
-                  <p>No payments recorded for this bill yet.</p>
-                </div>
-              ) : (
-                <div className="history-list">
-                  <table className="history-table">
-                    <thead>
-                      <tr>
-                        <th>Due Date</th>
-                        <th>Paid Date</th>
-                        <th>Amount Paid</th>
-                        <th>Status</th>
-                        <th>Notes</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {paymentHistory.map((payment) => {
-                        const diff = selectedBill?.amount - payment.amount_paid;
-                        let statusText = 'Paid';
-                        let statusColor = '#10b981';
-                        if (diff === 0) {
-                          statusText = '✅ Exact';
-                          statusColor = '#10b981';
-                        } else if (diff < 0) {
-                          statusText = '⚠️ Overpaid';
-                          statusColor = '#f59e0b';
-                        } else {
-                          statusText = '⚠️ Underpaid';
-                          statusColor = '#ef4444';
-                        }
-                        return (
-                          <tr key={payment.id}>
-                            <td>{new Date(payment.due_date).toLocaleDateString()}</td>
-                            <td>{payment.paid_date ? new Date(payment.paid_date).toLocaleDateString() : '-'}</td>
-                            <td>₱{payment.amount_paid.toLocaleString()}</td>
-                            <td style={{ color: statusColor }}>{statusText}</td>
-                            <td>{payment.notes || '-'}</td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-              <div className="history-summary">
-                <span>Total Payments: {paymentHistory.length}</span>
-                <span>Total Paid: ₱{paymentHistory.reduce((sum, p) => sum + p.amount_paid, 0).toLocaleString()}</span>
-              </div>
-              <div className="history-modal-footer">
-                <button className="history-modal-close-btn" onClick={() => setShowHistoryModal(false)}>
-                  Close
-                </button>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        <style>{`
-          /* ===== HISTORY MODAL OVERLAY ===== */
-          .history-modal-overlay {
-            position: fixed;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: rgba(0, 0, 0, 0.6);
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            z-index: 99999;
-            padding: 1.5rem;
-            animation: historyFadeIn 0.2s ease;
-          }
-
-          @keyframes historyFadeIn {
-            from {
-              opacity: 0;
-            }
-            to {
-              opacity: 1;
-            }
-          }
-
-          @keyframes historySlideUp {
-            from {
-              transform: translateY(30px);
-              opacity: 0;
-            }
-            to {
-              transform: translateY(0);
-              opacity: 1;
-            }
-          }
-
-          .history-modal-container {
-            background: var(--card-bg, #ffffff);
-            border-radius: 1.25rem;
-            max-width: 700px;
-            width: 100%;
-            max-height: 90vh;
-            display: flex;
-            flex-direction: column;
-            box-shadow: 0 25px 80px rgba(0, 0, 0, 0.3);
-            animation: historySlideUp 0.25s ease;
-            overflow: hidden;
-          }
-
-          .history-modal-header {
-            display: flex;
-            justify-content: space-between;
-            align-items: center;
-            padding: 1.25rem 1.5rem;
-            border-bottom: 1px solid var(--border-color, #e2e8f0);
-            flex-shrink: 0;
-          }
-
-          .history-modal-header h3 {
-            font-size: 1.125rem;
-            font-weight: 600;
-            color: var(--text-primary, #0f172a);
-            margin: 0;
-          }
-
-          .history-modal-close {
-            background: none;
-            border: none;
-            cursor: pointer;
-            color: var(--text-secondary, #64748b);
-            padding: 0.4rem;
-            border-radius: 0.5rem;
-            transition: all 0.2s;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-          }
-
-          .history-modal-close:hover {
-            background: var(--hover-bg, #f1f5f9);
-            color: var(--text-primary, #0f172a);
-          }
-
-          .history-modal-close svg {
-            width: 1.5rem;
-            height: 1.5rem;
-          }
-
-          .history-modal-body {
-            padding: 1.5rem;
-            overflow-y: auto;
-            flex: 1;
-          }
-
-          .history-list {
-            max-height: 350px;
-            overflow-y: auto;
-            border: 1px solid var(--border-color, #e2e8f0);
-            border-radius: 0.5rem;
-          }
-
-          .history-table {
-            width: 100%;
-            border-collapse: collapse;
-            font-size: 0.875rem;
-          }
-
-          .history-table th {
-            padding: 0.5rem 0.75rem;
-            text-align: left;
-            background: var(--bg-primary, #f8fafc);
-            border-bottom: 2px solid var(--border-color, #e2e8f0);
-            font-weight: 600;
-            color: var(--text-secondary, #64748b);
-            font-size: 0.75rem;
-            text-transform: uppercase;
-            letter-spacing: 0.05em;
-            position: sticky;
-            top: 0;
-            z-index: 1;
-          }
-
-          .history-table td {
-            padding: 0.5rem 0.75rem;
-            border-bottom: 1px solid var(--border-color, #e2e8f0);
-          }
-
-          .history-table tr:hover {
-            background: var(--hover-bg, #f1f5f9);
-          }
-
-          .history-empty {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-secondary, #64748b);
-          }
-
-          .history-loading {
-            text-align: center;
-            padding: 2rem;
-            color: var(--text-secondary, #64748b);
-          }
-
-          .history-summary {
-            display: flex;
-            justify-content: space-between;
-            padding: 0.75rem 0;
-            margin-top: 0.75rem;
-            border-top: 1px solid var(--border-color, #e2e8f0);
-            font-size: 0.875rem;
-            color: var(--text-secondary, #64748b);
-            font-weight: 500;
-          }
-
-          .history-modal-footer {
-            display: flex;
-            gap: 0.75rem;
-            justify-content: flex-end;
-            padding-top: 1rem;
-            border-top: 1px solid var(--border-color, #e2e8f0);
-            margin-top: 1rem;
-          }
-
-          .history-modal-close-btn {
-            padding: 0.5rem 1.25rem;
-            background: var(--bg-primary, #f1f5f9);
-            border: 1px solid var(--border-color, #e2e8f0);
-            border-radius: 0.5rem;
-            font-size: 0.875rem;
-            font-weight: 500;
-            color: var(--text-primary, #0f172a);
-            cursor: pointer;
-            transition: all 0.2s;
-          }
-
-          .history-modal-close-btn:hover {
-            background: var(--hover-bg, #e2e8f0);
-          }
-
-          @media (max-width: 768px) {
-            .history-modal-container {
-              max-width: 100%;
-              margin: 0.5rem;
-              max-height: 95vh;
-            }
-
-            .history-modal-body {
-              padding: 1rem;
-            }
-
-            .history-modal-header {
-              padding: 0.75rem 1rem;
-            }
-
-            .history-modal-header h3 {
-              font-size: 1rem;
-            }
-
-            .history-table {
-              font-size: 0.75rem;
-            }
-
-            .history-table th,
-            .history-table td {
-              padding: 0.3rem 0.4rem;
-            }
-          }
-
-          @media (max-width: 480px) {
-            .history-modal-overlay {
-              padding: 0.5rem;
-            }
-
-            .history-modal-footer {
-              flex-direction: column;
-            }
-
-            .history-modal-footer button {
-              width: 100%;
-              justify-content: center;
-            }
-          }
-        `}</style>
-      </>
-    );
+  const viewBillTransactions = (bill) => {
+    if (setActiveView) {
+      // Pass the bill data as filter
+      setActiveView('transactions', { 
+        name: bill.name, 
+        category: bill.category 
+      });
+    }
   };
 
   return (
@@ -501,65 +187,62 @@ const Bills = ({ finance }) => {
       </div>
 
       <div className="finance-bills-grid">
-        {bills.map((bill) => {
-          const statusInfo = getStatusInfo(bill);
-          return (
-            <div key={bill.id} className="finance-bill-item">
-              <div className="finance-bill-header">
-                <h3>{bill.name}</h3>
-                <span className={`finance-bill-status ${bill.active ? 'active' : 'inactive'}`}>
-                  {bill.active ? 'Active' : 'Inactive'}
-                </span>
-              </div>
-              <div className="finance-bill-details">
-                <div className="finance-bill-detail">
-                  <span>Category</span>
-                  <span>{bill.category}</span>
-                </div>
-                <div className="finance-bill-detail">
-                  <span>Amount</span>
-                  <span>₱{bill.amount.toLocaleString()}</span>
-                </div>
-                <div className="finance-bill-detail">
-                  <span>Due Day</span>
-                  <span>Day {bill.due_day}</span>
-                </div>
-                <div className="finance-bill-detail">
-                  <span>Frequency</span>
-                  <span>{bill.frequency}</span>
-                </div>
-                {bill.notes && (
-                  <div className="finance-bill-detail">
-                    <span>Notes</span>
-                    <span>{bill.notes}</span>
-                  </div>
-                )}
-              </div>
-              <div className="finance-bill-actions">
-                <button 
-                  className="finance-action-btn pay" 
-                  onClick={() => openPaymentModal(bill)}
-                  title="Record Payment"
-                >
-                  <CreditCardIcon className="finance-action-icon" />
-                </button>
-                <button 
-                  className="finance-action-btn history" 
-                  onClick={() => openHistoryModal(bill)}
-                  title="View Payment History"
-                >
-                  <ClockIcon className="finance-action-icon" />
-                </button>
-                <button className="finance-action-btn edit" onClick={() => openEdit(bill)}>
-                  <PencilSquareIcon className="finance-action-icon" />
-                </button>
-                <button className="finance-action-btn delete" onClick={() => handleDelete(bill.id)}>
-                  <TrashIcon className="finance-action-icon" />
-                </button>
-              </div>
+        {bills.map((bill) => (
+          <div key={bill.id} className="finance-bill-item">
+            <div className="finance-bill-header">
+              <h3>{bill.name}</h3>
+              <span className={`finance-bill-status ${bill.active ? 'active' : 'inactive'}`}>
+                {bill.active ? 'Active' : 'Inactive'}
+              </span>
             </div>
-          );
-        })}
+            <div className="finance-bill-details">
+              <div className="finance-bill-detail">
+                <span>Category</span>
+                <span>{bill.category}</span>
+              </div>
+              <div className="finance-bill-detail">
+                <span>Amount</span>
+                <span>₱{bill.amount.toLocaleString()}</span>
+              </div>
+              <div className="finance-bill-detail">
+                <span>Due Day</span>
+                <span>Day {bill.due_day}</span>
+              </div>
+              <div className="finance-bill-detail">
+                <span>Frequency</span>
+                <span>{bill.frequency}</span>
+              </div>
+              {bill.notes && (
+                <div className="finance-bill-detail">
+                  <span>Notes</span>
+                  <span>{bill.notes}</span>
+                </div>
+              )}
+            </div>
+            <div className="finance-bill-actions">
+              <button 
+                className="finance-action-btn pay" 
+                onClick={() => openPaymentModal(bill)}
+                title="Record Payment"
+              >
+                <CreditCardIcon className="finance-action-icon" />
+              </button>
+              <button 
+                className="finance-action-btn transactions" 
+                onClick={() => viewBillTransactions(bill)}
+                title="View Transactions for this bill"
+              >
+                <DocumentTextIcon className="finance-action-icon" />
+              </button>
+              <button className="finance-action-btn edit" onClick={() => openEdit(bill)}>
+                <PencilSquareIcon className="finance-action-icon" />
+              </button>
+              <button className="finance-action-btn delete" onClick={() => handleDelete(bill.id)}>
+                <TrashIcon className="finance-action-icon" />
+              </button>
+            </div>
+          </div>
+        ))}
       </div>
 
       {bills.length === 0 && (
@@ -665,9 +348,6 @@ const Bills = ({ finance }) => {
         onPay={handlePayment}
         isProcessing={isProcessing}
       />
-
-      {/* History Modal */}
-      {renderHistoryModal()}
 
       <style>{`
         .finance-bills-view {
@@ -811,11 +491,11 @@ const Bills = ({ finance }) => {
           color: #10b981;
         }
 
-        .finance-action-btn.history:hover {
+        .finance-action-btn.transactions:hover {
           background: rgba(59, 130, 246, 0.1);
         }
 
-        .finance-action-btn.history:hover .finance-action-icon {
+        .finance-action-btn.transactions:hover .finance-action-icon {
           color: #3b82f6;
         }
 
@@ -937,69 +617,6 @@ const Bills = ({ finance }) => {
           cursor: not-allowed;
         }
 
-        /* History Modal */
-        .history-modal {
-          max-width: 700px !important;
-        }
-
-        .history-list {
-          max-height: 350px;
-          overflow-y: auto;
-        }
-
-        .history-table {
-          width: 100%;
-          border-collapse: collapse;
-          font-size: 0.875rem;
-        }
-
-        .history-table th {
-          padding: 0.5rem 0.75rem;
-          text-align: left;
-          background: var(--bg-primary, #f8fafc);
-          border-bottom: 2px solid var(--border-color, #e2e8f0);
-          font-weight: 600;
-          color: var(--text-secondary, #64748b);
-          font-size: 0.75rem;
-          text-transform: uppercase;
-          letter-spacing: 0.05em;
-          position: sticky;
-          top: 0;
-          z-index: 1;
-        }
-
-        .history-table td {
-          padding: 0.5rem 0.75rem;
-          border-bottom: 1px solid var(--border-color, #e2e8f0);
-        }
-
-        .history-table tr:hover {
-          background: var(--hover-bg, #f1f5f9);
-        }
-
-        .history-empty {
-          text-align: center;
-          padding: 2rem;
-          color: var(--text-secondary, #64748b);
-        }
-
-        .history-loading {
-          text-align: center;
-          padding: 2rem;
-          color: var(--text-secondary, #64748b);
-        }
-
-        .history-summary {
-          display: flex;
-          justify-content: space-between;
-          padding: 0.75rem 0;
-          margin-top: 0.75rem;
-          border-top: 1px solid var(--border-color, #e2e8f0);
-          font-size: 0.875rem;
-          color: var(--text-secondary, #64748b);
-          font-weight: 500;
-        }
-
         @media (max-width: 768px) {
           .finance-view-header {
             flex-direction: column;
@@ -1013,20 +630,6 @@ const Bills = ({ finance }) => {
 
           .finance-form-row {
             grid-template-columns: 1fr;
-          }
-
-          .history-modal {
-            max-width: 100% !important;
-            margin: 0.5rem;
-          }
-
-          .history-table {
-            font-size: 0.75rem;
-          }
-
-          .history-table th,
-          .history-table td {
-            padding: 0.3rem 0.4rem;
           }
         }
       `}</style>

@@ -9,6 +9,7 @@ import {
   ExclamationCircleIcon,
 } from '@heroicons/react/24/outline';
 import Modal from './Modal';
+import { ChartContainer, BudgetBarChart, CHART_COLORS } from './Chart';
 
 const Budget = ({ finance }) => {
   const {
@@ -30,6 +31,15 @@ const Budget = ({ finance }) => {
   ];
 
   const budgetStatus = getBudgetStatus();
+
+  // Prepare chart data - limit to top categories for cleaner display
+  const chartData = budgetStatus
+    .map(budget => ({
+      category: budget.category.length > 12 ? budget.category.substring(0, 10) + '...' : budget.category,
+      budget: budget.amount,
+      actual: budget.spent,
+    }))
+    .slice(0, 8); // Show top 8 categories
 
   const openAdd = () => {
     setBudgetForm({ category: '', amount: '' });
@@ -85,6 +95,18 @@ const Budget = ({ finance }) => {
         </button>
       </div>
 
+      {/* Budget vs Actual Chart - Smaller */}
+      {budgetStatus.length > 0 && (
+        <div className="finance-budget-chart">
+          <ChartContainer title="Budget vs Actual Spending">
+            <div className="budget-chart-wrapper">
+              <BudgetBarChart data={chartData} height={200} />
+            </div>
+          </ChartContainer>
+        </div>
+      )}
+
+      {/* Budget Summary Cards */}
       <div className="finance-budget-grid">
         {budgetStatus.map((budget) => (
           <div key={budget.category} className="finance-budget-item">
@@ -211,6 +233,18 @@ const Budget = ({ finance }) => {
         .finance-add-btn-icon {
           width: 1.125rem;
           height: 1.125rem;
+        }
+
+        .finance-budget-chart {
+          margin-bottom: 1.5rem;
+          max-width: 700px;
+          margin-left: auto;
+          margin-right: auto;
+        }
+
+        .budget-chart-wrapper {
+          height: 200px;
+          width: 100%;
         }
 
         .finance-budget-grid {
@@ -429,6 +463,20 @@ const Budget = ({ finance }) => {
 
           .finance-budget-grid {
             grid-template-columns: 1fr;
+          }
+
+          .finance-budget-chart {
+            max-width: 100%;
+          }
+
+          .budget-chart-wrapper {
+            height: 180px;
+          }
+        }
+
+        @media (max-width: 480px) {
+          .budget-chart-wrapper {
+            height: 150px;
           }
         }
       `}</style>

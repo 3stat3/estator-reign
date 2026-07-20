@@ -27,6 +27,7 @@
     "react-hot-toast": "^2.6.0",
     "react-router-dom": "^7.15.1",
     "reactflow": "^11.11.4",
+    "recharts": "^3.9.2",
     "relatives-tree": "^1.0.0",
     "xlsx": "^0.18.5",
     "yup": "^1.7.1"
