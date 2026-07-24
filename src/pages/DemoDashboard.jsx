@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
-import FinanceTracker from '../components/FinanceTracker/FinanceTracker';
+import PersonalFinanceTracker from '../components/PersonalTools/PersonalFinanceTracker';  // <-- FIXED IMPORT
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -16,12 +16,13 @@ import {
   EyeIcon,
   ChartPieIcon,
   WrenchScrewdriverIcon,
-  Squares2X2Icon
+  Squares2X2Icon,
+  WalletIcon  // <-- Added for Finance Tracker icon
 } from '@heroicons/react/24/outline';
 
 const DemoDashboard = () => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('calculator');
+  const [activeTab, setActiveTab] = useState('finance'); // Set Finance Tracker as default
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -86,9 +87,6 @@ const DemoDashboard = () => {
     { id: 'vanishing-deduction', label: 'Vanishing Deduction', icon: WrenchScrewdriverIcon, locked: true },
   ];
 
-  // Finance Tracker is the only fully accessible feature
-  const financeItem = { id: 'finance', label: 'Finance Tracker', icon: ChartPieIcon };
-
   const notifications = [
     { id: 1, title: 'Demo Mode - View Only', message: 'You can see all features but cannot interact. Full access after admin approval.', time: 'Just now', read: false },
     { id: 2, title: 'Finance Tracker Available', message: 'Track your personal finances in demo mode.', time: '2 min ago', read: false },
@@ -147,7 +145,7 @@ const DemoDashboard = () => {
               Track your income, expenses, and savings
             </p>
           </div>
-          <FinanceTracker />
+          <PersonalFinanceTracker />  {/* <-- Using the correct component */}
         </motion.div>
       );
     }
@@ -301,7 +299,7 @@ const DemoDashboard = () => {
               onClick={() => setActiveTab('finance')}
               className={`nav-tab ${activeTab === 'finance' ? 'active' : ''}`}
             >
-              <ChartPieIcon className="tab-icon" />
+              <WalletIcon className="tab-icon" />
               <span>Finance Tracker</span>
               {activeTab === 'finance' && (
                 <motion.div className="tab-indicator" layoutId="activeTab" />
@@ -315,7 +313,7 @@ const DemoDashboard = () => {
               onClick={() => setActiveTab('finance')}
               className={`nav-tab ${activeTab === 'finance' ? 'active' : ''}`}
             >
-              <ChartPieIcon className="tab-icon" />
+              <WalletIcon className="tab-icon" />
               <span>Finance</span>
               {activeTab === 'finance' && (
                 <motion.div className="tab-indicator" layoutId="activeTabMobile" />
