@@ -78,42 +78,102 @@ export const AuthProvider = ({ children }) => {
         }
     }, [darkMode]);
 
+    // ============ UPDATED fetchUser FUNCTION ============
     const fetchUser = async (userId) => {
         try {
+            // Use maybeSingle() instead of single() to avoid 406 errors
             const { data: profile, error } = await supabase
                 .from('profiles')
                 .select('*')
                 .eq('id', userId)
-                .single();
+                .maybeSingle();
 
-            if (error) {
+            // If no profile exists, create one
+            if (!profile && error?.code === 'PGRST116') {
+                console.log('Profile not found, creating one...');
+                
+                // Get the user from auth
+                const { data: { user }, error: userError } = await supabase.auth.getUser();
+                
+                if (userError) {
+                    console.error('Error getting user:', userError);
+                    throw userError;
+                }
+
+                if (user) {
+                    // Create the profile
+                    const { data: newProfile, error: insertError } = await supabase
+                        .from('profiles')
+                        .insert([{
+                            id: user.id,
+                            email: user.email,
+                            username: user.user_metadata?.username || user.email.split('@')[0],
+                            full_name: user.user_metadata?.full_name || 'User',
+                            position: user.user_metadata?.position || 'Not Specified',
+                            role: 'regular_user',
+                            approval_status: 'pending_initial',
+                            created_at: new Date().toISOString(),
+                            updated_at: new Date().toISOString()
+                        }])
+                        .select()
+                        .maybeSingle();
+
+                    if (insertError) {
+                        console.error('Error creating profile:', insertError);
+                        throw insertError;
+                    }
+
+                    if (newProfile) {
+                        const userData = {
+                            id: newProfile.id,
+                            email: newProfile.email,
+                            username: newProfile.username,
+                            full_name: newProfile.full_name,
+                            role: newProfile.role,
+                            approval_status: newProfile.approval_status,
+                            position: newProfile.position
+                        };
+                        setUser(userData);
+                        localStorage.setItem('user', JSON.stringify(userData));
+                        return userData;
+                    }
+                }
+            }
+
+            // If there's a real error (not "no rows"), throw it
+            if (error && error.code !== 'PGRST116') {
                 throw error;
             }
 
-            if (!profile) {
-                throw new Error('Profile not found');
+            // If profile exists, return it
+            if (profile) {
+                const userData = {
+                    id: profile.id,
+                    email: profile.email,
+                    username: profile.username,
+                    full_name: profile.full_name,
+                    role: profile.role,
+                    approval_status: profile.approval_status,
+                    position: profile.position
+                };
+                
+                setUser(userData);
+                localStorage.setItem('user', JSON.stringify(userData));
+                
+                return userData;
             }
 
-            const userData = {
-                id: profile.id,
-                email: profile.email,
-                username: profile.username,
-                full_name: profile.full_name,
-                role: profile.role,
-                approval_status: profile.approval_status,
-                position: profile.position
-            };
+            // If we get here, something went wrong
+            throw new Error('Unable to fetch or create profile');
             
-            setUser(userData);
-            localStorage.setItem('user', JSON.stringify(userData));
-            
-            return userData;
         } catch (error) {
+            console.error('Error in fetchUser:', error);
             setUser(null);
             localStorage.removeItem('user');
             throw error;
         }
     };
+    // ============ END OF UPDATED fetchUser FUNCTION ============
 
     const register = async (email, password, username, fullName, position) => {
         setError(null);
@@ -137,6 +197,7 @@ export const AuthProvider = ({ children }) => {
             if (signUpError) throw signUpError;
 
             if (authData.user) {
+                // Try to insert profile, but don't fail if it already exists or trigger creates it
                 const { error: profileError } = await supabase
                     .from('profiles')
                     .insert([{
@@ -149,7 +210,11 @@ export const AuthProvider = ({ children }) => {
                         approval_status: 'pending_initial'
                     }]);
 
-                if (profileError) throw profileError;
+                // Only throw if it's not a duplicate or RLS error
+                if (profileError && profileError.code !== '23505' && !profileError.message.includes('policy')) {
+                    console.warn('Profile insert warning:', profileError);
+                    // Don't throw - the trigger might create it
+                }
                 
                 sessionStorage.setItem('pendingVerificationEmail', email);
                 
@@ -423,7 +488,7 @@ export const AuthProvider = ({ children }) => {
         verifyResetToken,
         updatePassword,
         
-        // Email confirmation methods (NEW)
+        // Email confirmation methods
         confirmEmail,
         resendConfirmationEmail,
         isEmailConfirmed,
