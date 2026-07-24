@@ -9,8 +9,6 @@ import {
   KeyIcon,
   ArrowRightIcon,
   ShieldCheckIcon,
-  DevicePhoneMobileIcon,
-  FingerPrintIcon,
   ArrowPathIcon,
   ExclamationTriangleIcon,
   CheckBadgeIcon,
@@ -66,7 +64,7 @@ const ThemeProvider = ({ children }) => {
 
 const Login = () => {
   const [showPassword, setShowPassword] = useState(false);
-  const [error, setError] = useState('');
+  const [displayError, setDisplayError] = useState('');
   const [loading, setLoading] = useState(false);
   const [show2FA, setShow2FA] = useState(false);
   const [twoFactorCode, setTwoFactorCode] = useState('');
@@ -78,12 +76,12 @@ const Login = () => {
   const [suggestedEmail, setSuggestedEmail] = useState('');
   const [isMobile, setIsMobile] = useState(false);
   const { theme, toggleTheme } = useTheme();
-  const { login, loginWith2FA, sendMagicLink, loginWithBiometrics } = useAuth();
+  const { login, loginWith2FA, sendMagicLink } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const emailInputRef = useRef(null);
   
-  const from = location.state?.from?.pathname || '/welcome';
+  const from = location.state?.from?.pathname || '/dashboard';
   
   const {
     register,
@@ -161,38 +159,17 @@ const Login = () => {
     }
   }, [emailValue, errors.email]);
   
-  // Biometric login
-  const handleBiometricLogin = async () => {
-    if (!window.PublicKeyCredential) {
-      setError('WebAuthn not supported on this browser');
-      return;
-    }
-    
-    try {
-      setLoading(true);
-      const result = await loginWithBiometrics();
-      if (result.success) {
-        navigate(from, { replace: true });
-      }
-    } catch (err) {
-      setError('Biometric authentication failed');
-    } finally {
-      setLoading(false);
-    }
-  };
-  
   // Magic link login
   const handleMagicLink = async () => {
     if (!emailValue) {
-      setError('Please enter your email first');
+      setDisplayError('Please enter your email first');
       emailInputRef.current?.focus();
       return;
     }
     
-    // Validate email format
     const isValidEmail = await trigger('email');
     if (!isValidEmail) {
-      setError('Please enter a valid email address');
+      setDisplayError('Please enter a valid email address');
       return;
     }
     
@@ -200,9 +177,9 @@ const Login = () => {
       setLoading(true);
       await sendMagicLink(emailValue);
       setMagicLinkSent(true);
-      setError('');
+      setDisplayError('');
     } catch (err) {
-      setError('Failed to send magic link. Please try again.');
+      setDisplayError('Failed to send magic link. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -210,12 +187,13 @@ const Login = () => {
   
   // Main login handler
   const onSubmit = async (data) => {
+    setDisplayError('');
+    
     if (cooldownTime > 0) {
-      setError(`Too many attempts. Please wait ${cooldownTime} seconds.`);
+      setDisplayError(`Too many attempts. Please wait ${cooldownTime} seconds.`);
       return;
     }
     
-    setError('');
     setLoading(true);
     
     try {
@@ -229,21 +207,23 @@ const Login = () => {
       
       const result = await login(data.email, data.password, deviceInfo);
       
-      if (result.requires2FA) {
-        setShow2FA(true);
-        setLoading(false);
-        return;
-      }
-      
-      if (result.user) {
-        await handleUserApproval(result.user);
-      } else {
-        setAttempts(prev => prev + 1);
-        if (attempts + 1 >= 5) {
+      if (result?.error) {
+        const errorMessageText = result.error;
+        
+        const newAttempts = attempts + 1;
+        setAttempts(newAttempts);
+        
+        let displayErrorMsg;
+        if (newAttempts >= 5) {
           setCooldownTime(30);
+          displayErrorMsg = `Too many failed attempts. Please wait 30 seconds.`;
+        } else {
+          const remainingAttempts = 5 - newAttempts;
+          displayErrorMsg = `${errorMessageText}. ${remainingAttempts} attempt(s) remaining.`;
         }
-        setError('Invalid email or password');
-        // Trigger shake animation on form
+        
+        setDisplayError(displayErrorMsg);
+        
         const formElement = document.querySelector('.login-form');
         if (formElement) {
           formElement.classList.add('shake');
@@ -251,9 +231,42 @@ const Login = () => {
             formElement.classList.remove('shake');
           }, 500);
         }
+        
+        setLoading(false);
+        return;
+      }
+      
+      if (result?.user) {
+        setDisplayError('');
+        await handleUserApproval(result.user);
+      } else {
+        setDisplayError('Login failed. Please try again.');
+        setLoading(false);
       }
     } catch (err) {
-      setError(err.response?.data?.error || 'Login failed. Please try again.');
+      const errorMessageText = err?.message || 'Invalid email or password';
+      
+      const newAttempts = attempts + 1;
+      setAttempts(newAttempts);
+      
+      let displayErrorMsg;
+      if (newAttempts >= 5) {
+        setCooldownTime(30);
+        displayErrorMsg = `Too many failed attempts. Please wait 30 seconds.`;
+      } else {
+        const remainingAttempts = 5 - newAttempts;
+        displayErrorMsg = `${errorMessageText}. ${remainingAttempts} attempt(s) remaining.`;
+      }
+      
+      setDisplayError(displayErrorMsg);
+      
+      const formElement = document.querySelector('.login-form');
+      if (formElement) {
+        formElement.classList.add('shake');
+        setTimeout(() => {
+          formElement.classList.remove('shake');
+        }, 500);
+      }
     } finally {
       setLoading(false);
     }
@@ -263,16 +276,17 @@ const Login = () => {
   const handle2FASubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
+    setDisplayError('');
     
     try {
       const result = await loginWith2FA(twoFactorCode);
       if (result.user) {
         await handleUserApproval(result.user);
       } else {
-        setError('Invalid 2FA code');
+        setDisplayError('Invalid 2FA code. Please try again.');
       }
     } catch (err) {
-      setError('2FA verification failed');
+      setDisplayError('2FA verification failed. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -281,60 +295,28 @@ const Login = () => {
   const handleUserApproval = async (user) => {
     switch (user.approval_status) {
       case 'approved':
-        navigate('/welcome', { replace: true });
+        navigate('/dashboard', { replace: true });
         break;
       case 'pending_initial':
-        setError(
-          <div className="approval-status pending">
-            <AcademicCapIcon className="icon" />
-            <div>
-              <strong>Account Pending Initial Approval</strong>
-              <p>Your account is awaiting review by an admin. You'll receive an email once approved.</p>
-            </div>
-          </div>
-        );
+        setDisplayError('Account Pending Initial Approval - Your account is awaiting review by an admin.');
         break;
       case 'pending_final':
-        setError(
-          <div className="approval-status pending-final">
-            <BuildingOfficeIcon className="icon" />
-            <div>
-              <strong>Pending Final Approval</strong>
-              <p>Super admin review required. Estimated wait time: 24-48 hours.</p>
-            </div>
-          </div>
-        );
+        setDisplayError('Pending Final Approval - Super admin review required. Estimated wait time: 24-48 hours.');
         break;
       case 'rejected':
-        setError(
-          <div className="approval-status rejected">
-            <ExclamationTriangleIcon className="icon" />
-            <div>
-              <strong>Account Rejected</strong>
-              <p>Your application was not approved. Please contact support with reference #{user.id}</p>
-            </div>
-          </div>
-        );
+        setDisplayError('Account Rejected - Your application was not approved. Please contact support.');
         break;
       case 'frozen':
-        setError(
-          <div className="approval-status frozen">
-            <ShieldCheckIcon className="icon" />
-            <div>
-              <strong>Account Frozen</strong>
-              <p>Security hold detected. Please verify your identity or contact support.</p>
-            </div>
-          </div>
-        );
+        setDisplayError('Account Frozen - Security hold detected. Please verify your identity or contact support.');
         break;
       default:
-        setError('Invalid account status');
+        setDisplayError('Invalid account status');
     }
   };
   
   return (
     <div className={`login-container ${theme}`} data-theme={theme}>
-      {/* Dynamic background that changes with theme */}
+      {/* Dynamic background */}
       <div className="login-background">
         <div className={`bg-gradient ${theme}`}></div>
         <div className="bg-pattern"></div>
@@ -373,19 +355,21 @@ const Login = () => {
             </p>
           </div>
           
-          {/* Error Display */}
-          <AnimatePresence>
-            {error && (
-              <motion.div
-                initial={{ opacity: 0, height: 0 }}
-                animate={{ opacity: 1, height: 'auto' }}
-                exit={{ opacity: 0, height: 0 }}
-                className="error-message"
-              >
-                {typeof error === 'string' ? error : error}
-              </motion.div>
-            )}
-          </AnimatePresence>
+          {/* ERROR DISPLAY */}
+          {displayError && (
+            <div style={{
+              background: 'rgba(220, 38, 38, 0.1)',
+              color: '#ef4444',
+              borderLeft: '4px solid #ef4444',
+              padding: '0.75rem 1rem',
+              borderRadius: '0.75rem',
+              marginBottom: '1.5rem',
+              fontSize: '0.875rem',
+              wordBreak: 'break-word'
+            }}>
+              {displayError}
+            </div>
+          )}
           
           {/* Magic Link Success */}
           {magicLinkSent && (
@@ -540,7 +524,7 @@ const Login = () => {
                 </div>
               )}
               
-              {/* Email Suggestion - moved after form to show only when needed */}
+              {/* Email Suggestion */}
               {suggestedEmail && !show2FA && !showPasswordless && !errors.email && emailValue && emailValue.length > 0 && (
                 <motion.div
                   initial={{ opacity: 0 }}
@@ -561,39 +545,9 @@ const Login = () => {
                 </motion.div>
               )}
               
-              {/* Alternative Login Methods */}
+              {/* Divider */}
               <div className="divider">
-                <span>or continue with</span>
-              </div>
-              
-              <div className="social-login">
-                {window.PublicKeyCredential && (
-                  <button
-                    onClick={handleBiometricLogin}
-                    className="social-btn biometric"
-                    disabled={loading}
-                  >
-                    <FingerPrintIcon />
-                    <span>{isMobile ? '' : 'Biometric'}</span>
-                  </button>
-                )}
-                
-                <button className="social-btn google">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" fill="#4285F4"/>
-                    <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" fill="#34A853"/>
-                    <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l2.85-2.22.81-.62z" fill="#FBBC05"/>
-                    <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z" fill="#EA4335"/>
-                  </svg>
-                  <span>{isMobile ? '' : 'Google'}</span>
-                </button>
-                
-                <button className="social-btn github">
-                  <svg viewBox="0 0 24 24">
-                    <path d="M12 2C6.48 2 2 6.48 2 12c0 4.42 2.87 8.17 6.84 9.49.5.09.68-.21.68-.48 0-.24-.01-.88-.01-1.73-2.78.6-3.37-1.34-3.37-1.34-.46-1.16-1.11-1.47-1.11-1.47-.91-.62.07-.61.07-.61 1 .07 1.53 1.03 1.53 1.03.89 1.52 2.34 1.08 2.91.83.09-.65.35-1.09.63-1.34-2.22-.25-4.55-1.11-4.55-4.94 0-1.09.39-1.98 1.03-2.68-.1-.25-.45-1.27.1-2.64 0 0 .84-.27 2.75 1.02.8-.22 1.65-.33 2.5-.33.85 0 1.7.11 2.5.33 1.91-1.29 2.75-1.02 2.75-1.02.55 1.37.2 2.39.1 2.64.64.7 1.03 1.59 1.03 2.68 0 3.84-2.34 4.69-4.57 4.94.36.31.68.92.68 1.85 0 1.34-.01 2.42-.01 2.75 0 .27.18.58.69.48A10.02 10.02 0 0022 12c0-5.52-4.48-10-10-10z"/>
-                  </svg>
-                  <span>{isMobile ? '' : 'GitHub'}</span>
-                </button>
+                <span>or</span>
               </div>
               
               {/* Toggle Passwordless */}
@@ -609,7 +563,7 @@ const Login = () => {
           ) : (
             <form onSubmit={handle2FASubmit} className="twofa-form">
               <div className="twofa-header">
-                <DevicePhoneMobileIcon className="twofa-icon" />
+                <ShieldCheckIcon className="twofa-icon" />
                 <h3>Two-Factor Authentication</h3>
                 <p>Enter the 6-digit code from your authenticator app</p>
               </div>
@@ -705,21 +659,13 @@ const Login = () => {
           transition: all 0.3s ease;
         }
         
-        /* Light mode gradient */
         .bg-gradient:not(.dark) {
           background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
         }
         
-        /* Dark mode gradient - darker, more subtle */
         .bg-gradient.dark {
           background: linear-gradient(135deg, #2d3748 0%, #1a202c 100%);
         }
-        
-        /* Alternative: Keep purple but darker for dark mode */
-        /* .bg-gradient.dark {
-          background: linear-gradient(135deg, #4c51bf 0%, #5b3a8a 100%);
-          opacity: 0.8;
-        } */
         
         .bg-pattern {
           position: absolute;
@@ -748,7 +694,6 @@ const Login = () => {
           position: relative;
         }
         
-        /* Theme Toggle */
         .theme-toggle-wrapper {
           position: absolute;
           top: clamp(1rem, 3vw, 1.5rem);
@@ -832,40 +777,30 @@ const Login = () => {
           font-size: clamp(0.75rem, 3vw, 0.875rem);
         }
         
-        /* Error and Success Messages */
-        .error-message, .success-message, .suggestion-message {
+        .success-message {
           display: flex;
           align-items: center;
           gap: 0.75rem;
           padding: clamp(0.5rem, 2vw, 0.75rem) clamp(0.75rem, 3vw, 1rem);
+          background: rgba(34, 197, 94, 0.1);
+          color: #22c55e;
+          border-left: 4px solid #22c55e;
           border-radius: 0.75rem;
           margin-bottom: 1.5rem;
           font-size: clamp(0.75rem, 3vw, 0.875rem);
         }
         
-        .error-message {
-          background: rgba(220, 38, 38, 0.1);
-          color: #ef4444;
-          border-left: 4px solid #ef4444;
-        }
-        
-        .success-message {
-          background: rgba(34, 197, 94, 0.1);
-          color: #22c55e;
-          border-left: 4px solid #22c55e;
-        }
-        
         .suggestion-message {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          padding: clamp(0.5rem, 2vw, 0.75rem) clamp(0.75rem, 3vw, 1rem);
           background: rgba(245, 158, 11, 0.1);
           color: #f59e0b;
           border-left: 4px solid #f59e0b;
+          border-radius: 0.75rem;
           margin-bottom: 1.5rem;
-        }
-        
-        .error-message .icon, .success-message .icon, .suggestion-message .icon {
-          width: 1.25rem;
-          height: 1.25rem;
-          flex-shrink: 0;
+          font-size: clamp(0.75rem, 3vw, 0.875rem);
         }
         
         .suggestion-btn {
@@ -878,7 +813,6 @@ const Login = () => {
           text-decoration: underline;
         }
         
-        /* Forms */
         .login-form, .twofa-form {
           display: flex;
           flex-direction: column;
@@ -1052,7 +986,7 @@ const Login = () => {
           content: '';
           position: absolute;
           top: 50%;
-          width: calc(50% - 60px);
+          width: calc(50% - 30px);
           height: 1px;
           background: var(--border-color);
         }
@@ -1072,66 +1006,9 @@ const Login = () => {
           font-size: 0.75rem;
         }
         
-        /* Social Login */
-        .social-login {
-          display: flex;
-          gap: 0.75rem;
-          margin-bottom: 1rem;
-          flex-wrap: wrap;
-        }
-        
-        .social-btn {
-          flex: 1;
-          min-width: 0;
-          display: flex;
-          align-items: center;
-          justify-content: center;
-          gap: 0.5rem;
-          padding: 0.625rem;
-          border: 2px solid var(--border-color);
-          background: var(--input-bg);
-          border-radius: 0.75rem;
-          cursor: pointer;
-          transition: all 0.2s;
-          font-size: clamp(0.75rem, 3vw, 0.875rem);
-          font-weight: 500;
-          color: var(--text-primary);
-        }
-        
-        .social-btn:hover {
-          background: var(--hover-bg);
-          border-color: var(--text-secondary);
-        }
-        
-        .social-btn svg {
-          width: 1.25rem;
-          height: 1.25rem;
-          flex-shrink: 0;
-        }
-        
-        .social-btn.biometric {
-          background: linear-gradient(135deg, #1a202c, #2d3748);
-          color: white;
-          border: none;
-        }
-        
-        [data-theme="dark"] .social-btn.biometric {
-          background: linear-gradient(135deg, #334155, #1e293b);
-        }
-        
-        @media (max-width: 480px) {
-          .social-btn span {
-            display: none;
-          }
-          
-          .social-btn {
-            padding: 0.625rem;
-          }
-        }
-        
         .auth-toggle {
           text-align: center;
-          margin-top: 1rem;
+          margin-top: 0.5rem;
         }
         
         .toggle-link {
@@ -1143,7 +1020,6 @@ const Login = () => {
           text-decoration: underline;
         }
         
-        /* 2FA Section */
         .twofa-header {
           text-align: center;
         }
@@ -1190,7 +1066,6 @@ const Login = () => {
           font-size: 0.875rem;
         }
         
-        /* Sign Up Prompt */
         .signup-prompt {
           text-align: center;
           margin-top: 2rem;
@@ -1256,10 +1131,6 @@ const Login = () => {
           .login-card {
             max-width: 480px;
           }
-          
-          .social-btn span {
-            display: inline;
-          }
         }
         
         @media (min-width: 1025px) {
@@ -1300,7 +1171,6 @@ const Login = () => {
         @media (prefers-reduced-motion: reduce) {
           .login-card,
           .submit-btn,
-          .social-btn,
           .theme-toggle {
             transition: none;
           }

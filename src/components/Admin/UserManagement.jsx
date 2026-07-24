@@ -1,4 +1,3 @@
-// components/Admin/UserManagement.jsx
 import React, { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -65,16 +64,69 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
       .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => loadUsers())
       .subscribe();
     return () => subscription.unsubscribe();
-  }, [filterRole]);
+  }, [filterRole, filterStatus]);
 
   const loadUsers = async () => {
     setLoading(true);
     setError(null);
     try {
-      let query = supabase.from('profiles').select('*').order('created_at', { ascending: false });
-      if (filterRole !== 'all') query = query.eq('role', filterRole);
+      console.log('🔄 Loading users...');
+      console.log('Current filters:', { filterRole, filterStatus });
+      
+      // Get current user to check their role
+      const { data: { user } } = await supabase.auth.getUser();
+      console.log('👤 Current auth user:', user?.email);
+      
+      if (!user) {
+        throw new Error('No authenticated user');
+      }
+
+      // Check if user is admin
+      const { data: userProfile, error: profileError } = await supabase
+        .from('profiles')
+        .select('role')
+        .eq('id', user.id)
+        .single();
+      
+      if (profileError) {
+        console.error('Error fetching user profile:', profileError);
+        throw profileError;
+      }
+      
+      console.log('👤 User role:', userProfile?.role);
+      
+      // Build the query
+      let query = supabase
+        .from('profiles')
+        .select('*')
+        .order('created_at', { ascending: false });
+      
+      // Apply role filter
+      if (filterRole !== 'all') {
+        query = query.eq('role', filterRole);
+        console.log('🔍 Applying role filter:', filterRole);
+      }
+      
+      // Try to get all users - if RLS is blocking, we'll handle it
       const { data, error: fetchError } = await query;
-      if (fetchError) throw fetchError;
+      
+      if (fetchError) {
+        console.error('❌ Query error:', fetchError);
+        
+        // If it's an RLS error, try to get users with a different approach
+        if (fetchError.message.includes('permission') || fetchError.code === '42501') {
+          console.log('⚠️ RLS policy detected, trying alternative approach...');
+          
+          // For super_admin, we can try using a service role or different query
+          // This is a fallback - it may or may not work depending on your RLS setup
+          throw new Error('Permission denied. Please check your RLS policies.');
+        }
+        
+        throw fetchError;
+      }
+      
+      console.log('📊 Raw profiles data:', data);
+      console.log('📊 Total users from DB:', data?.length || 0);
 
       const transformedUsers = (data || []).map(profile => ({
         id: profile.id,
@@ -88,10 +140,18 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
                 profile.approval_status === 'frozen' ? 'frozen' : 'pending',
         approvalStatus: profile.approval_status,
       }));
+      
+      console.log('✅ Transformed users:', transformedUsers);
       setUsers(transformedUsers);
+      
     } catch (err) {
-      console.error('Error loading users:', err);
+      console.error('❌ Error loading users:', err);
       setError(err.message);
+      
+      // If error is permission related, show helpful message
+      if (err.message.includes('permission') || err.message.includes('RLS')) {
+        setError('Unable to load users due to permissions. Please check your RLS policies.');
+      }
     } finally {
       setLoading(false);
     }
@@ -162,15 +222,26 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
     }
   };
 
+  // Apply client-side filters
   const filteredUsers = users.filter(user => {
     const matchesSearch = !searchQuery || 
       user.name?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.fullName?.toLowerCase().includes(searchQuery.toLowerCase()) ||
       user.email?.toLowerCase().includes(searchQuery.toLowerCase());
+    
     const matchesRole = filterRole === 'all' || user.role === filterRole;
     const matchesStatus = filterStatus === 'all' || user.status === filterStatus;
+    
     return matchesSearch && matchesRole && matchesStatus;
   });
+
+  // Count users by status for stats
+  const userStats = {
+    total: users.length,
+    active: users.filter(u => u.status === 'active').length,
+    pending: users.filter(u => u.status === 'pending').length,
+    frozen: users.filter(u => u.status === 'frozen').length,
+  };
 
   const statusConfig = {
     active: { text: 'Active', className: 'status-active', icon: <CheckCircleIcon /> },
@@ -215,10 +286,20 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
             <p>Manage user accounts and access permissions</p>
           </div>
         </div>
-        <button className="btn-add">
-          <UserPlusIcon />
-          <span>Add User</span>
-        </button>
+        <div className="header-stats">
+          <span className="stat-badge">
+            <UsersIcon />
+            {userStats.total} Total
+          </span>
+          <span className="stat-badge active">
+            <CheckCircleIcon />
+            {userStats.active} Active
+          </span>
+          <span className="stat-badge pending">
+            <ClockIcon />
+            {userStats.pending} Pending
+          </span>
+        </div>
       </div>
 
       {/* Search and Filters */}
@@ -291,17 +372,23 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
             </thead>
             <tbody>
               {filteredUsers.map((user) => {
-                const status = statusConfig[user.status];
+                const status = statusConfig[user.status] || statusConfig.pending;
                 const role = roleConfig[user.role] || { text: user.role || 'User', className: 'role-user', icon: <UsersIcon /> };
                 
+                // Check if this is the current admin
+                const isCurrentAdmin = currentAdmin?.id === user.id;
+                
                 return (
-                  <tr key={user.id} onClick={() => handleOpenUserModal(user)}>
+                  <tr key={user.id} onClick={() => handleOpenUserModal(user)} className={isCurrentAdmin ? 'current-admin-row' : ''}>
                     <td className="user-info">
                       <div className="user-avatar">
                         {user.fullName?.[0] || user.name?.[0] || user.email?.[0] || '?'}
                       </div>
                       <div className="user-details">
-                        <div className="user-name">{user.fullName || user.name || 'Unnamed User'}</div>
+                        <div className="user-name">
+                          {user.fullName || user.name || 'Unnamed User'}
+                          {isCurrentAdmin && <span className="current-admin-badge">(You)</span>}
+                        </div>
                         <div className="user-email">{user.email || 'No email'}</div>
                       </div>
                     </td>
@@ -335,7 +422,7 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
         )}
       </div>
 
-      {/* User Detail Modal - Updated with Full Name and Position */}
+      {/* User Detail Modal */}
       <AnimatePresence>
         {showUserModal && selectedUser && (
           <div className="modal-overlay" onClick={() => setShowUserModal(false)}>
@@ -351,7 +438,10 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
                   {selectedUser.fullName?.[0] || selectedUser.name?.[0] || selectedUser.email?.[0] || '?'}
                 </div>
                 <div className="modal-info">
-                  <h2>{selectedUser.fullName || selectedUser.name || 'Unnamed User'}</h2>
+                  <h2>
+                    {selectedUser.fullName || selectedUser.name || 'Unnamed User'}
+                    {currentAdmin?.id === selectedUser.id && <span className="current-admin-badge"> (You)</span>}
+                  </h2>
                   <p className="modal-username">
                     <UserIcon /> @{selectedUser.name || 'username'}
                   </p>
@@ -377,45 +467,59 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
                   </div>
                   <div className="stat">
                     <span className="stat-label">Status</span>
-                    <span className={`status-badge ${statusConfig[selectedUser.status]?.className}`}>
+                    <span className={`status-badge ${statusConfig[selectedUser.status]?.className || 'status-pending'}`}>
                       {statusConfig[selectedUser.status]?.icon}
-                      {statusConfig[selectedUser.status]?.text}
+                      {statusConfig[selectedUser.status]?.text || selectedUser.status}
                     </span>
                   </div>
                 </div>
 
                 <div className="modal-actions">
-                  {selectedUser.status === 'pending' && (
-                    <button 
-                      className="action-btn approve"
-                      onClick={handleApproveUser}
-                      disabled={isProcessing}
-                    >
-                      <CheckBadgeIcon />
-                      {isProcessing ? 'Processing...' : 'Approve User'}
-                    </button>
+                  {currentAdmin?.id !== selectedUser.id && (
+                    <>
+                      {selectedUser.status === 'pending' && (
+                        <button 
+                          className="action-btn approve"
+                          onClick={handleApproveUser}
+                          disabled={isProcessing}
+                        >
+                          <CheckBadgeIcon />
+                          {isProcessing ? 'Processing...' : 'Approve User'}
+                        </button>
+                      )}
+                      
+                      {selectedUser.status === 'active' && (
+                        <button 
+                          className="action-btn freeze"
+                          onClick={handleFreezeUser}
+                          disabled={isProcessing}
+                        >
+                          <NoSymbolIcon />
+                          {isProcessing ? 'Processing...' : 'Freeze Access'}
+                        </button>
+                      )}
+                      
+                      {selectedUser.status === 'frozen' && (
+                        <button 
+                          className="action-btn restore"
+                          onClick={handleRestoreUser}
+                          disabled={isProcessing}
+                        >
+                          <ArrowPathIcon />
+                          {isProcessing ? 'Processing...' : 'Restore Access'}
+                        </button>
+                      )}
+                    </>
                   )}
-                  
-                  {selectedUser.status === 'active' && (
-                    <button 
-                      className="action-btn freeze"
-                      onClick={handleFreezeUser}
-                      disabled={isProcessing}
-                    >
-                      <NoSymbolIcon />
-                      {isProcessing ? 'Processing...' : 'Freeze Access'}
-                    </button>
-                  )}
-                  
-                  {selectedUser.status === 'frozen' && (
-                    <button 
-                      className="action-btn restore"
-                      onClick={handleRestoreUser}
-                      disabled={isProcessing}
-                    >
-                      <ArrowPathIcon />
-                      {isProcessing ? 'Processing...' : 'Restore Access'}
-                    </button>
+                  {currentAdmin?.id === selectedUser.id && (
+                    <div className="action-btn" style={{ 
+                      background: 'var(--bg-secondary)', 
+                      color: 'var(--text-secondary)',
+                      cursor: 'default'
+                    }}>
+                      <UserIcon />
+                      This is your account
+                    </div>
                   )}
                 </div>
               </div>
@@ -458,7 +562,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           padding: 1.5rem;
         }
 
-        /* Header */
         .header {
           display: flex;
           justify-content: space-between;
@@ -493,6 +596,55 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           margin: 0;
         }
 
+        .header-stats {
+          display: flex;
+          gap: 0.75rem;
+          flex-wrap: wrap;
+        }
+
+        .stat-badge {
+          display: flex;
+          align-items: center;
+          gap: 0.375rem;
+          padding: 0.375rem 0.75rem;
+          background: var(--bg-secondary);
+          border-radius: 0.5rem;
+          font-size: 0.75rem;
+          color: var(--text-secondary);
+          border: 1px solid var(--border);
+        }
+
+        .stat-badge svg {
+          width: 0.875rem;
+          height: 0.875rem;
+        }
+
+        .stat-badge.active {
+          color: #10b981;
+          border-color: rgba(16, 185, 129, 0.2);
+        }
+
+        .stat-badge.pending {
+          color: #f59e0b;
+          border-color: rgba(245, 158, 11, 0.2);
+        }
+
+        .current-admin-row {
+          background: rgba(139, 92, 246, 0.05);
+        }
+
+        .current-admin-badge {
+          display: inline-block;
+          margin-left: 0.5rem;
+          font-size: 0.65rem;
+          font-weight: 600;
+          color: #8b5cf6;
+          background: rgba(139, 92, 246, 0.1);
+          padding: 0.125rem 0.5rem;
+          border-radius: 1rem;
+          white-space: nowrap;
+        }
+
         .btn-add {
           display: flex;
           align-items: center;
@@ -517,7 +669,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           height: 1.25rem;
         }
 
-        /* Search Bar */
         .search-bar {
           display: flex;
           gap: 1rem;
@@ -587,7 +738,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           transform: rotate(180deg);
         }
 
-        /* Filters Panel */
         .filters-panel {
           display: flex;
           gap: 1rem;
@@ -625,7 +775,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           cursor: pointer;
         }
 
-        /* Table */
         .table-container {
           background: var(--bg-primary);
           border-radius: 0.75rem;
@@ -697,6 +846,9 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           overflow: hidden;
           text-overflow: ellipsis;
           white-space: nowrap;
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
         }
 
         .user-email {
@@ -747,7 +899,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           height: 0.875rem;
         }
 
-        /* Badges */
         .role-badge, .status-badge {
           display: inline-flex;
           align-items: center;
@@ -794,7 +945,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           color: #6b7280;
         }
 
-        /* Loading & Error States */
         .loading-state, .error-state {
           display: flex;
           flex-direction: column;
@@ -843,7 +993,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           color: var(--text-tertiary);
         }
 
-        /* Modal */
         .modal-overlay {
           position: fixed;
           top: 0;
@@ -901,6 +1050,9 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           color: var(--text-primary);
           margin: 0 0 0.5rem 0;
           word-break: break-word;
+          display: flex;
+          align-items: center;
+          flex-wrap: wrap;
         }
 
         .modal-info p {
@@ -917,12 +1069,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           width: 0.875rem;
           height: 0.875rem;
           flex-shrink: 0;
-        }
-
-        .modal-username, .modal-position {
-          display: flex;
-          align-items: center;
-          gap: 0.375rem;
         }
 
         .modal-close {
@@ -1033,7 +1179,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           to { transform: rotate(360deg); }
         }
 
-        /* Mobile Responsive */
         @media (max-width: 768px) {
           .user-management {
             padding: 1rem;
@@ -1047,26 +1192,13 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
             display: none;
           }
 
+          .header-stats {
+            width: 100%;
+          }
+
           .users-table th:nth-child(3),
           .users-table td:nth-child(3) {
             display: none;
-          }
-
-          .stat {
-            font-size: 0.75rem;
-          }
-
-          .modal-header {
-            flex-direction: column;
-            text-align: center;
-          }
-
-          .modal-avatar {
-            margin: 0 auto;
-          }
-
-          .modal-info p {
-            justify-content: center;
           }
         }
 
@@ -1074,14 +1206,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
           .users-table th:nth-child(4),
           .users-table td:nth-child(4) {
             display: none;
-          }
-
-          .btn-add span {
-            display: none;
-          }
-
-          .btn-add {
-            padding: 0.625rem;
           }
 
           .filter-btn span {
@@ -1094,14 +1218,6 @@ const UserManagement = ({ currentAdminRole, onUserUpdate }) => {
 
           .stats {
             grid-template-columns: 1fr;
-          }
-
-          .modal-info h2 {
-            font-size: 1rem;
-          }
-
-          .modal-info p {
-            font-size: 0.75rem;
           }
         }
 

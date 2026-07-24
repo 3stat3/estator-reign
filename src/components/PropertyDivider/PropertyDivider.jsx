@@ -82,7 +82,6 @@ const PropertyDivider = ({ darkMode = false }) => {
   const renderModule = () => {
     switch(currentStep) {
       case 1:
-        console.log('📦 PropertyDivider - rendering PersonManager with decedentId:', appState.decedentId);
         return (
           <PersonManager 
             darkMode={darkMode}
@@ -90,19 +89,15 @@ const PropertyDivider = ({ darkMode = false }) => {
             properties={appState.properties}
             decedentId={appState.decedentId}
             onUpdate={(data) => {
-              console.log('📥 PropertyDivider - received persons update:', data.length, 'persons');
               setAppState(prev => ({...prev, persons: data}));
             }}
             onUpdateProperties={(data) => {
-              console.log('📥 PropertyDivider - received properties update:', data.length, 'properties');
               setAppState(prev => ({...prev, properties: data}));
             }}
             onUpdateDecedent={(id) => {
-              console.log('📤 PropertyDivider - updating decedentId to:', id);
               setAppState(prev => ({...prev, decedentId: id}));
             }}
             onNavigateToPropertyManager={(personId) => {
-              console.log('🚀 PropertyDivider - navigating to PropertyManager with personId:', personId);
               setCurrentStep(2);
               setSelectedPersonForProperty(personId);
             }}
@@ -116,7 +111,6 @@ const PropertyDivider = ({ darkMode = false }) => {
             persons={appState.persons}
             selectedPersonId={selectedPersonForProperty}
             onUpdate={(data) => {
-              console.log('📥 PropertyDivider - received property update:', data.length, 'properties');
               setAppState(prev => ({...prev, properties: data}));
             }}
           />

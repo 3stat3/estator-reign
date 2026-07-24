@@ -190,10 +190,10 @@ export const AuthProvider = ({ children }) => {
         try {
             const { error } = await supabase.auth.signOut();
             if (error) {
-                console.error('Logout error:', error);
+                // Silent error handling - no console logs
             }
         } catch (error) {
-            console.error('Logout error:', error);
+            // Silent error handling - no console logs
         } finally {
             setUser(null);
             localStorage.removeItem('user');
@@ -222,10 +222,12 @@ export const AuthProvider = ({ children }) => {
         return { success: false, error: '2FA not configured' };
     };
 
-    const forgotPassword = async (email) => {
+    const forgotPassword = async (email, options = {}) => {
         setError(null);
         try {
-            const redirectUrl = window.location.origin + '/reset-password';
+            // Use the provided redirect URL or fallback to the default
+            const redirectUrl = options.redirectTo || `${window.location.origin}/reset-password`;
+            
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: redirectUrl,
             });
@@ -238,10 +240,12 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    const resendResetLink = async (email) => {
+    const resendResetLink = async (email, options = {}) => {
         setError(null);
         try {
-            const redirectUrl = window.location.origin + '/reset-password';
+            // Use the provided redirect URL or fallback to the default
+            const redirectUrl = options.redirectTo || `${window.location.origin}/reset-password`;
+            
             const { error } = await supabase.auth.resetPasswordForEmail(email, {
                 redirectTo: redirectUrl,
             });

@@ -5,13 +5,12 @@ import SplashScreen from './components/SplashScreen/SplashScreen';
 import Login from './pages/Login';
 import Register from './pages/Register';
 import Dashboard from './pages/Dashboard';
-import WelcomePage from './pages/WelcomePage';
 import ForgotPassword from './pages/ForgotPassword';
 import ResetPassword from './pages/ResetPassword';
 import EmailConfirmation from './pages/EmailConfirmation';
 import './index.css';
 
-// Loading component
+// Loading component - ONLY for initial app loading
 const AppLoading = () => (
   <div style={{ 
     display: 'flex', 
@@ -39,6 +38,23 @@ const AppLoading = () => (
   </div>
 );
 
+// Helper function to get role-based dashboard path
+const getDashboardPath = (user) => {
+  const userRole = user?.role || user?.user_metadata?.role || 'client';
+  
+  switch (userRole) {
+    case 'admin':
+      return '/admin/dashboard';
+    case 'manager':
+      return '/manager/dashboard';
+    case 'advisor':
+      return '/advisor/dashboard';
+    case 'client':
+    default:
+      return '/dashboard';
+  }
+};
+
 // Protected Route wrapper
 const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   const { user, loading } = useAuth();
@@ -56,11 +72,6 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
     return children;
   }
 
-  // Allow access to welcome page without redirect
-  if (location.pathname === '/welcome') {
-    return children;
-  }
-
   if (loading || isChecking) {
     return <AppLoading />;
   }
@@ -70,7 +81,7 @@ const ProtectedRoute = ({ children, allowedRoles = [] }) => {
   }
 
   if (allowedRoles.length > 0 && !allowedRoles.includes(user.role)) {
-    return <Navigate to="/dashboard" replace />;
+    return <Navigate to={getDashboardPath(user)} replace />;
   }
 
   return children;
@@ -86,14 +97,12 @@ const PublicOnlyRoute = ({ children }) => {
     return children;
   }
   
-  if (loading) {
-    return <AppLoading />;
+  // ONLY redirect if we're done loading AND user exists
+  if (!loading && user) {
+    return <Navigate to={getDashboardPath(user)} replace />;
   }
   
-  if (user) {
-    return <Navigate to="/welcome" replace />;
-  }
-  
+  // ALWAYS render the children (login/register page) regardless of loading state
   return children;
 };
 
@@ -113,8 +122,6 @@ function CheckHashForConfirmation() {
       const params = new URLSearchParams(hash.replace('#', '?'));
       const type = params.get('type');
       
-      console.log('🔍 Hash detected:', type);
-      
       // Only redirect to email confirmation for signup/email confirmations
       if (type === 'signup' || type === 'email' || !type) {
         navigate('/email-confirmation', { replace: true });
@@ -133,9 +140,6 @@ function AppContent() {
   const location = useLocation();
   const [showSplash, setShowSplash] = useState(true);
 
-  // Check if on reset-password page
-  const isResetPasswordPage = location.pathname === '/reset-password';
-
   useEffect(() => {
     const timer = setTimeout(() => {
       setShowSplash(false);
@@ -144,11 +148,18 @@ function AppContent() {
     return () => clearTimeout(timer);
   }, []);
 
+  // Only show splash screen on initial app load
   if (showSplash) {
     return <SplashScreen onComplete={() => setShowSplash(false)} />;
   }
 
-  if (loading) {
+  // Check if we're on auth pages - if so, don't show loading
+  const isAuthPage = location.pathname === '/login' || 
+                     location.pathname === '/register' || 
+                     location.pathname === '/forgot-password';
+  
+  // Only show AppLoading if loading AND not on an auth page
+  if (loading && !isAuthPage) {
     return <AppLoading />;
   }
 
@@ -178,13 +189,6 @@ function AppContent() {
         <Route path="/reset-password" element={<ResetPassword />} />
         <Route path="/email-confirmation" element={<EmailConfirmation />} />
         
-        {/* Welcome Page - Protected but accessible after login */}
-        <Route path="/welcome" element={
-          <ProtectedRoute>
-            <WelcomePage />
-          </ProtectedRoute>
-        } />
-        
         {/* Protected routes - require authentication */}
         <Route path="/dashboard" element={
           <ProtectedRoute>
@@ -197,14 +201,35 @@ function AppContent() {
           </ProtectedRoute>
         } />
         
-        {/* Root route */}
+        {/* Admin routes - if you have them */}
+        <Route path="/admin/*" element={
+          <ProtectedRoute allowedRoles={['admin']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        {/* Manager routes - if you have them */}
+        <Route path="/manager/*" element={
+          <ProtectedRoute allowedRoles={['manager']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        {/* Advisor routes - if you have them */}
+        <Route path="/advisor/*" element={
+          <ProtectedRoute allowedRoles={['advisor']}>
+            <Dashboard />
+          </ProtectedRoute>
+        } />
+        
+        {/* Root route - redirect to role-based dashboard */}
         <Route path="/" element={
-          <Navigate to={user ? "/welcome" : "/login"} replace />
+          <Navigate to={user ? getDashboardPath(user) : "/login"} replace />
         } />
         
         {/* Catch all */}
         <Route path="*" element={
-          <Navigate to={user ? "/welcome" : "/login"} replace />
+          <Navigate to={user ? getDashboardPath(user) : "/login"} replace />
         } />
       </Routes>
     </div>

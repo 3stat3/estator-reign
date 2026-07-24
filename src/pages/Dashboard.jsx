@@ -22,17 +22,11 @@ const Dashboard = () => {
                 return;
             }
 
-            // Check for welcome flag
-            const cameFromWelcome = sessionStorage.getItem('cameFromWelcome');
+            // REMOVED: The welcome page check since we deleted it
+            // Users now go directly to dashboard after splash screen
             
-            if (!cameFromWelcome) {
-                navigate('/welcome', { replace: true });
-                return;
-            }
-
             // Validated successfully
             hasValidated.current = true;
-            sessionStorage.removeItem('cameFromWelcome');
             setIsReady(true);
         }
     }, [loading, user, navigate]);

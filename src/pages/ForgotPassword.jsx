@@ -25,7 +25,7 @@ const forgotPasswordSchema = yup.object().shape({
     .max(255, 'Email too long'),
 });
 
-// Theme Context (copy from Login component)
+// Theme Context
 const ThemeContext = createContext();
 const useTheme = () => useContext(ThemeContext);
 
@@ -82,6 +82,16 @@ const ForgotPassword = () => {
 
   const emailValue = watch('email');
 
+  // Get the base URL for redirects
+  const getRedirectUrl = () => {
+    // In production, use the Vercel URL
+    if (process.env.NODE_ENV === 'production') {
+      return 'https://estatorreign.vercel.app/reset-password';
+    }
+    // In development, use localhost
+    return 'http://localhost:3000/reset-password';
+  };
+
   // Responsive detection
   useEffect(() => {
     const handleResize = () => {
@@ -125,12 +135,14 @@ const ForgotPassword = () => {
     setLoading(true);
     
     try {
-      await forgotPassword(data.email);
+      // Use the correct redirect URL
+      await forgotPassword(data.email, {
+        redirectTo: getRedirectUrl()
+      });
       setSuccess(true);
-      // Start cooldown to prevent spam
       setCooldownTime(60);
     } catch (err) {
-      setError(err.response?.data?.error || 'Failed to send reset link. Please try again.');
+      setError(err.message || 'Failed to send reset link. Please try again.');
     } finally {
       setLoading(false);
     }
@@ -143,9 +155,10 @@ const ForgotPassword = () => {
     setLoading(true);
     
     try {
-      await resendResetLink(emailValue);
-      setResendCooldown(30); // 30 seconds cooldown for resend
-      // Show a temporary success message update
+      await resendResetLink(emailValue, {
+        redirectTo: getRedirectUrl()
+      });
+      setResendCooldown(30);
       setSuccess(true);
     } catch (err) {
       setError('Failed to resend link. Please try again.');
@@ -358,7 +371,7 @@ const ForgotPassword = () => {
       </div>
       
       <style>{`
-        /* CSS Variables for Themes - same as Login */
+        /* CSS Variables for Themes */
         :root {
           --bg-primary: #ffffff;
           --bg-secondary: #f7fafc;
@@ -442,7 +455,6 @@ const ForgotPassword = () => {
           position: relative;
         }
         
-        /* Theme Toggle */
         .theme-toggle-wrapper {
           position: absolute;
           top: clamp(1rem, 3vw, 1.5rem);
@@ -473,7 +485,6 @@ const ForgotPassword = () => {
           background: var(--hover-bg);
         }
         
-        /* Back Button */
         .back-button {
           display: inline-flex;
           align-items: center;
@@ -526,7 +537,6 @@ const ForgotPassword = () => {
           line-height: 1.5;
         }
         
-        /* Error and Success Messages */
         .error-message, .success-message {
           display: flex;
           align-items: center;
@@ -565,7 +575,6 @@ const ForgotPassword = () => {
           margin: 0;
         }
         
-        /* Form */
         .forgot-form {
           display: flex;
           flex-direction: column;
@@ -697,7 +706,6 @@ const ForgotPassword = () => {
           animation: spin 0.6s linear infinite;
         }
         
-        /* Success Actions */
         .success-actions {
           display: flex;
           flex-direction: column;
@@ -751,7 +759,6 @@ const ForgotPassword = () => {
           height: 0.875rem;
         }
         
-        /* Help Section */
         .help-section {
           margin-top: 1.5rem;
           padding-top: 1.5rem;
@@ -800,7 +807,6 @@ const ForgotPassword = () => {
           cursor: not-allowed;
         }
         
-        /* Security Notice */
         .security-notice {
           display: flex;
           align-items: flex-start;
@@ -834,12 +840,6 @@ const ForgotPassword = () => {
         @keyframes spin {
           from { transform: rotate(0deg); }
           to { transform: rotate(360deg); }
-        }
-        
-        @keyframes shake {
-          0%, 100% { transform: translateX(0); }
-          25% { transform: translateX(-5px); }
-          75% { transform: translateX(5px); }
         }
         
         @media (max-width: 640px) {
