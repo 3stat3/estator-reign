@@ -3,6 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
+import FinanceTracker from '../components/FinanceTracker/FinanceTracker';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -12,7 +13,10 @@ import {
   ChevronDownIcon,
   ExclamationTriangleIcon,
   LockClosedIcon,
-  EyeIcon
+  EyeIcon,
+  ChartPieIcon,
+  WrenchScrewdriverIcon,
+  Squares2X2Icon
 } from '@heroicons/react/24/outline';
 
 const DemoDashboard = () => {
@@ -21,6 +25,8 @@ const DemoDashboard = () => {
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
+  const [showEstateTaxMenu, setShowEstateTaxMenu] = useState(false);
+  const [showHelpfulToolsMenu, setShowHelpfulToolsMenu] = useState(false);
   const [theme, setTheme] = useState(() => {
     const savedTheme = localStorage.getItem('theme');
     if (savedTheme) return savedTheme;
@@ -55,21 +61,40 @@ const DemoDashboard = () => {
       if (showNotifications && !e.target.closest('.notifications-container')) {
         setShowNotifications(false);
       }
+      if (showEstateTaxMenu && !e.target.closest('.estate-tax-menu-container')) {
+        setShowEstateTaxMenu(false);
+      }
+      if (showHelpfulToolsMenu && !e.target.closest('.helpful-tools-menu-container')) {
+        setShowHelpfulToolsMenu(false);
+      }
     };
     document.addEventListener('click', handleClickOutside);
     return () => document.removeEventListener('click', handleClickOutside);
-  }, [showUserMenu, showNotifications]);
+  }, [showUserMenu, showNotifications, showEstateTaxMenu, showHelpfulToolsMenu]);
 
-  const tabs = [
-    { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon },
-    { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon },
+  // Estate Tax sub-menu items (all locked in demo)
+  const estateTaxItems = [
+    { id: 'calculator', label: 'Tax Calculator', icon: CalculatorIcon, locked: true },
+    { id: 'propertydivider', label: 'Property Divider', icon: UserGroupIcon, locked: true },
+    { id: 'taxhelpers', label: 'Tax Helpers', icon: WrenchScrewdriverIcon, locked: true },
   ];
+
+  // Helpful Tools items (all locked in demo)
+  const helpfulToolsItems = [
+    { id: 'onnet-tracker', label: 'ONNET & eLA Tracker', icon: ChartPieIcon, locked: true },
+    { id: 'interest-calculator', label: 'Interest Calculator', icon: CalculatorIcon, locked: true },
+    { id: 'vanishing-deduction', label: 'Vanishing Deduction', icon: WrenchScrewdriverIcon, locked: true },
+  ];
+
+  // Finance Tracker is the only fully accessible feature
+  const financeItem = { id: 'finance', label: 'Finance Tracker', icon: ChartPieIcon };
 
   const notifications = [
     { id: 1, title: 'Demo Mode - View Only', message: 'You can see all features but cannot interact. Full access after admin approval.', time: 'Just now', read: false },
+    { id: 2, title: 'Finance Tracker Available', message: 'Track your personal finances in demo mode.', time: '2 min ago', read: false },
   ];
 
-  // Wrapper component that disables all interactive elements (no banner inside)
+  // Wrapper component that disables all interactive elements
   const DemoWrapper = ({ children }) => {
     return (
       <div className="demo-content">
@@ -78,23 +103,76 @@ const DemoDashboard = () => {
     );
   };
 
+  // Locked feature component
+  const LockedFeature = ({ featureName }) => (
+    <motion.div 
+      className="locked-feature-card"
+      initial={{ opacity: 0, scale: 0.95 }}
+      animate={{ opacity: 1, scale: 1 }}
+      transition={{ duration: 0.3 }}
+    >
+      <div className="locked-icon">
+        <LockClosedIcon />
+      </div>
+      <h2>Feature Locked</h2>
+      <p>The <strong>{featureName}</strong> is not available in demo mode.</p>
+      <div className="locked-details">
+        <ExclamationTriangleIcon />
+        <div>
+          <strong>Why is this locked?</strong>
+          <p>This feature requires full account approval from an administrator.</p>
+        </div>
+      </div>
+      <div className="locked-estimate">
+        <p>Please wait for admin approval to access all features.</p>
+      </div>
+    </motion.div>
+  );
+
   const renderContent = () => {
-    switch (activeTab) {
-      case 'calculator':
-        return (
-          <DemoWrapper>
-            <EstateTaxCalculator />
-          </DemoWrapper>
-        );
-      case 'propertydivider':
-        return (
-          <DemoWrapper>
-            <PropertyDivider />
-          </DemoWrapper>
-        );
-      default:
-        return null;
+    // Finance Tracker - Fully accessible
+    if (activeTab === 'finance') {
+      return (
+        <motion.div
+          key="finance"
+          initial={{ opacity: 0, y: 20 }}
+          animate={{ opacity: 1, y: 0 }}
+          exit={{ opacity: 0, y: -20 }}
+          transition={{ duration: 0.3 }}
+          className="finance-tracker-wrapper"
+        >
+          <div className="finance-tracker-header">
+            <h2>💰 Personal Finance Tracker</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400">
+              Track your income, expenses, and savings
+            </p>
+          </div>
+          <FinanceTracker />
+        </motion.div>
+      );
     }
+
+    // All other features are locked
+    const featureNames = {
+      calculator: 'Estate Tax Calculator',
+      propertydivider: 'Property Divider',
+      taxhelpers: 'Tax Helpers',
+      'onnet-tracker': 'ONNET & eLA Tracker',
+      'interest-calculator': 'Interest Calculator',
+      'vanishing-deduction': 'Vanishing Deduction'
+    };
+
+    return (
+      <motion.div
+        key={activeTab}
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        exit={{ opacity: 0, y: -20 }}
+        transition={{ duration: 0.3 }}
+      >
+        <LockedFeature featureName={featureNames[activeTab] || 'Feature'} />
+      </motion.div>
+    );
   };
 
   return (
@@ -112,18 +190,144 @@ const DemoDashboard = () => {
             <div className="demo-badge-nav">DEMO MODE</div>
           </div>
 
-          <div className="nav-tabs">
-            {tabs.map((tab) => (
+          {/* Desktop Navigation */}
+          <div className={`nav-tabs desktop-nav ${isMobile ? 'hidden' : ''}`}>
+            {/* Estate Tax Dropdown Menu - All locked */}
+            <div className="estate-tax-menu-container">
               <button
-                key={tab.id}
-                onClick={() => setActiveTab(tab.id)}
-                className={`nav-tab ${activeTab === tab.id ? 'active' : ''}`}
+                className={`nav-tab dropdown-trigger ${estateTaxItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowEstateTaxMenu(!showEstateTaxMenu)}
+                onMouseEnter={() => setShowEstateTaxMenu(true)}
+                onMouseLeave={() => {
+                  setTimeout(() => {
+                    if (!document.querySelector('.estate-tax-menu-container .dropdown-menu:hover')) {
+                      setShowEstateTaxMenu(false);
+                    }
+                  }, 150);
+                }}
               >
-                <tab.icon className="tab-icon" />
-                <span>{tab.label}</span>
-                {activeTab === tab.id && <motion.div className="tab-indicator" layoutId="activeTab" />}
+                <Squares2X2Icon className="tab-icon" />
+                <span>Estate Tax Services</span>
+                <ChevronDownIcon className={`dropdown-chevron ${showEstateTaxMenu ? 'rotated' : ''}`} />
+                {estateTaxItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
               </button>
-            ))}
+              
+              <AnimatePresence>
+                {showEstateTaxMenu && (
+                  <motion.div
+                    className="dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    onMouseEnter={() => setShowEstateTaxMenu(true)}
+                    onMouseLeave={() => setShowEstateTaxMenu(false)}
+                  >
+                    {estateTaxItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''} locked-item`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowEstateTaxMenu(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        <LockClosedIcon className="lock-icon-dropdown" />
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Helpful Tools Dropdown - All locked */}
+            <div className="helpful-tools-menu-container">
+              <button
+                className={`nav-tab dropdown-trigger ${helpfulToolsItems.some(item => item.id === activeTab) ? 'active' : ''}`}
+                onClick={() => setShowHelpfulToolsMenu(!showHelpfulToolsMenu)}
+                onMouseEnter={() => setShowHelpfulToolsMenu(true)}
+                onMouseLeave={() => {
+                  setTimeout(() => {
+                    if (!document.querySelector('.helpful-tools-menu-container .dropdown-menu:hover')) {
+                      setShowHelpfulToolsMenu(false);
+                    }
+                  }, 150);
+                }}
+              >
+                <WrenchScrewdriverIcon className="tab-icon" />
+                <span>Revenuer Tools</span>
+                <ChevronDownIcon className={`dropdown-chevron ${showHelpfulToolsMenu ? 'rotated' : ''}`} />
+                {helpfulToolsItems.some(item => item.id === activeTab) && (
+                  <motion.div className="tab-indicator" layoutId="activeTab" />
+                )}
+              </button>
+              
+              <AnimatePresence>
+                {showHelpfulToolsMenu && (
+                  <motion.div
+                    className="dropdown-menu"
+                    initial={{ opacity: 0, y: -5, scale: 0.98 }}
+                    animate={{ opacity: 1, y: 0, scale: 1 }}
+                    exit={{ opacity: 0, y: -5, scale: 0.98 }}
+                    transition={{ duration: 0.15 }}
+                    onMouseEnter={() => setShowHelpfulToolsMenu(true)}
+                    onMouseLeave={() => setShowHelpfulToolsMenu(false)}
+                  >
+                    {helpfulToolsItems.map((item) => (
+                      <button
+                        key={item.id}
+                        className={`dropdown-item-nav ${activeTab === item.id ? 'active' : ''} locked-item`}
+                        onClick={() => {
+                          setActiveTab(item.id);
+                          setShowHelpfulToolsMenu(false);
+                        }}
+                      >
+                        <item.icon className="dropdown-item-icon" />
+                        <span>{item.label}</span>
+                        <LockClosedIcon className="lock-icon-dropdown" />
+                      </button>
+                    ))}
+                  </motion.div>
+                )}
+              </AnimatePresence>
+            </div>
+
+            {/* Finance Tracker - Fully accessible */}
+            <button
+              onClick={() => setActiveTab('finance')}
+              className={`nav-tab ${activeTab === 'finance' ? 'active' : ''}`}
+            >
+              <ChartPieIcon className="tab-icon" />
+              <span>Finance Tracker</span>
+              {activeTab === 'finance' && (
+                <motion.div className="tab-indicator" layoutId="activeTab" />
+              )}
+            </button>
+          </div>
+
+          {/* Mobile Navigation - Simplified */}
+          <div className={`nav-tabs mobile-nav ${isMobile ? '' : 'hidden'}`}>
+            <button
+              onClick={() => setActiveTab('finance')}
+              className={`nav-tab ${activeTab === 'finance' ? 'active' : ''}`}
+            >
+              <ChartPieIcon className="tab-icon" />
+              <span>Finance</span>
+              {activeTab === 'finance' && (
+                <motion.div className="tab-indicator" layoutId="activeTabMobile" />
+              )}
+            </button>
+            <button
+              onClick={() => setActiveTab('calculator')}
+              className={`nav-tab ${activeTab === 'calculator' ? 'active' : ''}`}
+            >
+              <LockClosedIcon className="tab-icon" />
+              <span>Locked</span>
+            </button>
           </div>
 
           <div className="nav-actions">
@@ -134,7 +338,7 @@ const DemoDashboard = () => {
             <div className="notifications-container">
               <button className="icon-btn" onClick={() => setShowNotifications(!showNotifications)}>
                 <BellIcon />
-                <span className="notification-badge">1</span>
+                <span className="notification-badge">2</span>
               </button>
               <AnimatePresence>
                 {showNotifications && (
@@ -206,7 +410,7 @@ const DemoDashboard = () => {
         </div>
       </nav>
 
-      {/* Only ONE Global Demo Banner */}
+      {/* Global Demo Banner */}
       <div className="global-demo-banner">
         <div className="banner-content">
           <EyeIcon className="banner-icon" />
@@ -278,6 +482,7 @@ const DemoDashboard = () => {
           position: sticky;
           top: 0;
           z-index: 50;
+          overflow: visible !important;
         }
 
         .nav-container {
@@ -288,7 +493,9 @@ const DemoDashboard = () => {
           align-items: center;
           justify-content: space-between;
           height: 70px;
-          gap: 2rem;
+          gap: 1rem;
+          overflow: visible !important;
+          position: relative;
         }
 
         .nav-brand {
@@ -336,12 +543,25 @@ const DemoDashboard = () => {
           display: flex;
           align-items: center;
           gap: 0.5rem;
-          overflow-x: auto;
+          overflow: visible !important;
           scrollbar-width: none;
+          position: relative;
         }
 
         .nav-tabs::-webkit-scrollbar {
           display: none;
+        }
+
+        .nav-tabs.hidden {
+          display: none !important;
+        }
+
+        .desktop-nav {
+          display: flex !important;
+        }
+
+        .mobile-nav {
+          display: none !important;
         }
 
         .nav-tab {
@@ -359,6 +579,8 @@ const DemoDashboard = () => {
           transition: all 0.2s;
           position: relative;
           white-space: nowrap;
+          z-index: 1;
+          flex-shrink: 0;
         }
 
         .nav-tab:hover {
@@ -386,10 +608,100 @@ const DemoDashboard = () => {
           border-radius: 2px;
         }
 
+        .dropdown-trigger {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+        }
+
+        .dropdown-chevron {
+          width: 1rem;
+          height: 1rem;
+          transition: transform 0.2s ease;
+        }
+
+        .dropdown-chevron.rotated {
+          transform: rotate(180deg);
+        }
+
+        .estate-tax-menu-container,
+        .helpful-tools-menu-container {
+          position: relative;
+          display: inline-block;
+          flex-shrink: 0;
+          overflow: visible !important;
+          z-index: 10;
+        }
+
+        .dropdown-menu {
+          position: absolute;
+          top: calc(100% + 8px);
+          left: 0;
+          min-width: 220px;
+          background: var(--card-bg);
+          border: 1px solid var(--border-color);
+          border-radius: 0.75rem;
+          box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+          padding: 0.5rem;
+          z-index: 99999 !important;
+          overflow: visible !important;
+          display: block !important;
+        }
+
+        .dropdown-item-nav {
+          display: flex;
+          align-items: center;
+          gap: 0.75rem;
+          width: 100%;
+          padding: 0.625rem 0.875rem;
+          background: none;
+          border: none;
+          border-radius: 0.5rem;
+          cursor: pointer;
+          color: var(--text-secondary);
+          font-size: 0.875rem;
+          font-weight: 500;
+          transition: all 0.2s;
+          text-align: left;
+        }
+
+        .dropdown-item-nav:hover {
+          background: var(--hover-bg);
+          color: var(--text-primary);
+        }
+
+        .dropdown-item-nav.active {
+          background: rgba(102, 126, 234, 0.1);
+          color: var(--gradient-start);
+        }
+
+        .dropdown-item-nav.locked-item {
+          opacity: 0.7;
+        }
+
+        .dropdown-item-nav.locked-item:hover {
+          background: rgba(245, 158, 11, 0.1);
+        }
+
+        .dropdown-item-icon {
+          width: 1.25rem;
+          height: 1.25rem;
+          flex-shrink: 0;
+        }
+
+        .lock-icon-dropdown {
+          width: 0.875rem;
+          height: 0.875rem;
+          margin-left: auto;
+          color: #f59e0b;
+          flex-shrink: 0;
+        }
+
         .nav-actions {
           display: flex;
           align-items: center;
           gap: 0.75rem;
+          flex-shrink: 0;
         }
 
         .icon-btn {
@@ -477,6 +789,7 @@ const DemoDashboard = () => {
 
         .user-menu-container {
           position: relative;
+          z-index: 10;
         }
 
         .user-menu-btn {
@@ -627,7 +940,6 @@ const DemoDashboard = () => {
           padding: 2rem 1.5rem;
         }
 
-        /* Global Demo Banner - Only ONE */
         .global-demo-banner {
           max-width: 1600px;
           margin: 0 auto;
@@ -695,13 +1007,118 @@ const DemoDashboard = () => {
           height: 1rem;
         }
 
-        /* Demo Content - Disables all interactive elements */
+        .finance-tracker-wrapper {
+          background: var(--card-bg);
+          border-radius: 1rem;
+          border: 1px solid var(--border-color);
+          padding: 1.5rem;
+          margin-top: 0.5rem;
+        }
+
+        .finance-tracker-header {
+          margin-bottom: 1.5rem;
+        }
+
+        .finance-tracker-header h2 {
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 0.25rem;
+        }
+
+        .finance-tracker-header p {
+          color: var(--text-secondary);
+        }
+
+        .locked-feature-card {
+          background: var(--card-bg);
+          border-radius: 1rem;
+          border: 1px solid var(--border-color);
+          padding: 3rem 2rem;
+          text-align: center;
+          max-width: 550px;
+          margin: 0 auto;
+        }
+
+        .locked-icon {
+          width: 5rem;
+          height: 5rem;
+          background: rgba(245, 158, 11, 0.1);
+          border-radius: 50%;
+          display: flex;
+          align-items: center;
+          justify-content: center;
+          margin: 0 auto 1.5rem;
+        }
+
+        .locked-icon svg {
+          width: 2.5rem;
+          height: 2.5rem;
+          color: #f59e0b;
+        }
+
+        .locked-feature-card h2 {
+          font-size: 1.5rem;
+          font-weight: 600;
+          color: var(--text-primary);
+          margin-bottom: 0.5rem;
+        }
+
+        .locked-feature-card p {
+          color: var(--text-secondary);
+          margin-bottom: 1rem;
+        }
+
+        .locked-details {
+          display: flex;
+          align-items: flex-start;
+          gap: 0.75rem;
+          background: var(--bg-secondary);
+          padding: 1rem;
+          border-radius: 0.75rem;
+          margin: 1.5rem 0;
+          text-align: left;
+          border: 1px solid var(--border-color);
+        }
+
+        .locked-details svg {
+          width: 1.25rem;
+          height: 1.25rem;
+          color: #f59e0b;
+          flex-shrink: 0;
+          margin-top: 0.125rem;
+        }
+
+        .locked-details strong {
+          display: block;
+          color: var(--text-primary);
+          font-size: 0.875rem;
+          margin-bottom: 0.25rem;
+        }
+
+        .locked-details p {
+          color: var(--text-secondary);
+          font-size: 0.813rem;
+          margin: 0;
+        }
+
+        .locked-estimate {
+          margin-top: 1rem;
+          padding-top: 1rem;
+          border-top: 1px solid var(--border-color);
+        }
+
+        .locked-estimate p {
+          color: var(--text-tertiary);
+          font-size: 0.75rem;
+          margin: 0;
+        }
+
         .demo-content {
           position: relative;
           opacity: 0.9;
         }
 
-        /* Disable all interactive elements inside demo content */
         .demo-content input,
         .demo-content select,
         .demo-content textarea,
@@ -733,7 +1150,15 @@ const DemoDashboard = () => {
         @media (max-width: 768px) {
           .nav-container {
             padding: 0 1rem;
-            gap: 1rem;
+            gap: 0.5rem;
+          }
+
+          .desktop-nav {
+            display: none !important;
+          }
+
+          .mobile-nav {
+            display: flex !important;
           }
           
           .user-name-nav {
@@ -756,11 +1181,34 @@ const DemoDashboard = () => {
           .banner-status {
             align-self: flex-start;
           }
+
+          .finance-tracker-wrapper {
+            padding: 1rem;
+          }
+
+          .locked-feature-card {
+            padding: 2rem 1.5rem;
+            margin: 1rem 0;
+          }
         }
 
         @media (max-width: 640px) {
           .nav-brand .logo-text {
             display: none;
+          }
+
+          .finance-tracker-header h2 {
+            font-size: 1.25rem;
+          }
+
+          .nav-tab {
+            padding: 0.4rem 0.6rem;
+            font-size: 0.75rem;
+          }
+
+          .notifications-dropdown {
+            width: 280px;
+            right: -2rem;
           }
         }
       `}</style>
