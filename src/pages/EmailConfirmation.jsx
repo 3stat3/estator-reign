@@ -1,8 +1,9 @@
 import React, { useEffect, useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { supabase } from '../../supabase';
 
 const EmailConfirmation = () => {
+  const [searchParams] = useSearchParams();
   const [status, setStatus] = useState('verifying');
   const [countdown, setCountdown] = useState(5);
   const navigate = useNavigate();
@@ -11,75 +12,123 @@ const EmailConfirmation = () => {
     const handleConfirmation = async () => {
       console.log('1. EmailConfirmation page loaded');
       console.log('2. Full URL:', window.location.href);
+      console.log('3. Search params:', window.location.search);
+      console.log('4. Hash:', window.location.hash);
       
-      const hash = window.location.hash;
-      console.log('3. Hash:', hash);
+      // Try to get token from query params first (new format)
+      let tokenHash = searchParams.get('token_hash');
+      let type = searchParams.get('type');
       
-      if (!hash || !hash.includes('access_token')) {
-        console.log('4. No access token found');
-        setStatus('error');
-        return;
-      }
-
-      const params = new URLSearchParams(hash.substring(1));
-      const accessToken = params.get('access_token');
-      const refreshToken = params.get('refresh_token');
-      
-      console.log('5. Access token present:', !!accessToken);
-      
-      if (!accessToken) {
-        setStatus('error');
-        return;
-      }
-
-      try {
-        console.log('6. Setting session...');
-        const { data, error } = await supabase.auth.setSession({
-          access_token: accessToken,
-          refresh_token: refreshToken,
-        });
+      // If no token_hash in query params, try the hash (legacy format)
+      if (!tokenHash && window.location.hash) {
+        const hashParams = new URLSearchParams(window.location.hash.substring(1));
+        tokenHash = hashParams.get('token_hash');
+        type = hashParams.get('type');
         
-        console.log('7. Set session response:', data);
-        
-        if (error) {
-          console.error('8. Error:', error);
-          setStatus('error');
-          return;
-        }
-        
-        if (data.user?.email_confirmed_at) {
-          console.log('9. Email confirmed! Showing success message...');
-          setStatus('success');
+        // If still no token_hash, try access_token (older format)
+        if (!tokenHash) {
+          const accessToken = hashParams.get('access_token');
+          const refreshToken = hashParams.get('refresh_token');
           
-          // Wait 5 seconds before redirect
-          const timer = setInterval(() => {
-            setCountdown(prev => {
-              console.log(`Redirecting in ${prev - 1} seconds...`);
-              if (prev <= 1) {
-                clearInterval(timer);
-                console.log('Redirecting to dashboard...');
-                navigate('/dashboard');
-                return 0;
+          if (accessToken) {
+            console.log('5. Found access_token in hash, setting session...');
+            try {
+              const { data, error } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+              });
+              
+              console.log('6. Set session response:', data);
+              
+              if (error) {
+                console.error('7. Error:', error);
+                setStatus('error');
+                return;
               }
-              return prev - 1;
-            });
-          }, 1000);
+              
+              if (data.user?.email_confirmed_at) {
+                console.log('8. Email confirmed!');
+                setStatus('success');
+                
+                const timer = setInterval(() => {
+                  setCountdown(prev => {
+                    if (prev <= 1) {
+                      clearInterval(timer);
+                      navigate('/dashboard');
+                      return 0;
+                    }
+                    return prev - 1;
+                  });
+                }, 1000);
+                
+                return () => clearInterval(timer);
+              } else {
+                console.log('Email not confirmed');
+                setStatus('error');
+              }
+            } catch (error) {
+              console.error('Error:', error);
+              setStatus('error');
+            }
+            return;
+          }
+        }
+      }
+      
+      // If we have token_hash and type is signup/confirmation
+      if (tokenHash && (type === 'signup' || type === 'confirmation' || type === 'email')) {
+        console.log('5. Verifying token_hash:', tokenHash);
+        
+        try {
+          const { data, error } = await supabase.auth.verifyOtp({
+            token_hash: tokenHash,
+            type: 'signup', // or 'email' depending on your setup
+          });
           
-          return () => clearInterval(timer);
-        } else {
-          console.log('Email not confirmed');
+          console.log('6. Verify OTP response:', data);
+          
+          if (error) {
+            console.error('7. Error:', error);
+            setStatus('error');
+            return;
+          }
+          
+          if (data.user?.email_confirmed_at) {
+            console.log('8. Email confirmed!');
+            setStatus('success');
+            
+            const timer = setInterval(() => {
+              setCountdown(prev => {
+                if (prev <= 1) {
+                  clearInterval(timer);
+                  navigate('/dashboard');
+                  return 0;
+                }
+                return prev - 1;
+              });
+            }, 1000);
+            
+            return () => clearInterval(timer);
+          } else {
+            console.log('Email not confirmed');
+            setStatus('error');
+          }
+        } catch (error) {
+          console.error('Error:', error);
           setStatus('error');
         }
-      } catch (error) {
-        console.error('Error:', error);
-        setStatus('error');
+        return;
       }
+      
+      // If we get here, no valid token was found
+      console.log('No valid token found');
+      setStatus('error');
     };
 
     handleConfirmation();
-  }, [navigate]);
+  }, [searchParams, navigate]);
 
-  // SUCCESS STATE - This is what you should see
+  // SUCCESS STATE
   if (status === 'success') {
     return (
       <div style={{
@@ -195,6 +244,10 @@ const EmailConfirmation = () => {
           
           <p style={{ color: '#4a5568', marginBottom: '1rem' }}>
             The verification link is invalid or has expired.
+          </p>
+          
+          <p style={{ color: '#718096', fontSize: '0.9rem', marginBottom: '1.5rem' }}>
+            Please try signing up again or contact support if the problem persists.
           </p>
           
           <button

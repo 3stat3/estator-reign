@@ -258,7 +258,7 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
-    // ============ NEW METHODS FOR PASSWORD RESET ============
+    // ============ PASSWORD RESET METHODS ============
     
     /**
      * Verify the reset token from the email link
@@ -301,6 +301,69 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // ============ EMAIL CONFIRMATION METHODS ============
+    
+    /**
+     * Verify the email confirmation token from the email link
+     * @param {string} tokenHash - The token hash from the URL
+     * @param {string} type - The type of verification (signup, email, etc.)
+     * @returns {Promise<{success: boolean, data?: any}>}
+     */
+    const confirmEmail = async (tokenHash, type = 'signup') => {
+        setError(null);
+        try {
+            const { data, error } = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: type, // 'signup' for email confirmation
+            });
+            
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            setError(error.message);
+            throw error;
+        }
+    };
+
+    /**
+     * Resend the confirmation email
+     * @param {string} email - The user's email address
+     * @param {string} redirectUrl - The URL to redirect to after confirmation
+     * @returns {Promise<{success: boolean}>}
+     */
+    const resendConfirmationEmail = async (email, redirectUrl = null) => {
+        setError(null);
+        try {
+            const finalRedirectUrl = redirectUrl || `${window.location.origin}/email-confirmation`;
+            
+            const { error } = await supabase.auth.resend({
+                type: 'signup',
+                email: email,
+                options: {
+                    emailRedirectTo: finalRedirectUrl
+                }
+            });
+            
+            if (error) throw error;
+            return { success: true };
+        } catch (error) {
+            setError(error.message);
+            throw error;
+        }
+    };
+
+    /**
+     * Check if the user's email is confirmed
+     * @returns {boolean}
+     */
+    const isEmailConfirmed = () => {
+        if (!user) return false;
+        // You might want to check this from your user object or profile
+        return user?.email_confirmed_at ? true : false;
+    };
+
+    // ============ UTILITY METHODS ============
+
     /**
      * Check if user is currently authenticated
      * @returns {boolean}
@@ -334,7 +397,7 @@ export const AuthProvider = ({ children }) => {
         return null;
     };
 
-    // ============ END NEW METHODS ============
+    // ============ EXPORT VALUE ============
 
     const value = {
         // State
@@ -357,13 +420,18 @@ export const AuthProvider = ({ children }) => {
         // Password reset methods
         forgotPassword,
         resendResetLink,
-        verifyResetToken,    // NEW
-        updatePassword,      // NEW
+        verifyResetToken,
+        updatePassword,
+        
+        // Email confirmation methods (NEW)
+        confirmEmail,
+        resendConfirmationEmail,
+        isEmailConfirmed,
         
         // Utility methods
-        isAuthenticated,     // NEW
-        getSession,          // NEW
-        refreshUser,         // Updated
+        isAuthenticated,
+        getSession,
+        refreshUser,
         
         // User management
         fetchUser,
