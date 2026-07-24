@@ -10,11 +10,6 @@ const EmailConfirmation = () => {
 
   useEffect(() => {
     const handleConfirmation = async () => {
-      console.log('1. EmailConfirmation page loaded');
-      console.log('2. Full URL:', window.location.href);
-      console.log('3. Search params:', window.location.search);
-      console.log('4. Hash:', window.location.hash);
-      
       // Try to get token from query params first (new format)
       let tokenHash = searchParams.get('token_hash');
       let type = searchParams.get('type');
@@ -31,23 +26,18 @@ const EmailConfirmation = () => {
           const refreshToken = hashParams.get('refresh_token');
           
           if (accessToken) {
-            console.log('5. Found access_token in hash, setting session...');
             try {
               const { data, error } = await supabase.auth.setSession({
                 access_token: accessToken,
                 refresh_token: refreshToken || '',
               });
               
-              console.log('6. Set session response:', data);
-              
               if (error) {
-                console.error('7. Error:', error);
                 setStatus('error');
                 return;
               }
               
               if (data.user?.email_confirmed_at) {
-                console.log('8. Email confirmed!');
                 setStatus('success');
                 
                 const timer = setInterval(() => {
@@ -63,11 +53,9 @@ const EmailConfirmation = () => {
                 
                 return () => clearInterval(timer);
               } else {
-                console.log('Email not confirmed');
                 setStatus('error');
               }
             } catch (error) {
-              console.error('Error:', error);
               setStatus('error');
             }
             return;
@@ -77,24 +65,18 @@ const EmailConfirmation = () => {
       
       // If we have token_hash and type is signup/confirmation
       if (tokenHash && (type === 'signup' || type === 'confirmation' || type === 'email')) {
-        console.log('5. Verifying token_hash:', tokenHash);
-        
         try {
           const { data, error } = await supabase.auth.verifyOtp({
             token_hash: tokenHash,
-            type: 'signup', // or 'email' depending on your setup
+            type: 'signup',
           });
           
-          console.log('6. Verify OTP response:', data);
-          
           if (error) {
-            console.error('7. Error:', error);
             setStatus('error');
             return;
           }
           
           if (data.user?.email_confirmed_at) {
-            console.log('8. Email confirmed!');
             setStatus('success');
             
             const timer = setInterval(() => {
@@ -110,18 +92,15 @@ const EmailConfirmation = () => {
             
             return () => clearInterval(timer);
           } else {
-            console.log('Email not confirmed');
             setStatus('error');
           }
         } catch (error) {
-          console.error('Error:', error);
           setStatus('error');
         }
         return;
       }
       
       // If we get here, no valid token was found
-      console.log('No valid token found');
       setStatus('error');
     };
 

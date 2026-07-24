@@ -90,13 +90,10 @@ export const AuthProvider = ({ children }) => {
 
             // If no profile exists, create one
             if (!profile && error?.code === 'PGRST116') {
-                console.log('Profile not found, creating one...');
-                
                 // Get the user from auth
                 const { data: { user }, error: userError } = await supabase.auth.getUser();
                 
                 if (userError) {
-                    console.error('Error getting user:', userError);
                     throw userError;
                 }
 
@@ -119,7 +116,6 @@ export const AuthProvider = ({ children }) => {
                         .maybeSingle();
 
                     if (insertError) {
-                        console.error('Error creating profile:', insertError);
                         throw insertError;
                     }
 
@@ -167,7 +163,6 @@ export const AuthProvider = ({ children }) => {
             throw new Error('Unable to fetch or create profile');
             
         } catch (error) {
-            console.error('Error in fetchUser:', error);
             setUser(null);
             localStorage.removeItem('user');
             throw error;
@@ -212,7 +207,6 @@ export const AuthProvider = ({ children }) => {
 
                 // Only throw if it's not a duplicate or RLS error
                 if (profileError && profileError.code !== '23505' && !profileError.message.includes('policy')) {
-                    console.warn('Profile insert warning:', profileError);
                     // Don't throw - the trigger might create it
                 }
                 

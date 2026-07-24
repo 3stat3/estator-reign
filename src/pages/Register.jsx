@@ -23,7 +23,6 @@ import {
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-// REMOVED: import { supabase } from '../../supabase';  <-- THIS IS THE CHANGE
 
 // Theme Context
 const ThemeContext = createContext();
@@ -103,7 +102,7 @@ const Register = () => {
   const [showSubLevel, setShowSubLevel] = useState(false);
   const [subLevelOptions, setSubLevelOptions] = useState([]);
   const { theme, toggleTheme } = useTheme();
-  const { register: registerUser } = useAuth();  // <-- THIS IS THE CHANGE - renamed to avoid conflict with react-hook-form's register
+  const { register: registerUser } = useAuth();
   const navigate = useNavigate();
 
   const {
@@ -201,51 +200,37 @@ const Register = () => {
     setLoading(true);
 
     try {
-        // Combine position and level if level exists
-        let finalPosition = data.position;
-        if (data.positionLevel) {
-            finalPosition = data.positionLevel;
-        }
+      let finalPosition = data.position;
+      if (data.positionLevel) {
+        finalPosition = data.positionLevel;
+      }
 
-        console.log('1. Starting registration with:', {
-            email: data.email,
-            username: data.username,
-            fullName: data.fullName,
-            position: finalPosition
-        });
+      const result = await registerUser(
+        data.email,
+        data.password,
+        data.username,
+        data.fullName,
+        finalPosition
+      );
 
-        // Use the AuthContext register method
-        const result = await registerUser(
-            data.email,
-            data.password,
-            data.username,
-            data.fullName,
-            finalPosition
-        );
+      if (result.error) {
+        throw new Error(result.error);
+      }
 
-        console.log('2. Registration result:', result);
-
-        if (result.error) {
-            throw new Error(result.error);
-        }
-
-        if (result.success) {
-            console.log('3. Registration successful!');
-            setSuccess('Registration successful! Please check your email to confirm your account.');
-            setTimeout(() => {
-                navigate('/login');
-            }, 4000);
-        } else {
-            throw new Error('Registration failed');
-        }
+      if (result.success) {
+        setSuccess('Registration successful! Please check your email to confirm your account.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 4000);
+      } else {
+        throw new Error('Registration failed');
+      }
     } catch (err) {
-        console.error('Registration error:', err);
-        setError(err.message || 'Registration failed. Please try again.');
+      setError(err.message || 'Registration failed. Please try again.');
     } finally {
-        setLoading(false);
+      setLoading(false);
     }
-};
-  // ============ END OF CHANGED onSubmit FUNCTION ============
+  };
 
   // Terms of Service Modal
   const TosModal = () => (
