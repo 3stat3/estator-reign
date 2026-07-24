@@ -195,57 +195,51 @@ const Register = () => {
     return texts[passwordStrength];
   };
 
-  // ============ THIS IS THE COMPLETE CHANGED onSubmit FUNCTION ============
   const onSubmit = async (data) => {
     setError('');
     setSuccess('');
     setLoading(true);
 
     try {
-      // Combine position and level if level exists
-      let finalPosition = data.position;
-      if (data.positionLevel) {
-        finalPosition = data.positionLevel;
-      }
+        // Combine position and level if level exists
+        let finalPosition = data.position;
+        if (data.positionLevel) {
+            finalPosition = data.positionLevel;
+        }
 
-      console.log('1. Starting registration with:', {
-        email: data.email,
-        username: data.username,
-        fullName: data.fullName,
-        position: finalPosition
-      });
+        // Only sign up - the trigger will create the profile
+        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+            email: data.email,
+            password: data.password,
+            options: {
+                data: {
+                    username: data.username,
+                    full_name: data.fullName,
+                    position: finalPosition
+                },
+                emailRedirectTo: `${window.location.origin}/email-confirmation`
+            }
+        });
 
-      // Use the AuthContext register method instead of direct Supabase call
-      const result = await registerUser(
-        data.email,
-        data.password,
-        data.username,
-        data.fullName,
-        finalPosition
-      );
+        if (signUpError) throw signUpError;
 
-      console.log('2. Registration result:', result);
+        if (authData.user) {
+            // The profile is automatically created by the trigger
+            // No need to insert into profiles!
+            sessionStorage.setItem('pendingVerificationEmail', data.email);
+        }
 
-      if (result.error) {
-        throw new Error(result.error);
-      }
-
-      if (result.success) {
-        console.log('3. Registration successful!');
-        setSuccess('Registration successful! Your account is pending admin approval. You will be notified once approved.');
+        setSuccess('Registration successful! Please check your email to confirm your account.');
         setTimeout(() => {
-          navigate('/login');
+            navigate('/login');
         }, 4000);
-      } else {
-        throw new Error('Registration failed');
-      }
     } catch (err) {
-      console.error('Registration error:', err);
-      setError(err.message || 'Registration failed. Please try again.');
+        console.error('Registration error:', err);
+        setError(err.message || 'Registration failed. Please try again.');
     } finally {
-      setLoading(false);
+        setLoading(false);
     }
-  };
+};
   // ============ END OF CHANGED onSubmit FUNCTION ============
 
   // Terms of Service Modal
