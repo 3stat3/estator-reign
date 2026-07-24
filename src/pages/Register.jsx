@@ -23,7 +23,7 @@ import {
 import { useForm } from 'react-hook-form';
 import { yupResolver } from '@hookform/resolvers/yup';
 import * as yup from 'yup';
-import { supabase } from '../../supabase';
+// REMOVED: import { supabase } from '../../supabase';  <-- THIS IS THE CHANGE
 
 // Theme Context
 const ThemeContext = createContext();
@@ -103,6 +103,7 @@ const Register = () => {
   const [showSubLevel, setShowSubLevel] = useState(false);
   const [subLevelOptions, setSubLevelOptions] = useState([]);
   const { theme, toggleTheme } = useTheme();
+  const { register: registerUser } = useAuth();  // <-- THIS IS THE CHANGE - renamed to avoid conflict with react-hook-form's register
   const navigate = useNavigate();
 
   const {
@@ -194,6 +195,7 @@ const Register = () => {
     return texts[passwordStrength];
   };
 
+  // ============ THIS IS THE COMPLETE CHANGED onSubmit FUNCTION ============
   const onSubmit = async (data) => {
     setError('');
     setSuccess('');
@@ -206,46 +208,37 @@ const Register = () => {
         finalPosition = data.positionLevel;
       }
 
-      // Register with Supabase Auth
-      const { data: authData, error: signUpError } = await supabase.auth.signUp({
+      console.log('1. Starting registration with:', {
         email: data.email,
-        password: data.password,
-        options: {
-          data: {
-            username: data.username,
-            full_name: data.fullName,
-            position: finalPosition
-          }
-        }
+        username: data.username,
+        fullName: data.fullName,
+        position: finalPosition
       });
 
-      if (signUpError) throw signUpError;
+      // Use the AuthContext register method instead of direct Supabase call
+      const result = await registerUser(
+        data.email,
+        data.password,
+        data.username,
+        data.fullName,
+        finalPosition
+      );
 
-      if (authData.user) {
-        // Insert into profiles table
-        const { error: profileError } = await supabase
-          .from('profiles')
-          .insert([
-            {
-              id: authData.user.id,
-              username: data.username,
-              full_name: data.fullName,
-              email: data.email,
-              position: finalPosition,
-              role: 'regular_user',
-              approval_status: 'pending_initial',
-              created_at: new Date().toISOString(),
-              updated_at: new Date().toISOString()
-            }
-          ]);
+      console.log('2. Registration result:', result);
 
-        if (profileError) throw profileError;
+      if (result.error) {
+        throw new Error(result.error);
       }
 
-      setSuccess('Registration successful! Your account is pending admin approval. You will be notified once approved.');
-      setTimeout(() => {
-        navigate('/login');
-      }, 4000);
+      if (result.success) {
+        console.log('3. Registration successful!');
+        setSuccess('Registration successful! Your account is pending admin approval. You will be notified once approved.');
+        setTimeout(() => {
+          navigate('/login');
+        }, 4000);
+      } else {
+        throw new Error('Registration failed');
+      }
     } catch (err) {
       console.error('Registration error:', err);
       setError(err.message || 'Registration failed. Please try again.');
@@ -253,6 +246,7 @@ const Register = () => {
       setLoading(false);
     }
   };
+  // ============ END OF CHANGED onSubmit FUNCTION ============
 
   // Terms of Service Modal
   const TosModal = () => (
