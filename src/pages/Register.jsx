@@ -207,32 +207,37 @@ const Register = () => {
             finalPosition = data.positionLevel;
         }
 
-        // Only sign up - the trigger will create the profile
-        const { data: authData, error: signUpError } = await supabase.auth.signUp({
+        console.log('1. Starting registration with:', {
             email: data.email,
-            password: data.password,
-            options: {
-                data: {
-                    username: data.username,
-                    full_name: data.fullName,
-                    position: finalPosition
-                },
-                emailRedirectTo: `${window.location.origin}/email-confirmation`
-            }
+            username: data.username,
+            fullName: data.fullName,
+            position: finalPosition
         });
 
-        if (signUpError) throw signUpError;
+        // Use the AuthContext register method
+        const result = await registerUser(
+            data.email,
+            data.password,
+            data.username,
+            data.fullName,
+            finalPosition
+        );
 
-        if (authData.user) {
-            // The profile is automatically created by the trigger
-            // No need to insert into profiles!
-            sessionStorage.setItem('pendingVerificationEmail', data.email);
+        console.log('2. Registration result:', result);
+
+        if (result.error) {
+            throw new Error(result.error);
         }
 
-        setSuccess('Registration successful! Please check your email to confirm your account.');
-        setTimeout(() => {
-            navigate('/login');
-        }, 4000);
+        if (result.success) {
+            console.log('3. Registration successful!');
+            setSuccess('Registration successful! Please check your email to confirm your account.');
+            setTimeout(() => {
+                navigate('/login');
+            }, 4000);
+        } else {
+            throw new Error('Registration failed');
+        }
     } catch (err) {
         console.error('Registration error:', err);
         setError(err.message || 'Registration failed. Please try again.');
