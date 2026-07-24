@@ -3,7 +3,7 @@ import { useAuth } from '../context/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import PropertyDivider from "../components/PropertyDivider/PropertyDivider";
 import EstateTaxCalculator from '../components/EstateTaxCalculator/EstateTaxCalculator';
-import PersonalFinanceTracker from '../components/PersonalTools/PersonalFinanceTracker';  // <-- FIXED IMPORT
+import PersonalFinanceTracker from '../components/PersonalTools/PersonalFinanceTracker';
 import {
   CalculatorIcon,
   UserGroupIcon,
@@ -17,12 +17,12 @@ import {
   ChartPieIcon,
   WrenchScrewdriverIcon,
   Squares2X2Icon,
-  WalletIcon  // <-- Added for Finance Tracker icon
+  WalletIcon
 } from '@heroicons/react/24/outline';
 
 const DemoDashboard = () => {
   const { user, logout } = useAuth();
-  const [activeTab, setActiveTab] = useState('finance'); // Set Finance Tracker as default
+  const [activeTab, setActiveTab] = useState('finance');
   const [showUserMenu, setShowUserMenu] = useState(false);
   const [showNotifications, setShowNotifications] = useState(false);
   const [isMobile, setIsMobile] = useState(false);
@@ -101,7 +101,7 @@ const DemoDashboard = () => {
     );
   };
 
-  // Locked feature component
+  // Locked feature component with demo warning
   const LockedFeature = ({ featureName }) => (
     <motion.div 
       className="locked-feature-card"
@@ -128,7 +128,7 @@ const DemoDashboard = () => {
   );
 
   const renderContent = () => {
-    // Finance Tracker - Fully accessible
+    // Finance Tracker - Fully accessible (NO demo warning)
     if (activeTab === 'finance') {
       return (
         <motion.div
@@ -145,12 +145,12 @@ const DemoDashboard = () => {
               Track your income, expenses, and savings
             </p>
           </div>
-          <PersonalFinanceTracker />  {/* <-- Using the correct component */}
+          <PersonalFinanceTracker />
         </motion.div>
       );
     }
 
-    // All other features are locked
+    // All other features are locked with demo warning
     const featureNames = {
       calculator: 'Estate Tax Calculator',
       propertydivider: 'Property Divider',
@@ -172,6 +172,9 @@ const DemoDashboard = () => {
       </motion.div>
     );
   };
+
+  // Check if Finance Tracker is active - to hide the demo banner
+  const isFinanceTrackerActive = activeTab === 'finance';
 
   return (
     <div className={`dashboard-container ${theme}`} data-theme={theme}>
@@ -408,20 +411,22 @@ const DemoDashboard = () => {
         </div>
       </nav>
 
-      {/* Global Demo Banner */}
-      <div className="global-demo-banner">
-        <div className="banner-content">
-          <EyeIcon className="banner-icon" />
-          <div className="banner-text">
-            <strong>Demo Account - View Only Mode</strong>
-            <p>Your account is awaiting administrator approval. You can preview all features but cannot submit or save any data. Full access will be granted once approved.</p>
-          </div>
-          <div className="banner-status">
-            <LockClosedIcon />
-            <span>Pending Approval</span>
+      {/* Global Demo Banner - HIDDEN when Finance Tracker is active */}
+      {!isFinanceTrackerActive && (
+        <div className="global-demo-banner">
+          <div className="banner-content">
+            <EyeIcon className="banner-icon" />
+            <div className="banner-text">
+              <strong>Demo Account - View Only Mode</strong>
+              <p>Your account is awaiting administrator approval. You can preview all features but cannot submit or save any data. Full access will be granted once approved.</p>
+            </div>
+            <div className="banner-status">
+              <LockClosedIcon />
+              <span>Pending Approval</span>
+            </div>
           </div>
         </div>
-      </div>
+      )}
 
       <main className="dashboard-main">
         <AnimatePresence mode="wait">
@@ -938,6 +943,7 @@ const DemoDashboard = () => {
           padding: 2rem 1.5rem;
         }
 
+        /* Global Demo Banner - HIDDEN on Finance Tracker */
         .global-demo-banner {
           max-width: 1600px;
           margin: 0 auto;
@@ -1005,6 +1011,7 @@ const DemoDashboard = () => {
           height: 1rem;
         }
 
+        /* Finance Tracker - No demo warning inside */
         .finance-tracker-wrapper {
           background: var(--card-bg);
           border-radius: 1rem;
@@ -1028,6 +1035,7 @@ const DemoDashboard = () => {
           color: var(--text-secondary);
         }
 
+        /* Locked Feature - Shows demo warning */
         .locked-feature-card {
           background: var(--card-bg);
           border-radius: 1rem;
