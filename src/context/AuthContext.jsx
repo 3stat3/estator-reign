@@ -258,21 +258,115 @@ export const AuthProvider = ({ children }) => {
         }
     };
 
+    // ============ NEW METHODS FOR PASSWORD RESET ============
+    
+    /**
+     * Verify the reset token from the email link
+     * @param {string} tokenHash - The token hash from the URL
+     * @returns {Promise<{success: boolean, data?: any}>}
+     */
+    const verifyResetToken = async (tokenHash) => {
+        setError(null);
+        try {
+            const { data, error } = await supabase.auth.verifyOtp({
+                token_hash: tokenHash,
+                type: 'recovery',
+            });
+            
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            setError(error.message);
+            throw error;
+        }
+    };
+
+    /**
+     * Update the user's password
+     * @param {string} newPassword - The new password
+     * @returns {Promise<{success: boolean, data?: any}>}
+     */
+    const updatePassword = async (newPassword) => {
+        setError(null);
+        try {
+            const { data, error } = await supabase.auth.updateUser({
+                password: newPassword,
+            });
+            
+            if (error) throw error;
+            return { success: true, data };
+        } catch (error) {
+            setError(error.message);
+            throw error;
+        }
+    };
+
+    /**
+     * Check if user is currently authenticated
+     * @returns {boolean}
+     */
+    const isAuthenticated = () => {
+        return !!user;
+    };
+
+    /**
+     * Get the current session
+     * @returns {Promise<{session: any, error: any}>}
+     */
+    const getSession = async () => {
+        try {
+            const { data, error } = await supabase.auth.getSession();
+            if (error) throw error;
+            return { session: data.session, error: null };
+        } catch (error) {
+            return { session: null, error: error.message };
+        }
+    };
+
+    /**
+     * Refresh the user data
+     * @returns {Promise<any>}
+     */
+    const refreshUser = async () => {
+        if (user) {
+            return await fetchUser(user.id);
+        }
+        return null;
+    };
+
+    // ============ END NEW METHODS ============
+
     const value = {
+        // State
         user,
         loading,
         error,
+        darkMode,
+        
+        // Authentication methods
         register,
         login,
         logout,
-        darkMode,
         toggleDarkMode,
+        
+        // Advanced auth methods
         sendMagicLink,
         loginWithBiometrics,
         loginWith2FA,
+        
+        // Password reset methods
         forgotPassword,
         resendResetLink,
-        refreshUser: () => user ? fetchUser(user.id) : null
+        verifyResetToken,    // NEW
+        updatePassword,      // NEW
+        
+        // Utility methods
+        isAuthenticated,     // NEW
+        getSession,          // NEW
+        refreshUser,         // Updated
+        
+        // User management
+        fetchUser,
     };
 
     return (

@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useContext, createContext } from "react";
-import { useNavigate, Link } from "react-router-dom";
+import { useNavigate, Link, useSearchParams } from "react-router-dom";
 import { supabase } from "../../supabase";
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -13,6 +13,7 @@ import {
   SunIcon,
   MoonIcon,
 } from '@heroicons/react/24/outline';
+import { useAuth } from '../context/AuthContext';
 
 // Theme Context
 const ThemeContext = createContext();
@@ -43,7 +44,9 @@ const ThemeProvider = ({ children }) => {
 
 const ResetPassword = () => {
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
   const { theme, toggleTheme } = useTheme();
+  const { verifyResetToken, updatePassword } = useAuth();
   
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -55,6 +58,7 @@ const ResetPassword = () => {
   const [passwordStrength, setPasswordStrength] = useState(0);
   const [isVerifying, setIsVerifying] = useState(true);
   const [showResetForm, setShowResetForm] = useState(false);
+  const [tokenVerified, setTokenVerified] = useState(false);
 
   // Handle the recovery flow - runs once on component mount
   useEffect(() => {
@@ -63,63 +67,64 @@ const ResetPassword = () => {
         setIsVerifying(true);
         setError('');
 
-        // Get the current URL hash
-        const hash = window.location.hash;
-        
-        // Parse the hash parameters
-        const params = new URLSearchParams(hash.replace('#', '?'));
-        const accessToken = params.get('access_token');
-        const refreshToken = params.get('refresh_token');
-        const type = params.get('type');
-        const expiresAt = params.get('expires_at');
+        // Get token from URL query parameters (not hash)
+        const tokenHash = searchParams.get('token_hash');
+        const type = searchParams.get('type');
 
-        // If we have an access token and it's a recovery type
-        if (accessToken && type === 'recovery') {
-          // Check if token is expired
-          if (expiresAt) {
-            const expiryTime = parseInt(expiresAt) * 1000;
-            const now = Date.now();
-            if (now > expiryTime) {
-              throw new Error('This reset link has expired. Please request a new one.');
+        console.log('Token hash:', tokenHash);
+        console.log('Type:', type);
+
+        // Check if we have the required parameters
+        if (!tokenHash || type !== 'recovery') {
+          // Check if there's a hash-based token (for backward compatibility)
+          const hash = window.location.hash;
+          if (hash) {
+            const params = new URLSearchParams(hash.replace('#', '?'));
+            const accessToken = params.get('access_token');
+            const refreshToken = params.get('refresh_token');
+            const hashType = params.get('type');
+            
+            if (accessToken && hashType === 'recovery') {
+              // Handle hash-based token (legacy)
+              const { data, error: setSessionError } = await supabase.auth.setSession({
+                access_token: accessToken,
+                refresh_token: refreshToken || '',
+              });
+
+              if (!setSessionError && data.session) {
+                setShowResetForm(true);
+                setTokenVerified(true);
+                setIsVerifying(false);
+                return;
+              }
             }
           }
-
-          // Set the session with the recovery token
-          const { data, error: setSessionError } = await supabase.auth.setSession({
-            access_token: accessToken,
-            refresh_token: refreshToken || '',
-          });
-
-          if (setSessionError) {
-            throw new Error('This reset link is invalid or has expired. Please request a new one.');
-          }
-
-          if (data.session) {
-            setShowResetForm(true);
-            setIsVerifying(false);
-            return;
-          }
+          
+          throw new Error('Invalid or missing reset link. Please request a new password reset.');
         }
 
-        // Check if we already have a session (maybe from a previous login)
-        const { data: { session } } = await supabase.auth.getSession();
-        if (session) {
+        // Verify the token using the AuthContext method
+        const result = await verifyResetToken(tokenHash);
+        
+        if (result.success) {
+          setTokenVerified(true);
           setShowResetForm(true);
           setIsVerifying(false);
-          return;
+        } else {
+          throw new Error('Invalid or expired reset token');
         }
 
-        // If we get here, no valid token or session was found
-        throw new Error('No valid reset link found. Please request a new password reset.');
       } catch (err) {
+        console.error('Recovery error:', err);
         setError(err.message || 'An error occurred while verifying your reset link.');
         setShowResetForm(false);
+        setTokenVerified(false);
         setIsVerifying(false);
       }
     };
 
     handleRecovery();
-  }, []);
+  }, [searchParams, verifyResetToken]);
 
   // Password strength checker
   const checkPasswordStrength = (pwd) => {
@@ -151,34 +156,36 @@ const ResetPassword = () => {
       return;
     }
 
+    if (passwordStrength < 3) {
+      setError('Please use a stronger password (uppercase, lowercase, numbers)');
+      return;
+    }
+
     setLoading(true);
     setError('');
     setMessage('');
 
     try {
-      // Update the password
-      const { error: updateError } = await supabase.auth.updateUser({
-        password: password
-      });
+      // Update the password using the AuthContext method
+      const result = await updatePassword(password);
 
-      if (updateError) {
-        if (updateError.message.includes('session') || updateError.message.includes('token')) {
-          throw new Error('Your reset session has expired. Please request a new password reset.');
-        }
-        throw updateError;
+      if (result.success) {
+        setMessage('Password reset successful! Redirecting to login...');
+        
+        // Sign out to clear the temporary session
+        await supabase.auth.signOut();
+        
+        // Clean the URL
+        window.history.replaceState({}, document.title, '/reset-password');
+        
+        setTimeout(() => {
+          navigate('/login', { 
+            state: { message: 'Password successfully reset! Please login with your new password.' }
+          });
+        }, 3000);
+      } else {
+        throw new Error('Failed to update password');
       }
-
-      setMessage('Password reset successful! Redirecting to login...');
-      
-      // Sign out to clear the temporary session
-      await supabase.auth.signOut();
-      
-      // Clean the URL
-      window.history.replaceState({}, document.title, '/reset-password');
-      
-      setTimeout(() => {
-        navigate('/login');
-      }, 3000);
     } catch (err) {
       setError(err.message || 'Failed to reset password. Please try again.');
     } finally {
@@ -244,13 +251,21 @@ const ResetPassword = () => {
               <p className="subtitle mb-6">
                 {error || "This password reset link is invalid or has expired."}
               </p>
-              <Link
-                to="/forgot-password"
-                className="submit-btn"
-              >
-                Request New Reset Link
-                <ArrowRightIcon className="btn-icon" />
-              </Link>
+              <div className="flex flex-col gap-3">
+                <Link
+                  to="/forgot-password"
+                  className="submit-btn"
+                >
+                  Request New Reset Link
+                  <ArrowRightIcon className="btn-icon" />
+                </Link>
+                <Link
+                  to="/login"
+                  className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+                >
+                  Back to Login
+                </Link>
+              </div>
             </div>
           </motion.div>
         </div>
@@ -437,7 +452,7 @@ const ResetPassword = () => {
               whileTap={{ scale: 0.98 }}
               type="submit"
               className="submit-btn"
-              disabled={loading || !password || !confirmPassword || password !== confirmPassword}
+              disabled={loading || !password || !confirmPassword || password !== confirmPassword || passwordStrength < 3}
             >
               {loading ? (
                 <div className="spinner"></div>
