@@ -8,6 +8,7 @@ export const useFinance = () => {
   const [transactions, setTransactions] = useState([]);
   const [budgets, setBudgets] = useState([]);
   const [bills, setBills] = useState([]);
+  const [loans, setLoans] = useState([]);
   const [loading, setLoading] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState(new Date());
 
@@ -43,7 +44,7 @@ export const useFinance = () => {
       if (error) throw error;
       setTransactions(data || []);
     } catch (error) {
-      console.error('Error fetching transactions:', error);
+      // Silent fail
     } finally {
       setLoading(false);
     }
@@ -68,7 +69,6 @@ export const useFinance = () => {
       setTransactions(prev => [data, ...prev]);
       return { success: true, data };
     } catch (error) {
-      console.error('Error adding transaction:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -94,7 +94,6 @@ export const useFinance = () => {
       setTransactions(prev => prev.map(t => t.id === id ? data : t));
       return { success: true, data };
     } catch (error) {
-      console.error('Error updating transaction:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -115,7 +114,6 @@ export const useFinance = () => {
       setTransactions(prev => prev.filter(t => t.id !== id));
       return { success: true };
     } catch (error) {
-      console.error('Error deleting transaction:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -136,7 +134,7 @@ export const useFinance = () => {
       if (error) throw error;
       setBudgets(data || []);
     } catch (error) {
-      console.error('Error fetching budgets:', error);
+      // Silent fail
     }
   }, [user, selectedMonth]);
 
@@ -160,7 +158,6 @@ export const useFinance = () => {
       await fetchBudgets();
       return { success: true, data };
     } catch (error) {
-      console.error('Error setting budget:', error);
       return { success: false, error: error.message };
     }
   };
@@ -180,7 +177,6 @@ export const useFinance = () => {
       setBudgets(prev => prev.filter(b => b.category !== category));
       return { success: true };
     } catch (error) {
-      console.error('Error deleting budget:', error);
       return { success: false, error: error.message };
     }
   };
@@ -199,7 +195,7 @@ export const useFinance = () => {
       if (error) throw error;
       setBills(data || []);
     } catch (error) {
-      console.error('Error fetching bills:', error);
+      // Silent fail
     }
   }, [user]);
 
@@ -223,7 +219,6 @@ export const useFinance = () => {
       setBills(prev => [...prev, data]);
       return { success: true, data };
     } catch (error) {
-      console.error('Error adding bill:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -249,7 +244,6 @@ export const useFinance = () => {
       setBills(prev => prev.map(b => b.id === id ? data : b));
       return { success: true, data };
     } catch (error) {
-      console.error('Error updating bill:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -270,7 +264,6 @@ export const useFinance = () => {
       setBills(prev => prev.filter(b => b.id !== id));
       return { success: true };
     } catch (error) {
-      console.error('Error deleting bill:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -292,7 +285,6 @@ export const useFinance = () => {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching bill payments:', error);
       return [];
     }
   }, [user]);
@@ -301,7 +293,6 @@ export const useFinance = () => {
     if (!user) return { success: false, error: 'Not authenticated' };
     setLoading(true);
     try {
-      // 1. Get the bill details
       const { data: bill, error: billError } = await supabase
         .from('bills')
         .select('*')
@@ -310,7 +301,6 @@ export const useFinance = () => {
 
       if (billError) throw billError;
 
-      // 2. Insert payment record
       const { data: payment, error: paymentError } = await supabase
         .from('bill_payments')
         .insert([{
@@ -329,7 +319,6 @@ export const useFinance = () => {
 
       if (paymentError) throw paymentError;
 
-      // 3. Create a transaction for this payment
       const transactionData = {
         date: paymentData.paid_date || new Date().toISOString().split('T')[0],
         description: `${bill.name} Payment`,
@@ -354,7 +343,6 @@ export const useFinance = () => {
 
       if (txError) throw txError;
 
-      // 4. Update the payment record with transaction_id
       const { error: updateError } = await supabase
         .from('bill_payments')
         .update({ transaction_id: transaction.id })
@@ -362,12 +350,9 @@ export const useFinance = () => {
 
       if (updateError) throw updateError;
 
-      // 5. Refresh data
       await loadAllData();
-
       return { success: true, data: { payment, transaction } };
     } catch (error) {
-      console.error('Error recording bill payment:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -387,7 +372,6 @@ export const useFinance = () => {
       if (error) throw error;
       return data || [];
     } catch (error) {
-      console.error('Error fetching bill payment history:', error);
       return [];
     }
   }, [user]);
@@ -396,7 +380,6 @@ export const useFinance = () => {
     if (!user) return { success: false, error: 'Not authenticated' };
     setLoading(true);
     try {
-      // Get the payment to find the transaction_id
       const { data: payment, error: getError } = await supabase
         .from('bill_payments')
         .select('transaction_id')
@@ -405,7 +388,6 @@ export const useFinance = () => {
 
       if (getError) throw getError;
 
-      // Delete the associated transaction if exists
       if (payment?.transaction_id) {
         const { error: txError } = await supabase
           .from('transactions')
@@ -416,7 +398,6 @@ export const useFinance = () => {
         if (txError) throw txError;
       }
 
-      // Delete the payment
       const { error } = await supabase
         .from('bill_payments')
         .delete()
@@ -428,7 +409,6 @@ export const useFinance = () => {
       await loadAllData();
       return { success: true };
     } catch (error) {
-      console.error('Error deleting bill payment:', error);
       return { success: false, error: error.message };
     } finally {
       setLoading(false);
@@ -444,7 +424,6 @@ export const useFinance = () => {
     const currentYear = today.getFullYear();
 
     try {
-      // Get all active bills
       const { data: activeBills, error } = await supabase
         .from('bills')
         .select('*')
@@ -453,10 +432,8 @@ export const useFinance = () => {
 
       if (error) throw error;
 
-      // For each bill, get the latest payment
       const billsWithStatus = await Promise.all(
         activeBills.map(async (bill) => {
-          // Get latest payment for this bill
           const { data: payments, error: pError } = await supabase
             .from('bill_payments')
             .select('*')
@@ -467,7 +444,6 @@ export const useFinance = () => {
 
           if (pError) throw pError;
 
-          // Get all payments for this bill
           const { data: allPayments, error: allError } = await supabase
             .from('bill_payments')
             .select('*')
@@ -477,19 +453,16 @@ export const useFinance = () => {
 
           if (allError) throw allError;
 
-          // Calculate due date for this month
           let dueDate = new Date(currentYear, currentMonth, bill.due_day);
           if (bill.due_day < currentDay) {
             dueDate = new Date(currentYear, currentMonth + 1, bill.due_day);
           }
 
-          // Determine if paid this month
           const latestPayment = payments?.[0] || null;
           const isPaid = latestPayment && 
             new Date(latestPayment.due_date).getMonth() === currentMonth &&
             new Date(latestPayment.due_date).getFullYear() === currentYear;
 
-          // Calculate over/under payment
           let status = 'unpaid';
           let paidAmount = 0;
           let difference = bill.amount;
@@ -530,14 +503,12 @@ export const useFinance = () => {
         })
       );
 
-      // Sort: Overdue first, then upcoming, then paid
       return billsWithStatus.sort((a, b) => {
         const order = { overdue: 0, upcoming: 1, paid_exact: 2, overpaid: 3, underpaid: 4, unpaid: 5 };
         return (order[a.status] || 5) - (order[b.status] || 5);
       });
 
     } catch (error) {
-      console.error('Error fetching bills with status:', error);
       return [];
     }
   }, [user]);
@@ -553,7 +524,6 @@ export const useFinance = () => {
       dueDate = new Date(currentYear, currentMonth + 1, bill.due_day);
     }
 
-    // Check if paid this month (simplified)
     const isPaid = bill.latestPayment && 
       new Date(bill.latestPayment.due_date).getMonth() === currentMonth &&
       new Date(bill.latestPayment.due_date).getFullYear() === currentYear;
@@ -589,6 +559,261 @@ export const useFinance = () => {
       isUnderpaid: status === 'underpaid'
     };
   }, []);
+
+  // ========== LOANS ==========
+  const fetchLoans = useCallback(async () => {
+    if (!user) return;
+    try {
+      const { data, error } = await supabase
+        .from('loans')
+        .select('*')
+        .eq('user_id', user.id)
+        .order('created_at', { ascending: false });
+
+      if (error) throw error;
+      setLoans(data || []);
+    } catch (error) {
+      // Silent fail
+    }
+  }, [user]);
+
+  const addLoan = async (loan) => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('loans')
+        .insert([{ 
+          ...loan, 
+          user_id: user.id,
+          total_paid: 0,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        }])
+        .select()
+        .single();
+
+      if (error) throw error;
+      setLoans(prev => [data, ...prev]);
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const updateLoan = async (id, updates) => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+    setLoading(true);
+    try {
+      const { data, error } = await supabase
+        .from('loans')
+        .update({ 
+          ...updates, 
+          updated_at: new Date().toISOString() 
+        })
+        .eq('id', id)
+        .eq('user_id', user.id)
+        .select()
+        .single();
+
+      if (error) throw error;
+      setLoans(prev => prev.map(l => l.id === id ? data : l));
+      return { success: true, data };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const deleteLoan = async (id) => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+    setLoading(true);
+    try {
+      const { error } = await supabase
+        .from('loans')
+        .delete()
+        .eq('id', id)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+      setLoans(prev => prev.filter(l => l.id !== id));
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== LOAN PAYMENTS ==========
+  const recordLoanPayment = async (paymentData) => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+    setLoading(true);
+    try {
+      const { data: loan, error: loanError } = await supabase
+        .from('loans')
+        .select('*')
+        .eq('id', paymentData.loan_id)
+        .single();
+
+      if (loanError) {
+        throw new Error(`Loan fetch error: ${loanError.message}`);
+      }
+
+      const paymentRecord = {
+        loan_id: paymentData.loan_id,
+        user_id: user.id,
+        payment_date: paymentData.payment_date || new Date().toISOString().split('T')[0],
+        amount_paid: parseFloat(paymentData.amount_paid),
+        status: paymentData.status || 'paid',
+        notes: paymentData.notes || '',
+        created_at: new Date().toISOString(),
+        updated_at: new Date().toISOString()
+      };
+
+      const { data: payment, error: paymentError } = await supabase
+        .from('loan_payments')
+        .insert([paymentRecord])
+        .select()
+        .single();
+
+      if (paymentError) {
+        throw new Error(`Payment insert error: ${paymentError.message}`);
+      }
+
+      const newTotalPaid = (loan.total_paid || 0) + parseFloat(paymentData.amount_paid);
+
+      const { error: updateError } = await supabase
+        .from('loans')
+        .update({ 
+          total_paid: newTotalPaid,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', paymentData.loan_id);
+
+      if (updateError) {
+        // Silent fail for update
+      }
+
+      try {
+        const transactionData = {
+          date: paymentData.payment_date || new Date().toISOString().split('T')[0],
+          description: `${loan.name} Payment`,
+          category: 'Loan Payment',
+          type: 'expense',
+          amount: parseFloat(paymentData.amount_paid),
+          is_bill: false,
+          notes: paymentData.notes || `Payment for ${loan.name}`,
+          user_id: user.id,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString()
+        };
+
+        const { data: transaction, error: txError } = await supabase
+          .from('transactions')
+          .insert([transactionData])
+          .select()
+          .single();
+
+        if (!txError) {
+          await supabase
+            .from('loan_payments')
+            .update({ transaction_id: transaction.id })
+            .eq('id', payment.id);
+        }
+      } catch (txError) {
+        // Silent fail for transaction creation
+      }
+
+      if (newTotalPaid >= loan.total_amount) {
+        await supabase
+          .from('loans')
+          .update({ 
+            status: 'paid',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', paymentData.loan_id);
+      }
+
+      await loadAllData();
+      return { success: true, data: { payment } };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ========== DELETE LOAN PAYMENT ==========
+  const deleteLoanPayment = async (paymentId) => {
+    if (!user) return { success: false, error: 'Not authenticated' };
+    setLoading(true);
+    try {
+      const { data: payment, error: getError } = await supabase
+        .from('loan_payments')
+        .select('loan_id, transaction_id, amount_paid')
+        .eq('id', paymentId)
+        .single();
+
+      if (getError) throw getError;
+
+      if (payment?.transaction_id) {
+        await supabase
+          .from('transactions')
+          .delete()
+          .eq('id', payment.transaction_id)
+          .eq('user_id', user.id);
+      }
+
+      const { error } = await supabase
+        .from('loan_payments')
+        .delete()
+        .eq('id', paymentId)
+        .eq('user_id', user.id);
+
+      if (error) throw error;
+
+      const { data: allPayments, error: sumError } = await supabase
+        .from('loan_payments')
+        .select('amount_paid')
+        .eq('loan_id', payment.loan_id)
+        .eq('user_id', user.id);
+
+      if (sumError) throw sumError;
+
+      const newTotalPaid = allPayments.reduce((sum, p) => sum + p.amount_paid, 0);
+
+      await supabase
+        .from('loans')
+        .update({ 
+          total_paid: newTotalPaid,
+          updated_at: new Date().toISOString()
+        })
+        .eq('id', payment.loan_id)
+        .eq('user_id', user.id);
+
+      if (newTotalPaid === 0) {
+        await supabase
+          .from('loans')
+          .update({ 
+            status: 'active',
+            updated_at: new Date().toISOString()
+          })
+          .eq('id', payment.loan_id)
+          .eq('user_id', user.id);
+      }
+
+      await loadAllData();
+      return { success: true };
+    } catch (error) {
+      return { success: false, error: error.message };
+    } finally {
+      setLoading(false);
+    }
+  };
 
   // ========== COMPUTED DATA ==========
   const getMonthlyIncome = useCallback(() => {
@@ -659,9 +884,10 @@ export const useFinance = () => {
     await Promise.all([
       fetchTransactions(),
       fetchBudgets(),
-      fetchBills()
+      fetchBills(),
+      fetchLoans()
     ]);
-  }, [fetchTransactions, fetchBudgets, fetchBills]);
+  }, [fetchTransactions, fetchBudgets, fetchBills, fetchLoans]);
 
   // Auto-load data when user or month changes
   useEffect(() => {
@@ -675,6 +901,7 @@ export const useFinance = () => {
     transactions,
     budgets,
     bills,
+    loans,
     loading,
     selectedMonth,
     setSelectedMonth,
@@ -703,6 +930,14 @@ export const useFinance = () => {
     deleteBillPayment,
     getUpcomingBillsWithStatus,
     getBillStatusSummary,
+    
+    // Loan CRUD
+    fetchLoans,
+    addLoan,
+    updateLoan,
+    deleteLoan,
+    recordLoanPayment,
+    deleteLoanPayment,
     
     // Computed data
     getMonthlyIncome,

@@ -12,6 +12,7 @@ import {
   ExclamationCircleIcon,
   XCircleIcon,
   ClockIcon,
+  BanknotesIcon,
 } from '@heroicons/react/24/outline';
 import {
   ChartContainer,
@@ -24,6 +25,7 @@ import {
 const Dashboard = ({ finance, setActiveView }) => {
   const {
     transactions,
+    loans,
     loading,
     getMonthlyIncome,
     getMonthlyExpenses,
@@ -47,6 +49,12 @@ const Dashboard = ({ finance, setActiveView }) => {
   const budgetStatus = getBudgetStatus();
   const upcomingBills = getUpcomingBills();
   const recentTransactions = transactions.slice(0, 5);
+
+  // Loan calculations
+  const totalLoanAmount = loans.reduce((sum, l) => sum + l.total_amount, 0);
+  const totalPaidLoans = loans.reduce((sum, l) => sum + (l.total_paid || 0), 0);
+  const totalRemainingLoans = totalLoanAmount - totalPaidLoans;
+  const activeLoans = loans.filter(l => l.status === 'active').length;
 
   // Load bills with status
   useEffect(() => {
@@ -214,6 +222,41 @@ const Dashboard = ({ finance, setActiveView }) => {
         </div>
       </div>
 
+      {/* Loan Summary Cards */}
+      {loans.length > 0 && (
+        <div className="finance-loan-summary">
+          <div className="finance-loan-summary-header">
+            <BanknotesIcon className="finance-loan-summary-icon" />
+            <span>Loan Summary</span>
+          </div>
+          <div className="finance-loan-summary-grid">
+            <div className="finance-loan-summary-item">
+              <span className="loan-summary-label">Total Loans</span>
+              <span className="loan-summary-value">{loans.length}</span>
+              <span className="loan-summary-sub">Active: {activeLoans}</span>
+            </div>
+            <div className="finance-loan-summary-item">
+              <span className="loan-summary-label">Total Amount</span>
+              <span className="loan-summary-value">₱{totalLoanAmount.toLocaleString()}</span>
+            </div>
+            <div className="finance-loan-summary-item">
+              <span className="loan-summary-label">Paid</span>
+              <span className="loan-summary-value paid">₱{totalPaidLoans.toLocaleString()}</span>
+            </div>
+            <div className="finance-loan-summary-item">
+              <span className="loan-summary-label">Remaining</span>
+              <span className="loan-summary-value remaining">₱{totalRemainingLoans.toLocaleString()}</span>
+            </div>
+          </div>
+          <button 
+            className="finance-loan-summary-btn"
+            onClick={() => setActiveView('loans')}
+          >
+            View All Loans
+          </button>
+        </div>
+      )}
+
       {/* Overdue Bills Alert */}
       {overdueBills.length > 0 && (
         <div className="finance-alert overdue-alert">
@@ -374,6 +417,10 @@ const Dashboard = ({ finance, setActiveView }) => {
           <CalendarIcon className="finance-quick-action-icon" />
           Manage Bills
         </button>
+        <button className="finance-quick-action-btn secondary" onClick={() => setActiveView('loans')}>
+          <BanknotesIcon className="finance-quick-action-icon" />
+          Manage Loans
+        </button>
         <button className="finance-quick-action-btn secondary" onClick={loadAllData}>
           <ArrowPathIcon className="finance-quick-action-icon" />
           Refresh
@@ -470,6 +517,88 @@ const Dashboard = ({ finance, setActiveView }) => {
         .finance-stat-trend-icon {
           width: 0.875rem;
           height: 0.875rem;
+        }
+
+        /* Loan Summary */
+        .finance-loan-summary {
+          background: var(--card-bg, #ffffff);
+          border-radius: 0.75rem;
+          padding: 1.25rem;
+          border: 1px solid var(--border-color, #e2e8f0);
+          margin-bottom: 1.5rem;
+          position: relative;
+        }
+
+        .finance-loan-summary-header {
+          display: flex;
+          align-items: center;
+          gap: 0.5rem;
+          font-size: 0.875rem;
+          font-weight: 600;
+          color: var(--text-secondary, #64748b);
+          margin-bottom: 0.75rem;
+        }
+
+        .finance-loan-summary-icon {
+          width: 1.125rem;
+          height: 1.125rem;
+          color: var(--gradient-start, #667eea);
+        }
+
+        .finance-loan-summary-grid {
+          display: grid;
+          grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+          gap: 1rem;
+        }
+
+        .finance-loan-summary-item {
+          display: flex;
+          flex-direction: column;
+          gap: 0.125rem;
+        }
+
+        .loan-summary-label {
+          font-size: 0.65rem;
+          color: var(--text-secondary, #64748b);
+          text-transform: uppercase;
+          letter-spacing: 0.05em;
+          font-weight: 500;
+        }
+
+        .loan-summary-value {
+          font-size: 1.25rem;
+          font-weight: 700;
+          color: var(--text-primary, #0f172a);
+        }
+
+        .loan-summary-value.paid {
+          color: #10b981;
+        }
+
+        .loan-summary-value.remaining {
+          color: #ef4444;
+        }
+
+        .loan-summary-sub {
+          font-size: 0.7rem;
+          color: var(--text-secondary, #64748b);
+        }
+
+        .finance-loan-summary-btn {
+          margin-top: 0.75rem;
+          padding: 0.375rem 1rem;
+          background: rgba(102, 126, 234, 0.1);
+          color: var(--gradient-start, #667eea);
+          border: none;
+          border-radius: 0.375rem;
+          font-size: 0.75rem;
+          font-weight: 500;
+          cursor: pointer;
+          transition: all 0.2s;
+        }
+
+        .finance-loan-summary-btn:hover {
+          background: rgba(102, 126, 234, 0.2);
         }
 
         /* Charts Grid */
@@ -925,6 +1054,10 @@ const Dashboard = ({ finance, setActiveView }) => {
             max-width: 100%;
           }
 
+          .finance-loan-summary-grid {
+            grid-template-columns: 1fr 1fr;
+          }
+
           .finance-bill-status-item {
             flex-direction: column;
             align-items: flex-start;
@@ -962,6 +1095,10 @@ const Dashboard = ({ finance, setActiveView }) => {
 
         @media (max-width: 480px) {
           .finance-stats-grid {
+            grid-template-columns: 1fr;
+          }
+
+          .finance-loan-summary-grid {
             grid-template-columns: 1fr;
           }
         }

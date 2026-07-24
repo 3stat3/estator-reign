@@ -12,6 +12,7 @@ import {
   ChevronRightIcon,
   SunIcon,
   MoonIcon,
+  BanknotesIcon, // Add this for Loans
 } from '@heroicons/react/24/outline';
 import { useAuth } from '../../context/AuthContext';
 import { useFinance } from './useFinance';
@@ -20,11 +21,12 @@ import Transactions from './Transactions';
 import Budget from './Budget';
 import Bills from './Bills';
 import Reports from './Reports';
+import Loans from './Loans'; // New import
 
 const PersonalFinanceTracker = () => {
   const { user, darkMode, toggleDarkMode } = useAuth();
   const [activeView, setActiveView] = useState('dashboard');
-  const [filterBill, setFilterBill] = useState(null); // Add this state
+  const [filterBill, setFilterBill] = useState(null);
 
   const finance = useFinance();
   const { selectedMonth, setSelectedMonth } = finance;
@@ -35,6 +37,7 @@ const PersonalFinanceTracker = () => {
     { id: 'transactions', label: 'Transactions', icon: DocumentTextIcon },
     { id: 'budget', label: 'Budget', icon: WalletIcon },
     { id: 'bills', label: 'Bills', icon: CalendarIcon },
+    { id: 'loans', label: 'Loans', icon: BanknotesIcon }, // New tab
     { id: 'reports', label: 'Reports', icon: ChartBarIcon },
   ];
 
@@ -83,6 +86,8 @@ const PersonalFinanceTracker = () => {
         return <Budget finance={finance} />;
       case 'bills':
         return <Bills finance={finance} setActiveView={handleNavigate} />;
+      case 'loans':
+        return <Loans finance={finance} setActiveView={handleNavigate} />;
       case 'reports':
         return <Reports finance={finance} />;
       default:
@@ -148,7 +153,7 @@ const PersonalFinanceTracker = () => {
               className={`finance-nav-item ${activeView === item.id ? 'active' : ''}`}
               onClick={() => {
                 setActiveView(item.id);
-                setFilterBill(null); // Clear filter when navigating
+                setFilterBill(null);
               }}
             >
               <item.icon className="finance-nav-icon" />
