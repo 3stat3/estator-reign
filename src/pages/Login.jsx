@@ -76,7 +76,7 @@ const Login = () => {
   const [suggestedEmail, setSuggestedEmail] = useState('');
   const [isMobile, setIsMobile] = useState(false);
   const { theme, toggleTheme } = useTheme();
-  const { login, loginWith2FA, sendMagicLink } = useAuth();
+  const { login, loginWith2FA, sendMagicLink, resendConfirmationEmail } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
   const emailInputRef = useRef(null);
@@ -184,6 +184,30 @@ const Login = () => {
       setLoading(false);
     }
   };
+
+  // Handle resend confirmation email
+  const handleResendConfirmation = async () => {
+    if (!emailValue) {
+      setDisplayError('Please enter your email address first.');
+      return;
+    }
+
+    try {
+      setLoading(true);
+      await resendConfirmationEmail(emailValue);
+      setDisplayError('✅ A new confirmation email has been sent. Please check your inbox (and spam folder).');
+      
+      // Clear the error after 5 seconds and show success
+      setTimeout(() => {
+        setDisplayError('');
+        setDisplayError('Confirmation email resent. Please check your email.');
+      }, 5000);
+    } catch (err) {
+      setDisplayError('Failed to resend confirmation email. Please try again later.');
+    } finally {
+      setLoading(false);
+    }
+  };
   
   // Main login handler
   const onSubmit = async (data) => {
@@ -209,6 +233,40 @@ const Login = () => {
       
       if (result?.error) {
         const errorMessageText = result.error;
+        
+        // Check if the error is related to email confirmation
+        if (errorMessageText.toLowerCase().includes('email not confirmed') || 
+            errorMessageText.toLowerCase().includes('confirm your email') ||
+            errorMessageText.toLowerCase().includes('email_confirmed')) {
+          
+          setDisplayError(
+            <div>
+              <strong>Email Verification Required</strong>
+              <p style={{ marginTop: '0.25rem', fontSize: '0.85rem' }}>
+                Your email address has not been verified. Please check your inbox for the 
+                confirmation link we sent when you registered.
+              </p>
+              <button
+                onClick={handleResendConfirmation}
+                style={{
+                  marginTop: '0.75rem',
+                  padding: '0.5rem 1rem',
+                  background: 'transparent',
+                  border: '1px solid #667eea',
+                  borderRadius: '0.5rem',
+                  color: '#667eea',
+                  cursor: 'pointer',
+                  fontWeight: '500',
+                  fontSize: '0.8rem'
+                }}
+              >
+                Resend Confirmation Email
+              </button>
+            </div>
+          );
+          setLoading(false);
+          return;
+        }
         
         const newAttempts = attempts + 1;
         setAttempts(newAttempts);
@@ -358,9 +416,15 @@ const Login = () => {
           {/* ERROR DISPLAY */}
           {displayError && (
             <div style={{
-              background: 'rgba(220, 38, 38, 0.1)',
-              color: '#ef4444',
-              borderLeft: '4px solid #ef4444',
+              background: typeof displayError === 'string' && displayError.includes('Email Verification Required') 
+                ? 'rgba(245, 158, 11, 0.1)' 
+                : 'rgba(220, 38, 38, 0.1)',
+              color: typeof displayError === 'string' && displayError.includes('Email Verification Required') 
+                ? '#f59e0b' 
+                : '#ef4444',
+              borderLeft: typeof displayError === 'string' && displayError.includes('Email Verification Required') 
+                ? '4px solid #f59e0b' 
+                : '4px solid #ef4444',
               padding: '0.75rem 1rem',
               borderRadius: '0.75rem',
               marginBottom: '1.5rem',
